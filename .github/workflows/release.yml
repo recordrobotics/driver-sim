@@ -51,20 +51,47 @@ jobs:
               run: |
                   sudo apt-get update
                   sudo apt-get install -y \
+                    build-essential \
+                    git \
+                    make \
+                    pkg-config \
+                    cmake \
+                    ninja-build \
+                    gnome-desktop-testing \
                     libasound2-dev \
+                    libaudio-dev \
+                    libfribidi-dev \
+                    libjack-dev \
+                    libsndio-dev \
                     libdbus-1-dev \
+                    libdrm-dev \
+                    libgbm-dev \
                     libgl1-mesa-dev \
+                    libgles2-mesa-dev \
+                    libegl1-mesa-dev \
+                    libibus-1.0-dev \
                     libpulse-dev \
+                    libthai-dev \
                     libudev-dev \
-                    libwayland-dev \
                     libx11-dev \
+                    libxcursor-dev \
                     libxext-dev \
                     libxfixes-dev \
                     libxi-dev \
-                    libxinerama-dev \
+                    libxss-dev \
+                    libxtst-dev \
                     libxkbcommon-dev \
                     libxrandr-dev \
                     wayland-protocols
+
+                  source /etc/os-release
+                  if dpkg --compare-versions "$VERSION_ID" ge "22.04"; then
+                    sudo apt-get install -y \
+                      libpipewire-0.3-dev \
+                      libwayland-dev \
+                      libdecor-0-dev \
+                      liburing-dev
+                  fi
 
             - name: Cache _external dependencies
               uses: actions/cache@v5
