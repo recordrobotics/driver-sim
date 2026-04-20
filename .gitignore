@@ -1,0 +1,13 @@
+## OSX artifacts
+.DS_Store
+**/.DS_Store
+
+.build*/
+.external/
+.vs/
+.clang-format
+_external
+_build*/
+build*/
+
+imgui.ini

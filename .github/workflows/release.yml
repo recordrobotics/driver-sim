@@ -1,0 +1,127 @@
+name: Release Build Matrix
+
+on:
+    release:
+        types:
+            - created
+
+permissions:
+    contents: write
+
+jobs:
+    build-and-upload:
+        name: ${{ matrix.name }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - name: Ubuntu x64
+                      os: ubuntu-latest
+                      asset_suffix: linux-x64
+                      executable_search: driver_sim
+                    - name: Windows x64
+                      os: windows-latest
+                      asset_suffix: windows-x64
+                      executable_search: driver_sim.exe
+                    - name: macOS
+                      os: macos-latest
+                      asset_suffix: macos
+                      executable_search: driver_sim.app
+
+        env:
+            BUILD_DIR: build
+            CMAKE_BUILD_TYPE: Release
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Rewrite SSH Git URLs to HTTPS for FetchContent
+              run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+            - name: Enable MSVC Developer Command Prompt
+              if: runner.os == 'Windows'
+              uses: ilammy/msvc-dev-cmd@v1
+
+            - name: Install Linux build dependencies
+              if: runner.os == 'Linux'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y \
+                    libasound2-dev \
+                    libdbus-1-dev \
+                    libgl1-mesa-dev \
+                    libpulse-dev \
+                    libudev-dev \
+                    libwayland-dev \
+                    libx11-dev \
+                    libxext-dev \
+                    libxfixes-dev \
+                    libxi-dev \
+                    libxinerama-dev \
+                    libxkbcommon-dev \
+                    libxrandr-dev \
+                    wayland-protocols
+
+            - name: Cache _external dependencies
+              uses: actions/cache@v5
+              with:
+                  path: _external
+                  key: ${{ runner.os }}-external-${{ hashFiles('CMakeLists.txt', 'cmake/fetch_external_dependencies.cmake', 'cmake/fetch_external/*.cmake') }}
+                  restore-keys: |
+                      ${{ runner.os }}-external-
+
+            - name: Configure CMake
+              run: cmake -S . -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }}
+
+            - name: Build
+              run: cmake --build ${{ env.BUILD_DIR }} --target driver_sim --parallel
+
+            - name: Prepare release asset (Linux)
+              if: runner.os == 'Linux'
+              shell: bash
+              run: |
+                  mkdir -p artifacts
+                  exe_path="$(find "${BUILD_DIR}" -type f -name "${{ matrix.executable_search }}" -perm -111 | head -n 1)"
+                  if [ -z "$exe_path" ]; then
+                    echo "driver_sim binary not found under ${BUILD_DIR}" >&2
+                    exit 1
+                  fi
+                  cp "$exe_path" "artifacts/driver_sim-${{ matrix.asset_suffix }}"
+                  chmod +x "artifacts/driver_sim-${{ matrix.asset_suffix }}"
+
+            - name: Prepare release asset (Windows)
+              if: runner.os == 'Windows'
+              shell: pwsh
+              run: |
+                  New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+                  $exe = Get-ChildItem -Path $env:BUILD_DIR -Filter "${{ matrix.executable_search }}" -File -Recurse | Select-Object -First 1
+                  if (-not $exe) {
+                    throw "driver_sim.exe not found under $env:BUILD_DIR"
+                  }
+                  Copy-Item $exe.FullName -Destination "artifacts/driver_sim-${{ matrix.asset_suffix }}.exe"
+
+            - name: Prepare release asset (macOS)
+              if: runner.os == 'macOS'
+              shell: bash
+              run: |
+                  mkdir -p artifacts
+                  app_path="$(find "${BUILD_DIR}" -type d -name "${{ matrix.executable_search }}" | head -n 1)"
+                  if [ -z "$app_path" ]; then
+                    echo "driver_sim.app not found under ${BUILD_DIR}" >&2
+                    exit 1
+                  fi
+                  cd "$(dirname "$app_path")"
+                  zip -r "${GITHUB_WORKSPACE}/artifacts/driver_sim-${{ matrix.asset_suffix }}.zip" "$(basename "$app_path")"
+
+            - name: Upload executable to release
+              uses: softprops/action-gh-release@v3
+              with:
+                  files: artifacts/*
+                  fail_on_unmatched_files: true
+                  overwrite_files: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
