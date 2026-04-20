@@ -1,29 +1,31 @@
 #pragma once
 #include <string>
 #include <utility>
+#include <cstdint>
 
 struct SDL_Window;
 
-namespace blackboard::app {
-
-struct Window
+namespace blackboard::app
 {
-  ~Window();
-  void init_platform_window();
 
-  std::pair<uint16_t, uint16_t> get_size_in_pixels() const;
-  float effective_display_resolution() const;
+  struct Window
+  {
+    ~Window();
+    void init_platform_window();
 
-  // get position
-  std::pair<uint16_t, uint16_t> get_position() const;
+    std::pair<uint16_t, uint16_t> get_size_in_pixels() const;
+    float effective_display_resolution() const;
 
-  std::string title{"title"};
-  uint16_t width{1280u};
-  uint16_t height{720u};
-  uint16_t imgui_view_id{255};    // might be possible to remove this id
-  bool fullscreen{false};
-  SDL_Window *window{nullptr};
-  bool is_dragging{false};
-};
+    // get position
+    std::pair<uint16_t, uint16_t> get_position() const;
 
-}    // namespace blackboard::app
+    std::string title{"title"};
+    uint16_t width{1280u};
+    uint16_t height{720u};
+    uint16_t imgui_view_id{255}; // might be possible to remove this id
+    bool fullscreen{false};
+    SDL_Window *window{nullptr};
+    bool is_dragging{false};
+  };
+
+} // namespace blackboard::app

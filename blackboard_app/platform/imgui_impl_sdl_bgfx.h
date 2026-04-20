@@ -2,6 +2,7 @@
 #include <bgfx/bgfx.h>
 #include <bx/bx.h>
 #include <imgui/imgui.h>
+#include <cstdint>
 
 struct SDL_Window;
 typedef uint32_t SDL_WindowID;

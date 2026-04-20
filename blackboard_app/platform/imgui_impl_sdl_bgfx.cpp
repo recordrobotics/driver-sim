@@ -1,6 +1,21 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 
+#include <bx/platform.h>
+#define BGFX_PLATFORM_SUPPORTS_DXBC (0 || BX_PLATFORM_WINDOWS || BX_PLATFORM_WINRT || BX_PLATFORM_XBOXONE)
+
 #include "imgui_impl_sdl_bgfx.h"
+
+#include <bgfx/bgfx.h>
+#include <bgfx/embedded_shader.h>
+#include <bx/math.h>
+#include <bx/timer.h>
+#include <imgui/imgui.h>
+// #include <imgui/imgui_internal.h>
+#include <SDL3/SDL.h>
+#include <build_config/SDL_build_config.h>
+
+#include <string>
+#include <vector>
 
 #include <glsl/vs_imgui_image.sc.bin.h>
 #include <essl/vs_imgui_image.sc.bin.h>
@@ -20,36 +35,29 @@
 #include <spirv/fs_ocornut_imgui.sc.bin.h>
 #include <wgsl/fs_ocornut_imgui.sc.bin.h>
 
-#if defined(_WIN32)
+#if BGFX_PLATFORM_SUPPORTS_DXBC
 #include <dxbc/vs_imgui_image.sc.bin.h>
-#include <dxil/vs_imgui_image.sc.bin.h>
 #include <dxbc/fs_imgui_image.sc.bin.h>
-#include <dxil/fs_imgui_image.sc.bin.h>
 
 #include <dxbc/vs_ocornut_imgui.sc.bin.h>
-#include <dxil/vs_ocornut_imgui.sc.bin.h>
 #include <dxbc/fs_ocornut_imgui.sc.bin.h>
+#endif
+
+#if BGFX_PLATFORM_SUPPORTS_DXIL
+#include <dxil/vs_imgui_image.sc.bin.h>
+#include <dxil/fs_imgui_image.sc.bin.h>
+
+#include <dxil/vs_ocornut_imgui.sc.bin.h>
 #include <dxil/fs_ocornut_imgui.sc.bin.h>
-#endif //  defined(_WIN32)
-#if __APPLE__
+#endif
+
+#if BGFX_PLATFORM_SUPPORTS_METAL
 #include <mtl/vs_imgui_image.sc.bin.h>
 #include <mtl/fs_imgui_image.sc.bin.h>
 
 #include <mtl/vs_ocornut_imgui.sc.bin.h>
 #include <mtl/fs_ocornut_imgui.sc.bin.h>
-#endif // __APPLE__
-
-#include <bgfx/bgfx.h>
-#include <bgfx/embedded_shader.h>
-#include <bx/math.h>
-#include <bx/timer.h>
-#include <imgui/imgui.h>
-// #include <imgui/imgui_internal.h>
-#include <SDL3/SDL.h>
-#include <build_config/SDL_build_config.h>
-
-#include <string>
-#include <vector>
+#endif
 
 // Data
 namespace blackboard::renderer
@@ -108,13 +116,26 @@ namespace blackboard::renderer
   unsigned long native_window_handle(ImGuiViewport *viewport, SDL_WindowID window_id)
   {
     SDL_Window *window = SDL_GetWindowFromID(window_id);
-#if defined(_WIN32) && !defined(__WINRT__)
-    return (unsigned long)SDL_GetPointerProperty(SDL_GetWindowProperties(window), "SDL.window.win32.hwnd", NULL);
-#elif defined(__APPLE__) && defined(SDL_VIDEO_DRIVER_COCOA)
-    return (unsigned long)SDL_GetPointerProperty(SDL_GetWindowProperties(window), "SDL.window.cocoa.window", NULL);
-#elif defined(__LINUX__) && defined(SDL_VIDEO_DRIVER_X11)
-    auto handle = SDL_GetNumberProperty(SDL_GetWindowProperties(window), "SDL.window.x11.window", 0);
-    return handle;
+#if BX_PLATFORM_WINDOWS
+    return (unsigned long)SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+#elif BX_PLATFORM_OSX && defined(SDL_VIDEO_DRIVER_COCOA)
+    return (unsigned long)SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
+#elif BX_PLATFORM_LINUX
+    const char *driver = SDL_GetCurrentVideoDriver();
+    if (driver && strcmp(driver, "wayland") == 0)
+    {
+      return (unsigned long)SDL_GetPointerProperty(
+          SDL_GetWindowProperties(window),
+          SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER,
+          NULL);
+    }
+    else
+    {
+      return SDL_GetNumberProperty(
+          SDL_GetWindowProperties(window),
+          SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
+          0);
+    }
 #endif
     return 0;
   }
@@ -137,7 +158,8 @@ namespace blackboard::renderer
     data->height = bx::max<uint16_t>((uint16_t)viewport->Size.y, 1);
     // Create frame buffer
     data->frameBufferHandle =
-        bgfx::createFrameBuffer((void *)native_window_handle(viewport, (SDL_WindowID)viewport->PlatformHandle),
+        bgfx::createFrameBuffer((void *)native_window_handle(viewport, static_cast<SDL_WindowID>(
+                                                                           reinterpret_cast<uintptr_t>(viewport->PlatformHandle))),
                                 data->width * viewport->DrawData->FramebufferScale.x,
                                 data->height * viewport->DrawData->FramebufferScale.y);
     // Set frame buffer
