@@ -24,10 +24,16 @@ jobs:
                       os: windows-latest
                       asset_suffix: windows-x64
                       executable_search: driver_sim.exe
-                    - name: macOS
+                    - name: macOS ARM64
                       os: macos-latest
-                      asset_suffix: macos
+                      asset_suffix: macos-arm64
                       executable_search: driver_sim.app
+                      cmake_osx_arch: arm64
+                    - name: macOS Intel x64
+                      os: macos-latest
+                      asset_suffix: macos-x64
+                      executable_search: driver_sim.app
+                      cmake_osx_arch: x86_64
 
         env:
             BUILD_DIR: build
@@ -93,7 +99,7 @@ jobs:
                       liburing-dev
                   fi
 
-            - name: Cache _external dependencies
+            - name: Cache external dependencies
               uses: actions/cache@v5
               with:
                   path: _external
@@ -102,7 +108,7 @@ jobs:
                       ${{ runner.os }}-external-
 
             - name: Configure CMake
-              run: cmake -S . -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }}
+              run: cmake -S . -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} ${{ runner.os == 'macOS' && format('-DCMAKE_OSX_ARCHITECTURES={0}', matrix.cmake_osx_arch) || '' }}
 
             - name: Build
               run: cmake --build ${{ env.BUILD_DIR }} --target driver_sim --parallel
