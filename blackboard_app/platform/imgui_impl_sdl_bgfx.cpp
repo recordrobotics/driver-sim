@@ -52,11 +52,11 @@
 #endif
 
 #if BGFX_PLATFORM_SUPPORTS_METAL
-#include <mtl/vs_imgui_image.sc.bin.h>
-#include <mtl/fs_imgui_image.sc.bin.h>
+#include <metal/vs_imgui_image.sc.bin.h>
+#include <metal/fs_imgui_image.sc.bin.h>
 
-#include <mtl/vs_ocornut_imgui.sc.bin.h>
-#include <mtl/fs_ocornut_imgui.sc.bin.h>
+#include <metal/vs_ocornut_imgui.sc.bin.h>
+#include <metal/fs_ocornut_imgui.sc.bin.h>
 #endif
 
 // Data

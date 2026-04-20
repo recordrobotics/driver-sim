@@ -30,7 +30,7 @@ file(GLOB_RECURSE FS_SHADERS CONFIGURE_DEPENDS fs_*.sc)
 set(BGFX_CONFIG_RENDERER_WEBGPU ${BIG_RENDERER_WEBGPU})
 
 set(BIG_SHADER_INCLUDE_DIRS
-    ${bgfx_SOURCE_DIR}/bgfx/src
+    ${CMAKE_CURRENT_LIST_DIR}/platform/include
 )
 
 bgfx_compile_shaders(

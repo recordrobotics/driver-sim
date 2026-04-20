@@ -24,6 +24,14 @@ set(_bgfx_tool_utils_file "${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
 if(EXISTS "${_bgfx_tool_utils_file}")
     file(READ "${_bgfx_tool_utils_file}" _bgfx_tool_utils_contents)
     string(REPLACE "$<IF:$<CONFIG:Debug>:0,3>" "$<IF:$<CONFIG:Debug>,0,3>" _bgfx_tool_utils_contents "${_bgfx_tool_utils_contents}")
+    if(NOT _bgfx_tool_utils_contents MATCHES "PROFILE STREQUAL \"spirv\" OR PROFILE STREQUAL \"wgsl\"")
+        string(REPLACE
+            "set(PLATFORM_I \${PLATFORM})"
+            "set(PLATFORM_I \${PLATFORM})\n\t\t\t\tif(APPLE AND (PROFILE STREQUAL \"spirv\" OR PROFILE STREQUAL \"wgsl\"))\n\t\t\t\t\t# On macOS, shaderc's osx path can select legacy sampler translation for SPIR-V/WGSL.\n\t\t\t\t\t# Using linux platform for these profiles keeps generated binaries valid and fixes parser issues.\n\t\t\t\t\tset(PLATFORM_I LINUX)\n\t\t\t\tendif()"
+            _bgfx_tool_utils_contents
+            "${_bgfx_tool_utils_contents}"
+        )
+    endif()
     file(WRITE "${_bgfx_tool_utils_file}" "${_bgfx_tool_utils_contents}")
 endif()
 

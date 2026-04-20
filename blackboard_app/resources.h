@@ -10,7 +10,7 @@ namespace blackboard::app::resources
   inline std::filesystem::path path()
   {
 #ifdef __APPLE__
-    if (char *base_path = SDL_GetBasePath(); base_path)
+    if (const char *base_path = SDL_GetBasePath(); base_path)
     {
       return {base_path};
     }
