@@ -26,6 +26,9 @@ namespace blackboard::gui
     io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
 
+    io.ConfigDpiScaleFonts = true;
+    io.ConfigDpiScaleViewports = true;
+
     ImGui::StyleColorsDark();
 
     // Setup friendly style for multiviewport
@@ -36,6 +39,7 @@ namespace blackboard::gui
       style.Colors[ImGuiCol_WindowBg].w = 1.0f;
       style.FrameBorderSize = 0.f;
       style.FramePadding = ImVec2(0.f, 0.f);
+      style.FontScaleMain = 1.2f;
     }
   }
 
@@ -225,20 +229,31 @@ namespace blackboard::gui
     font_config.OversampleV = oversample_v;
 
     auto &io{ImGui::GetIO()};
-    float ratio{ddpi / STANDARD_DPI};
+    const float dpi_ratio{ddpi > 0.0f ? ddpi / STANDARD_DPI : 1.0f};
+
+    // Seed DPI font scale for startup when backend DPI callbacks are late or unavailable.
+    if (io.ConfigDpiScaleFonts)
+    {
+      ImGui::GetStyle().FontScaleDpi = dpi_ratio;
+    }
+
+    const float size_pixels{io.ConfigDpiScaleFonts ? size : size * dpi_ratio};
 
     const ImWchar *ranges = io.Fonts->GetGlyphRangesDefault();
 
-    io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, size, &font_config, ranges);
-    io.Fonts->Fonts.back()->Scale = ratio;
+    ImFont *font{io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, size_pixels, &font_config, ranges)};
+    if (font == nullptr)
+    {
+      logger::logger->error("Could not load font {}", font_name);
+      return false;
+    }
+
     // setup default font
     if (set_as_default)
     {
-      io.FontDefault = io.Fonts->Fonts.back();
+      io.FontDefault = font;
     }
-#ifdef __APPLE__
-    io.FontGlobalScale = 1.0f / floor(ratio);
-#endif
+
     return true;
   }
 

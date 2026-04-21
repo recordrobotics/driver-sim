@@ -14,10 +14,17 @@
 #include <imgui/imgui_internal.h>
 #include <imguizmo/ImGuizmo.h>
 
+#include <algorithm>
 #include <iostream>
+#include <limits>
 
 namespace blackboard::app
 {
+
+  namespace
+  {
+    constexpr float WINDOW_WORK_AREA_RATIO = 0.7f;
+  }
 
   App::App(const char *app_name, const renderer::Api renderer_api, const uint16_t width, const uint16_t height,
            const bool fullscreen)
@@ -37,8 +44,26 @@ namespace blackboard::app
     }
 
     main_window->title = app_name;
-    main_window->width = width;
-    main_window->height = height;
+
+    SDL_Rect usable_bounds{};
+    const SDL_DisplayID primary_display = SDL_GetPrimaryDisplay();
+    if (primary_display != 0 && SDL_GetDisplayUsableBounds(primary_display, &usable_bounds))
+    {
+      const int target_width = static_cast<int>(usable_bounds.w * WINDOW_WORK_AREA_RATIO);
+      const int target_height = static_cast<int>(usable_bounds.h * WINDOW_WORK_AREA_RATIO);
+
+      const int clamped_width = std::clamp(target_width, 1, static_cast<int>(std::numeric_limits<uint16_t>::max()));
+      const int clamped_height = std::clamp(target_height, 1, static_cast<int>(std::numeric_limits<uint16_t>::max()));
+
+      main_window->width = static_cast<uint16_t>(clamped_width);
+      main_window->height = static_cast<uint16_t>(clamped_height);
+    }
+    else
+    {
+      main_window->width = width;
+      main_window->height = height;
+    }
+
     main_window->fullscreen = fullscreen;
     main_window->init_platform_window();
 

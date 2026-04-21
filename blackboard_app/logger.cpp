@@ -32,7 +32,7 @@ namespace blackboard::logger
   {
     static constexpr size_t file_size{5u * 1024u * 1024u};
     static constexpr size_t rotating_files{5u};
-    static const std::filesystem::path filename{path() / "blackboard.log"};
+    static const std::filesystem::path filename{path() / "driversim.log"};
 
     auto console_sink_trace = std::make_shared<spdlog::sinks::stdout_sink_mt>();
     console_sink_trace->set_pattern("[%^%l%$] %v");
@@ -44,7 +44,7 @@ namespace blackboard::logger
     auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
 #endif
 
-    logger = std::make_shared<spdlog::logger>("blackboard_log", sink_list.begin(), sink_list.end());
+    logger = std::make_shared<spdlog::logger>("driversim_log", sink_list.begin(), sink_list.end());
     logger::logger->set_level(spdlog::level::trace);
     spdlog::set_default_logger(logger);
     using namespace std::chrono_literals;
