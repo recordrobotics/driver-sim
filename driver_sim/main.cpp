@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <random>
+#include <list>
 
 using blackboard::gui::string_hex_to_rgba_float;
 
