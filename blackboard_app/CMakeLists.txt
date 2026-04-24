@@ -21,8 +21,8 @@ elseif(${BIG_WM_WAYLAND})
     )
 endif()
 
-file(GLOB_RECURSE SOURCES ./**.cpp ./**.c)
-file(GLOB_RECURSE HEADERS ./**.hpp ./**.h)
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ./**.cpp ./**.c)
+file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ./**.hpp ./**.h)
 file(GLOB_RECURSE VS_SHADERS CONFIGURE_DEPENDS vs_*.sc)
 file(GLOB_RECURSE FS_SHADERS CONFIGURE_DEPENDS fs_*.sc)
 
@@ -60,6 +60,7 @@ target_link_libraries(${PROJECT_NAME}
     glm
     ImGui
     spdlog
+    bimg_decode
 )
 
 target_include_directories(${PROJECT_NAME}

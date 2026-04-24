@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.21)
 
 project(driver_sim C CXX)
 
-file(GLOB_RECURSE SOURCES ./**.cpp ./**.c)
-file(GLOB_RECURSE HEADERS ./**.hpp ./**.h)
-file(GLOB_RECURSE ASSETS ./assets/*)
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ./**.cpp ./**.c)
+file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ./**.hpp ./**.h)
+file(GLOB_RECURSE ASSETS CONFIGURE_DEPENDS ./assets/*)
 
-file(GLOB_RECURSE FONTS ./assets/fonts/*.otf)
+file(GLOB_RECURSE FONTS CONFIGURE_DEPENDS ./assets/fonts/*.otf)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/fonts")
 
-file(GLOB_RECURSE IMAGES ./assets/images/*)
+file(GLOB_RECURSE IMAGES CONFIGURE_DEPENDS ./assets/images/*)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/images")
 
 foreach(FONT_FILE IN LISTS FONTS)
@@ -34,10 +34,39 @@ foreach(IMAGES_FILE IN LISTS IMAGES)
     )
 endforeach()
 
+file(GLOB_RECURSE VS_SHADERS CONFIGURE_DEPENDS vs_*.sc)
+file(GLOB_RECURSE FS_SHADERS CONFIGURE_DEPENDS fs_*.sc)
+
+
+# bgfx_compile_shaders appends the wgsl profile only when this variable is enabled.
+set(BGFX_CONFIG_RENDERER_WEBGPU ${BIG_RENDERER_WEBGPU})
+
+set(BIG_SHADER_INCLUDE_DIRS
+    ${CMAKE_SOURCE_DIR}/blackboard_app/platform/include
+)
+
+bgfx_compile_shaders(
+  TYPE VERTEX
+  SHADERS ${VS_SHADERS}
+    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/varying.def.sc
+    INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
+  OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
+  AS_HEADERS
+)
+bgfx_compile_shaders(
+  TYPE FRAGMENT
+  SHADERS ${FS_SHADERS}
+    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/varying.def.sc
+    INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
+  OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
+  AS_HEADERS
+)
+
+
 if(WINDOWS)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES})
+    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS})
 elseif(MACOS)
-    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES})
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS})
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUNDLE True
         RESOURCE True
@@ -55,7 +84,8 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     blackboard::app
-    bimg_decode
+    nlohmann_json::nlohmann_json
+    fastgltf::fastgltf
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -63,6 +93,7 @@ target_include_directories(${PROJECT_NAME}
     ${blackboard_app_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}/include/generated/fonts
     ${CMAKE_BINARY_DIR}/include/generated/images
+    ${CMAKE_BINARY_DIR}/include/generated/shaders
 )
 
 if(WINDOWS)

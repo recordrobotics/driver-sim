@@ -163,7 +163,7 @@ namespace blackboard::app
         m_prev_time = std::chrono::steady_clock::now();
 
         ImGui::Render();
-        renderer::ImGui_Impl_sdl_bgfx_Render(main_window->imgui_view_id, ImGui::GetDrawData(), 0x000000FF);
+        renderer::ImGui_Impl_sdl_bgfx_Render(main_window->imgui_view_id, ImGui::GetDrawData(), 0);
 
         if (const auto io = ImGui::GetIO(); io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {

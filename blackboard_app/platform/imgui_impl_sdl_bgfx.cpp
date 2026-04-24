@@ -201,7 +201,7 @@ namespace blackboard::renderer
     SDL_GetWindowSizeInPixels(window, &drawable_width, &drawable_height);
     ImGuiIO &io = ImGui::GetIO();
     io.DisplaySize = ImVec2((float)drawable_width, (float)drawable_height);
-    bgfx::reset(drawable_width, drawable_height, BGFX_RESET_MSAA_X4);
+    bgfx::reset(drawable_width, drawable_height, BGFX_RESET_VSYNC);
   }
 
   void ImGui_Impl_sdl_bgfx_UpdateTextures(ImVector<ImTextureData *> *Textures)

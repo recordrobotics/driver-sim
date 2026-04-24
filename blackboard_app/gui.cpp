@@ -6,6 +6,11 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 
+#include "platform/imgui_impl_sdl_bgfx.h"
+
+#include <bimg/decode.h>
+#include <bx/allocator.h>
+
 #include <cstring>
 
 #include "logger.h"
@@ -257,6 +262,56 @@ namespace blackboard::gui
     return true;
   }
 
+  static bx::DefaultAllocator s_allocator;
+
+  bool load_image(void *image_data, int image_data_size, ImTexture &out_texture)
+  {
+    if (!isInit())
+    {
+      logger::logger->error("Cannot add image as the GUI not initialised");
+      return false;
+    }
+
+    bimg::ImageContainer *image = bimg::imageParse(
+        &s_allocator,
+        image_data,
+        static_cast<uint32_t>(image_data_size),
+        bimg::TextureFormat::BGRA8);
+
+    if (image == nullptr)
+    {
+      logger::logger->error("Could not load image");
+      return false;
+    }
+
+    bgfx::TextureHandle textureHandle = bgfx::createTexture2D(
+        static_cast<uint16_t>(image->m_width),
+        static_cast<uint16_t>(image->m_height),
+        false,
+        1,
+        bgfx::TextureFormat::BGRA8,
+        0,
+        bgfx::copy(image->m_data, image->m_size));
+
+    bimg::imageFree(image);
+
+    if (!bgfx::isValid(textureHandle))
+    {
+      logger::logger->error("Could not create texture");
+      return false;
+    }
+
+    ImTextureID texture = blackboard::renderer::toId(
+        textureHandle,
+        IMGUI_FLAGS_ALPHA_BLEND,
+        0);
+
+    out_texture.handle = textureHandle;
+    out_texture.id = texture;
+
+    return true;
+  }
+
   void dockspace()
   {
     if (!isInit())
@@ -296,24 +351,6 @@ namespace blackboard::gui
     assert(color.size() == 9);
     return {std::stoul(color.substr(1, 2), nullptr, 16) / 255.0f, std::stoul(color.substr(3, 2), nullptr, 16) / 255.0f,
             std::stoul(color.substr(5, 2), nullptr, 16) / 255.0f, std::stoul(color.substr(7, 2), nullptr, 16) / 255.0f};
-  }
-
-  void *toId(bgfx::TextureHandle _handle, uint8_t _flags, uint8_t _mip)
-  {
-    union
-    {
-      struct
-      {
-        bgfx::TextureHandle handle;
-        uint8_t flags;
-        uint8_t mip;
-      } s;
-      ImTextureID id;
-    } tex;
-    tex.s.handle = _handle;
-    tex.s.flags = _flags;
-    tex.s.mip = _mip;
-    return reinterpret_cast<void *>(tex.id);
   }
 
 } // namespace blackboard::app::gui

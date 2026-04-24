@@ -35,4 +35,31 @@ if(EXISTS "${_bgfx_tool_utils_file}")
     file(WRITE "${_bgfx_tool_utils_file}" "${_bgfx_tool_utils_contents}")
 endif()
 
+# Patch bgfx OpenGL clip control block
+set(_bgfx_gl_file "${bgfx_SOURCE_DIR}/bgfx/src/renderer_gl.cpp")
+
+if(EXISTS "${_bgfx_gl_file}")
+    file(READ "${_bgfx_gl_file}" _bgfx_gl_contents)
+
+    # Replace the commented block with the uncommented version
+    string(REPLACE
+"//				if (s_extension[Extension::ARB_clip_control].m_supported)
+//				{
+//					GL_CHECK(glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE) );
+//					g_caps.originBottomLeft = true;
+//				}
+//				else"
+"				if (s_extension[Extension::ARB_clip_control].m_supported)
+				{
+					GL_CHECK(glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE) );
+					g_caps.originBottomLeft = true;
+				}
+				else"
+        _bgfx_gl_contents
+        "${_bgfx_gl_contents}"
+    )
+
+    file(WRITE "${_bgfx_gl_file}" "${_bgfx_gl_contents}")
+endif()
+
 add_subdirectory("${bgfx_SOURCE_DIR}" "${bgfx_BINARY_DIR}")

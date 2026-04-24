@@ -52,14 +52,14 @@ namespace blackboard::renderer
     bgfx_init.resolution.width = drawable_width;
     bgfx_init.resolution.height = drawable_height;
     bgfx_init.resolution.numBackBuffers = 1;
-    bgfx_init.resolution.reset = BGFX_RESET_HIDPI | BGFX_RESET_MSAA_X4;
+    bgfx_init.resolution.reset = BGFX_RESET_HIDPI | BGFX_RESET_VSYNC;
 #ifdef SDL_VIDEO_DRIVER_X11
     bgfx_init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(window.window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
     bgfx_init.platformData.nwh = (void *)window_handle;
 #endif
     bgfx::init(bgfx_init);
 
-    // bgfx::setDebug(BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS);
+    bgfx::setDebug(BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS);
     //  bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0xFF0000FF, 1.0f, 0);
     //  bgfx::setViewRect(0, 0, 0, drawable_width, drawable_height);
 
