@@ -1,11 +1,10 @@
-$input v_texcoord0
+#include <bgfx_compute.sh>
 
-#include <bgfx_shader.sh>
-
-SAMPLER2D(s_taaCurrent, 0);
-SAMPLER2D(s_taaHistory, 1);
-SAMPLER2D(s_velocity, 2);
-SAMPLER2D(s_depth, 3);
+IMAGE2D_RO(s_velocity, rg16f, 0);
+IMAGE2D_RO(s_depth, r32f, 1);
+IMAGE2D_RO(s_taaCurrent, rgba8, 2);
+SAMPLER2D(s_taaHistory, 3);
+IMAGE2D_WO(s_taaOutput, rgba8, 4);
 
 float Mitchell(float x) {
     float ax = abs(x);
@@ -13,10 +12,10 @@ float Mitchell(float x) {
     float x3 = ax * ax * ax;
 
     if (ax < 1.0) {
-        // (7 * x^3) - (12 * x^2) + (16/3) -> then divided by 6
+        // [(7 * x^3) - (12 * x^2) + (16/3)] / 6
         return (7.0 * x3 - 12.0 * x2 + 5.333333) / 6.0;
     } else if (ax < 2.0) {
-        // (-7/3 * x^3) + (12 * x^2) - (20 * x) + (32/3) -> then divided by 6
+        // [(-7/3 * x^3) + (12 * x^2) - (20 * x) + (32/3)] / 6
         return (-2.333333 * x3 + 12.0 * x2 - 20.0 * ax + 10.666667) / 6.0;
     }
     return 0.0;
@@ -55,13 +54,13 @@ vec3 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize)
     vec3 result = vec3_splat(0.0);
 
     // 5-tap Catmull-Rom filter using bilateral weights
-    result += texture2D(tex, vec2(uv12.x, uv0.y )).rgb * (w12.x * w0.y );
-    result += texture2D(tex, vec2(uv0.x,  uv12.y)).rgb * (w0.x  * w12.y);
-    result += texture2D(tex, vec2(uv12.x, uv12.y)).rgb * (w12.x * w12.y);
-    result += texture2D(tex, vec2(uv3.x,  uv12.y)).rgb * (w3.x  * w12.y);
-    result += texture2D(tex, vec2(uv12.x, uv3.y )).rgb * (w12.x * w3.y );
+    result += texture2DLod(tex, vec2(uv12.x, uv0.y ), 0).rgb * (w12.x * w0.y );
+    result += texture2DLod(tex, vec2(uv0.x,  uv12.y), 0).rgb * (w0.x  * w12.y);
+    result += texture2DLod(tex, vec2(uv12.x, uv12.y), 0).rgb * (w12.x * w12.y);
+    result += texture2DLod(tex, vec2(uv3.x,  uv12.y), 0).rgb * (w3.x  * w12.y);
+    result += texture2DLod(tex, vec2(uv12.x, uv3.y ), 0).rgb * (w12.x * w3.y );
 
-    // Normalize the final sum (weights for Catmull-Rom usually sum to 1.0)
+    // Normalize
     float totalWeight = (w12.x * w0.y) + (w0.x * w12.y) + (w12.x * w12.y) + (w3.x * w12.y) + (w12.x * w3.y);
     return result / totalWeight;
 }
@@ -107,18 +106,13 @@ vec3 ClipAABB(vec3 aabbMin, vec3 aabbMax, vec3 prevSample, vec3 avg)
     #endif
 }
 
+NUM_THREADS(8, 8, 1)
 void main()
 {
-#if BGFX_SHADER_LANGUAGE_GLSL >= 130 \
-	|| BGFX_SHADER_LANGUAGE_HLSL        \
-	|| BGFX_SHADER_LANGUAGE_PSSL        \
-	|| BGFX_SHADER_LANGUAGE_SPIRV       \
-	|| BGFX_SHADER_LANGUAGE_METAL       \
-	|| BGFX_SHADER_LANGUAGE_WGSL
-    // Extended vectors required
-
-
-    ivec2 sourceDimensions = ivec2(u_viewRect.zw);
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    
+    if (any(greaterThanEqual(pixel, ivec2(u_viewRect.zw))))
+        return;
 
     vec3 sourceSampleTotal = vec3(0, 0, 0);
     float sourceSampleWeight = 0.0;
@@ -129,14 +123,16 @@ void main()
     float closestDepth = 0.0;
     ivec2 closestDepthPixelPosition = ivec2(0, 0);
     
+    UNROLL
     for (int x = -1; x <= 1; x++)
-    {
+    {   
+        UNROLL
         for (int y = -1; y <= 1; y++)
         {
-            ivec2 pixelPosition = gl_FragCoord.xy + ivec2(x, y);
-            pixelPosition = clamp(pixelPosition, 0, sourceDimensions.xy - 1);  
+            ivec2 pixelPosition = pixel + ivec2(x, y);
+            pixelPosition = clamp(pixelPosition, 0, ivec2(u_viewRect.zw) - 1);  
     
-            vec3 neighbor = max(0, texelFetch(s_taaCurrent, pixelPosition, 0).rgb);
+            vec3 neighbor = max(0, imageLoad(s_taaCurrent, pixelPosition).rgb);
             float subSampleDistance = length(vec2(x, y));
             float subSampleWeight = Mitchell(subSampleDistance);
     
@@ -149,7 +145,7 @@ void main()
             m1 += neighbor;
             m2 += neighbor * neighbor;
     
-            float currentDepth = texelFetch(s_depth, pixelPosition, 0).r;
+            float currentDepth = imageLoad(s_depth, pixelPosition).r;
             if (currentDepth > closestDepth)
             {
                 closestDepth = currentDepth;
@@ -158,13 +154,14 @@ void main()
         }
     }
 
-    vec2 motionVector = texelFetch(s_velocity, closestDepthPixelPosition, 0).xy * vec2(0.5, -0.5);
-    vec2 historyTexCoord = v_texcoord0.xy - motionVector;
+    vec2 motionVector = imageLoad(s_velocity, closestDepthPixelPosition).xy * vec2(0.5, -0.5);
+    vec2 uv = (vec2(pixel) + 0.5) / u_viewRect.zw;
+    vec2 historyTexCoord = uv - motionVector;
     vec3 sourceSample = sourceSampleTotal / sourceSampleWeight;
     
     if(any(historyTexCoord != saturate(historyTexCoord)))
     {
-        gl_FragColor = vec4(sourceSample, 1.0);
+        imageStore(s_taaOutput, pixel, vec4(sourceSample, 1.0));
         return;
     }
     
@@ -184,19 +181,12 @@ void main()
     vec3 compressedSource = sourceSample * rcp(max(max(sourceSample.r, sourceSample.g), sourceSample.b) + 1.0);
     vec3 compressedHistory = historySample * rcp(max(max(historySample.r, historySample.g), historySample.b) + 1.0);
     float luminanceSource = Luminance(compressedSource);
-    float luminanceHistory = Luminance(compressedHistory); 
+    float luminanceHistory = Luminance(compressedHistory);
     
     sourceWeight *= 1.0 / (1.0 + luminanceSource);
     historyWeight *= 1.0 / (1.0 + luminanceHistory);
     
     vec3 result = (sourceSample * sourceWeight + historySample * historyWeight) / max(sourceWeight + historyWeight, 0.00001);
     
-    gl_FragColor = vec4(result, 1.0);
-
-
-#else
-    // Fallback to no TAA
-    vec4 current = texture2D(s_taaCurrent, v_texcoord0);
-    gl_FragColor = current;
-#endif
+    imageStore(s_taaOutput, pixel, vec4(result, 1.0));
 }

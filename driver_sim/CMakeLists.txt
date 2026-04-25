@@ -36,7 +36,7 @@ endforeach()
 
 file(GLOB_RECURSE VS_SHADERS CONFIGURE_DEPENDS vs_*.sc)
 file(GLOB_RECURSE FS_SHADERS CONFIGURE_DEPENDS fs_*.sc)
-
+file(GLOB_RECURSE CS_SHADERS CONFIGURE_DEPENDS cs_*.sc)
 
 # bgfx_compile_shaders appends the wgsl profile only when this variable is enabled.
 set(BGFX_CONFIG_RENDERER_WEBGPU ${BIG_RENDERER_WEBGPU})
@@ -61,12 +61,19 @@ bgfx_compile_shaders(
   OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
   AS_HEADERS
 )
-
+bgfx_compile_shaders(
+  TYPE COMPUTE
+  SHADERS ${CS_SHADERS}
+    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/varying.def.sc
+    INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
+  OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
+  AS_HEADERS
+)
 
 if(WINDOWS)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS})
+    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS})
 elseif(MACOS)
-    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS})
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS})
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUNDLE True
         RESOURCE True

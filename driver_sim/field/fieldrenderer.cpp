@@ -28,9 +28,8 @@ using namespace blackboard::logger;
 static constexpr uint16_t VIEW_GBUFFER = 0;
 static constexpr uint16_t VIEW_OIT = 1;
 static constexpr uint16_t VIEW_OIT_DEPTH_POST_PASS = 2;
-static constexpr uint16_t VIEW_OIT_COMP = 3;
-static constexpr uint16_t VIEW_TAA_RESOLVE = 4;
-static constexpr uint16_t VIEW_BLIT = 5;
+static constexpr uint16_t VIEW_POSTPROCESS = 3;
+static constexpr uint16_t VIEW_BLIT = 4;
 
 bx::DefaultAllocator allocator;
 bx::FileReader reader;
@@ -40,12 +39,13 @@ bgfx::UniformHandle u_baseColor;
 bgfx::UniformHandle u_info;
 bgfx::UniformHandle u_previousModelViewProj;
 bgfx::UniformHandle u_jitter;
+
 bgfx::ProgramHandle program = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitDepthPostPass = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle backgroundVelocityProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle cameraVelocityProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle taaResolveProgram = BGFX_INVALID_HANDLE;
 
 bgfx::TextureHandle gAccumTex;
@@ -60,17 +60,7 @@ bgfx::TextureHandle gTAABuffer1;
 bgfx::FrameBufferHandle gBufFbo;
 bgfx::FrameBufferHandle gOitFbo;
 bgfx::FrameBufferHandle gOitDepthPostPassFbo;
-bgfx::FrameBufferHandle gFXSwapFbo;
-bgfx::FrameBufferHandle gTAAFbo0;
-bgfx::FrameBufferHandle gTAAFbo1;
-bgfx::UniformHandle s_accum;
-bgfx::UniformHandle s_reveal;
-bgfx::UniformHandle s_depth;
-bgfx::UniformHandle s_albedo;
-bgfx::UniformHandle s_normal;
-bgfx::UniformHandle s_velocity;
 bgfx::UniformHandle s_tex;
-bgfx::UniformHandle s_taaCurrent;
 bgfx::UniformHandle s_taaHistory;
 
 void initOIT(uint16_t width, uint16_t height)
@@ -139,23 +129,12 @@ void initOIT(uint16_t width, uint16_t height)
         false,
         1,
         bgfx::TextureFormat::RGBA8,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gFXSwap))
     {
         logger->error("Failed to create swap texture.");
         throw std::runtime_error("Failed to create swap texture.");
-    }
-
-    gFXSwapFbo = bgfx::createFrameBuffer(
-        1,
-        &gFXSwap,
-        true);
-
-    if (!bgfx::isValid(gFXSwapFbo))
-    {
-        logger->error("Failed to create framebuffer for swap texture.");
-        throw std::runtime_error("Failed to create framebuffer for swap texture.");
     }
 }
 
@@ -166,7 +145,7 @@ void initTAA(uint16_t width, uint16_t height)
         false,
         1,
         bgfx::TextureFormat::RGBA8,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gTAABuffer0))
     {
@@ -179,34 +158,12 @@ void initTAA(uint16_t width, uint16_t height)
         false,
         1,
         bgfx::TextureFormat::RGBA8,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gTAABuffer1))
     {
         logger->error("Failed to create TAA buffer 1 texture.");
         throw std::runtime_error("Failed to create TAA buffer 1 texture.");
-    }
-
-    gTAAFbo0 = bgfx::createFrameBuffer(
-        1,
-        &gTAABuffer0,
-        true);
-
-    if (!bgfx::isValid(gTAAFbo0))
-    {
-        logger->error("Failed to create framebuffer for TAA buffer 0.");
-        throw std::runtime_error("Failed to create framebuffer for TAA buffer 0.");
-    }
-
-    gTAAFbo1 = bgfx::createFrameBuffer(
-        1,
-        &gTAABuffer1,
-        true);
-
-    if (!bgfx::isValid(gTAAFbo1))
-    {
-        logger->error("Failed to create framebuffer for TAA buffer 1.");
-        throw std::runtime_error("Failed to create framebuffer for TAA buffer 1.");
     }
 }
 
@@ -243,7 +200,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         false,
         1,
         bgfx::TextureFormat::RG16F,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gbufVelocity))
     {
@@ -291,10 +248,11 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
 
         BGFX_EMBEDDED_SHADER(vs_pass),
-        BGFX_EMBEDDED_SHADER(fs_oit_comp),
         BGFX_EMBEDDED_SHADER(fs_blit),
-        BGFX_EMBEDDED_SHADER(fs_taa_resolve),
-        BGFX_EMBEDDED_SHADER(fs_background_velocity),
+
+        BGFX_EMBEDDED_SHADER(cs_oit_comp),
+        BGFX_EMBEDDED_SHADER(cs_taa_resolve),
+        BGFX_EMBEDDED_SHADER(cs_camera_velocity),
 
         BGFX_EMBEDDED_SHADER_END()};
 
@@ -504,67 +462,12 @@ void field::init(const blackboard::app::Window &window)
     Vertex::init();
     UVVertex::init();
 
-    s_accum = bgfx::createUniform("s_accum", bgfx::UniformType::Sampler);
-
-    if (!bgfx::isValid(s_accum))
-    {
-        logger->error("Failed to create uniform for accumulation texture.");
-        throw std::runtime_error("Failed to create uniform for accumulation texture.");
-    }
-
-    s_reveal = bgfx::createUniform("s_reveal", bgfx::UniformType::Sampler);
-
-    if (!bgfx::isValid(s_reveal))
-    {
-        logger->error("Failed to create uniform for revealage texture.");
-        throw std::runtime_error("Failed to create uniform for revealage texture.");
-    }
-
-    s_depth = bgfx::createUniform("s_depth", bgfx::UniformType::Sampler);
-
-    if (!bgfx::isValid(s_depth))
-    {
-        logger->error("Failed to create uniform for depth texture.");
-        throw std::runtime_error("Failed to create uniform for depth texture.");
-    }
-
-    s_albedo = bgfx::createUniform("s_albedo", bgfx::UniformType::Sampler);
-
-    if (!bgfx::isValid(s_albedo))
-    {
-        logger->error("Failed to create uniform for albedo texture.");
-        throw std::runtime_error("Failed to create uniform for albedo texture.");
-    }
-
-    s_normal = bgfx::createUniform("s_normal", bgfx::UniformType::Sampler);
-
-    if (!bgfx::isValid(s_normal))
-    {
-        logger->error("Failed to create uniform for normal texture.");
-        throw std::runtime_error("Failed to create uniform for normal texture.");
-    }
-
     s_tex = bgfx::createUniform("s_tex", bgfx::UniformType::Sampler);
 
     if (!bgfx::isValid(s_tex))
     {
         logger->error("Failed to create uniform for generic texture.");
         throw std::runtime_error("Failed to create uniform for generic texture.");
-    }
-
-    s_velocity = bgfx::createUniform("s_velocity", bgfx::UniformType::Sampler);
-
-    if (!bgfx::isValid(s_velocity))
-    {
-        logger->error("Failed to create uniform for velocity texture.");
-        throw std::runtime_error("Failed to create uniform for velocity texture.");
-    }
-
-    s_taaCurrent = bgfx::createUniform("s_taaCurrent", bgfx::UniformType::Sampler);
-    if (!bgfx::isValid(s_taaCurrent))
-    {
-        logger->error("Failed to create uniform for TAA current texture.");
-        throw std::runtime_error("Failed to create uniform for TAA current texture.");
     }
 
     s_taaHistory = bgfx::createUniform("s_taaHistory", bgfx::UniformType::Sampler);
@@ -805,8 +708,7 @@ void field::init(const blackboard::app::Window &window)
         }
 
         oitCompProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_oit_comp"), true);
+            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_oit_comp"), true);
 
         if (!bgfx::isValid(oitCompProgram))
         {
@@ -825,8 +727,7 @@ void field::init(const blackboard::app::Window &window)
         }
 
         taaResolveProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_taa_resolve"), true);
+            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
 
         if (!bgfx::isValid(taaResolveProgram))
         {
@@ -834,13 +735,12 @@ void field::init(const blackboard::app::Window &window)
             throw std::runtime_error("Failed to create TAA resolve program.");
         }
 
-        backgroundVelocityProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_background_velocity"), true);
-        if (!bgfx::isValid(backgroundVelocityProgram))
+        cameraVelocityProgram =
+            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_camera_velocity"), true);
+        if (!bgfx::isValid(cameraVelocityProgram))
         {
-            logger->error("Failed to create background velocity program.");
-            throw std::runtime_error("Failed to create background velocity program.");
+            logger->error("Failed to create camera velocity program.");
+            throw std::runtime_error("Failed to create camera velocity program.");
         }
 
         u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
@@ -979,8 +879,6 @@ void field::render(const blackboard::app::Window &window)
     uint16_t m_width = window.width;
     uint16_t m_height = window.height;
 
-    bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
-
     float haltonX = 2.0f * Halton(jitterIndex + 1, 2) - 1.0f;
     float haltonY = 2.0f * Halton(jitterIndex + 1, 3) - 1.0f;
     float jitterX = (haltonX / m_width);
@@ -994,8 +892,6 @@ void field::render(const blackboard::app::Window &window)
     proj[8] += jitterX;
     proj[9] += jitterY;
 
-    bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
-
     float viewProj[16];
     bx::mtxMul(viewProj, view, proj);
 
@@ -1005,17 +901,9 @@ void field::render(const blackboard::app::Window &window)
         firstFrame = false;
     }
 
-    bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
-
     bgfx::Encoder *encoder = bgfx::begin();
 
     updateInfo(encoder, 0.1f, 100.0f);
-
-    bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo);
-    bgfx::setViewClear(VIEW_GBUFFER,
-                       BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
-                       0x00000000,
-                       bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
 
     jitterIndex = (jitterIndex + 1) % HALTON_SAMPLES;
 
@@ -1025,6 +913,17 @@ void field::render(const blackboard::app::Window &window)
     previousJitterY = jitterY;
 
     // OPAQUE PASS
+
+    encoder->discard(BGFX_DISCARD_BINDINGS);
+
+    bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
+    bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
+    bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo);
+    bgfx::setViewClear(VIEW_GBUFFER,
+                       BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
+                       0x00000000,
+                       bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
 
     float identity[16];
     bx::mtxIdentity(identity);
@@ -1109,57 +1008,54 @@ void field::render(const blackboard::app::Window &window)
     }
 #endif
 
-    encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_EQUAL);
+    // Post processing
+    bgfx::setViewName(VIEW_POSTPROCESS, "Field - Post Process");
+    bgfx::setViewMode(VIEW_POSTPROCESS, bgfx::ViewMode::Sequential);
+    bgfx::setViewTransform(VIEW_POSTPROCESS, view, proj);
+    bgfx::setViewRect(VIEW_POSTPROCESS, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_POSTPROCESS, BGFX_INVALID_HANDLE);
 
-    screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
+    encoder->setUniform(u_previousModelViewProj, previousViewProj);
 
-    encoder->submit(VIEW_OIT_DEPTH_POST_PASS, backgroundVelocityProgram);
+    // OIT Composition
+    encoder->setImage(0, gAccumTex, 0, bgfx::Access::Read);
+    encoder->setImage(1, gRevealTex, 0, bgfx::Access::Read);
+    encoder->setImage(2, gbufAlbedo, 0, bgfx::Access::Read);
+    encoder->setImage(3, gbufNormal, 0, bgfx::Access::Read);
+    encoder->setImage(4, gFXSwap, 0, bgfx::Access::Write);
+    encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, (m_width + 7) / 8, (m_height + 7) / 8);
 
-    bgfx::setViewName(VIEW_OIT_COMP, "Field - OIT Comp");
+    // Camera velocity
+    encoder->setImage(0, gbufVelocity, 0, bgfx::Access::Write);
+    encoder->setImage(1, gbufDepth, 0, bgfx::Access::Read);
+    encoder->dispatch(VIEW_POSTPROCESS, cameraVelocityProgram, (m_width + 7) / 8, (m_height + 7) / 8);
 
-    bgfx::setViewRect(VIEW_OIT_COMP, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_OIT_COMP, gFXSwapFbo);
+    // SSAO
 
-    encoder->setTexture(0, s_accum, gAccumTex);
-    encoder->setTexture(1, s_reveal, gRevealTex);
-    encoder->setTexture(2, s_albedo, gbufAlbedo);
-    encoder->setTexture(3, s_normal, gbufNormal);
-
-    encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
-
-    screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
-
-    encoder->submit(VIEW_OIT_COMP, oitCompProgram);
+    // Motion blur
 
     // TAA resolve
-    bgfx::setViewName(VIEW_TAA_RESOLVE, "Field - TAA Resolve");
-
-    bgfx::setViewRect(VIEW_TAA_RESOLVE, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_TAA_RESOLVE, taaUseBuffer1 ? gTAAFbo1 : gTAAFbo0);
+    bgfx::TextureHandle taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;
 
     if (firstTAAFrame)
     {
-        encoder->setTexture(0, s_tex, gFXSwap);
+        encoder->blit(VIEW_POSTPROCESS, taaOutput, 0, 0, gFXSwap, 0, 0, m_width, m_height);
+        firstTAAFrame = false;
     }
     else
     {
-        encoder->setTexture(0, s_taaCurrent, gFXSwap);
-        encoder->setTexture(1, s_taaHistory, taaUseBuffer1 ? gTAABuffer0 : gTAABuffer1);
-        encoder->setTexture(2, s_velocity, gbufVelocity);
-        encoder->setTexture(3, s_depth, gbufDepth);
+        encoder->setImage(0, gbufVelocity, 0, bgfx::Access::Read);
+        encoder->setImage(1, gbufDepth, 0, bgfx::Access::Read);
+        encoder->setImage(2, gFXSwap, 0, bgfx::Access::Read);
+        encoder->setTexture(3, s_taaHistory, taaUseBuffer1 ? gTAABuffer0 : gTAABuffer1);
+        encoder->setImage(4, taaOutput, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, taaResolveProgram, (m_width + 7) / 8, (m_height + 7) / 8);
     }
 
-    encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
-
-    screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
-
-    encoder->submit(VIEW_TAA_RESOLVE, firstTAAFrame ? blitProgram : taaResolveProgram);
-    firstTAAFrame = false;
+    // Bloom
 
     bgfx::setViewFrameBuffer(VIEW_BLIT, BGFX_INVALID_HANDLE);
-
     bgfx::setViewName(VIEW_BLIT, "Field - Blit");
-
     bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
 
     encoder->setTexture(0, s_tex, taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0);
@@ -1168,6 +1064,7 @@ void field::render(const blackboard::app::Window &window)
     screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
 
     encoder->submit(VIEW_BLIT, blitProgram);
+
     bgfx::end(encoder);
 
     std::memcpy(previousViewProj, viewProj, sizeof(viewProj));
@@ -1216,8 +1113,8 @@ void field::cleanup()
         bgfx::destroy(blitProgram);
     if (bgfx::isValid(taaResolveProgram))
         bgfx::destroy(taaResolveProgram);
-    if (bgfx::isValid(backgroundVelocityProgram))
-        bgfx::destroy(backgroundVelocityProgram);
+    if (bgfx::isValid(cameraVelocityProgram))
+        bgfx::destroy(cameraVelocityProgram);
 
     if (bgfx::isValid(gAccumTex))
         bgfx::destroy(gAccumTex);
@@ -1241,34 +1138,14 @@ void field::cleanup()
 
     if (bgfx::isValid(gFXSwap))
         bgfx::destroy(gFXSwap);
-    if (bgfx::isValid(gFXSwapFbo))
-        bgfx::destroy(gFXSwapFbo);
 
-    if (bgfx::isValid(gTAAFbo0))
-        bgfx::destroy(gTAAFbo0);
-    if (bgfx::isValid(gTAAFbo1))
-        bgfx::destroy(gTAAFbo1);
     if (bgfx::isValid(gTAABuffer0))
         bgfx::destroy(gTAABuffer0);
     if (bgfx::isValid(gTAABuffer1))
         bgfx::destroy(gTAABuffer1);
 
-    if (bgfx::isValid(s_accum))
-        bgfx::destroy(s_accum);
-    if (bgfx::isValid(s_reveal))
-        bgfx::destroy(s_reveal);
-    if (bgfx::isValid(s_depth))
-        bgfx::destroy(s_depth);
-    if (bgfx::isValid(s_albedo))
-        bgfx::destroy(s_albedo);
-    if (bgfx::isValid(s_normal))
-        bgfx::destroy(s_normal);
-    if (bgfx::isValid(s_velocity))
-        bgfx::destroy(s_velocity);
     if (bgfx::isValid(s_tex))
         bgfx::destroy(s_tex);
-    if (bgfx::isValid(s_taaCurrent))
-        bgfx::destroy(s_taaCurrent);
     if (bgfx::isValid(s_taaHistory))
         bgfx::destroy(s_taaHistory);
 }
