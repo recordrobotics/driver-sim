@@ -70,6 +70,9 @@ bgfx::UniformHandle u_previousProj;
 bgfx::UniformHandle u_jitter;
 bgfx::UniformHandle u_pbrData;
 
+bgfx::UniformHandle u_lightPos;
+bgfx::UniformHandle u_lightColor;
+
 bgfx::UniformHandle u_mbSampleStepMultiplier;
 bgfx::UniformHandle u_mbVelocityData;
 bgfx::UniformHandle u_mbJFAData;
@@ -80,8 +83,8 @@ bgfx::ProgramHandle programInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitDepthPostPass = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle tonemapProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle csBlitProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle taaResolveProgram = BGFX_INVALID_HANDLE;
 
@@ -201,7 +204,7 @@ void initOIT(uint16_t width, uint16_t height)
         width, height,
         false,
         1,
-        bgfx::TextureFormat::RGBA8,
+        bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gOutputColor))
@@ -217,7 +220,7 @@ void initTAA(uint16_t width, uint16_t height)
         width, height,
         false,
         1,
-        bgfx::TextureFormat::RGBA8,
+        bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gTAABuffer0))
@@ -230,7 +233,7 @@ void initTAA(uint16_t width, uint16_t height)
         width, height,
         false,
         1,
-        bgfx::TextureFormat::RGBA8,
+        bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gTAABuffer1))
@@ -402,7 +405,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         width, height,
         false,
         1,
-        bgfx::TextureFormat::RGBA8,
+        bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gMBOutputColor))
@@ -441,7 +444,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         width, height,
         false,
         1,
-        bgfx::TextureFormat::RGBA8,
+        bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     if (!bgfx::isValid(gMBPreviousOutputColor))
@@ -460,7 +463,7 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
 
         BGFX_EMBEDDED_SHADER(vs_pass),
-        BGFX_EMBEDDED_SHADER(fs_blit),
+        BGFX_EMBEDDED_SHADER(fs_tonemap),
 
         BGFX_EMBEDDED_SHADER(cs_blit),
         BGFX_EMBEDDED_SHADER(cs_oit_comp),
@@ -1073,23 +1076,23 @@ void field::init(const blackboard::app::Window &window)
             throw std::runtime_error("Failed to create OIT composition program.");
         }
 
-        blitProgram =
+        tonemapProgram =
             bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_blit"), true);
+                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tonemap"), true);
+
+        if (!bgfx::isValid(tonemapProgram))
+        {
+            logger->error("Failed to create tonemap program.");
+            throw std::runtime_error("Failed to create tonemap program.");
+        }
+
+        blitProgram =
+            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_blit"), true);
 
         if (!bgfx::isValid(blitProgram))
         {
             logger->error("Failed to create blit program.");
             throw std::runtime_error("Failed to create blit program.");
-        }
-
-        csBlitProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_blit"), true);
-
-        if (!bgfx::isValid(csBlitProgram))
-        {
-            logger->error("Failed to create cs blit program.");
-            throw std::runtime_error("Failed to create cs blit program.");
         }
 
         taaResolveProgram =
@@ -1229,6 +1232,20 @@ void field::init(const blackboard::app::Window &window)
         {
             logger->error("Failed to create uniform: u_pbrData");
             throw std::runtime_error("Failed to create uniform: u_pbrData");
+        }
+
+        u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, 3);
+        if (!bgfx::isValid(u_lightPos))
+        {
+            logger->error("Failed to create uniform: u_lightPos");
+            throw std::runtime_error("Failed to create uniform: u_lightPos");
+        }
+
+        u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, 3);
+        if (!bgfx::isValid(u_lightColor))
+        {
+            logger->error("Failed to create uniform: u_lightColor");
+            throw std::runtime_error("Failed to create uniform: u_lightColor");
         }
 
         u_mbSampleStepMultiplier = bgfx::createUniform("u_mbSampleStepMultiplier", bgfx::UniformType::Vec4);
@@ -1492,6 +1509,18 @@ void field::render(const blackboard::app::Window &window)
     previousJitterX = jitterX;
     previousJitterY = jitterY;
 
+    // Light uniforms
+    float lightPos[3][4] = {
+        {-7.0f, 6.0f, 0.0f, 0.0f},
+        {0.0f, 6.0f, 0.0f, 0.0f},
+        {7.0f, 6.0f, 0.0f, 0.0f}};
+    float lightColor[3][4] = {
+        {1.0f, 0.25f, 0.25f, 432.0f},
+        {1.0f, 1.0f, 1.0f, 432.0f},
+        {0.25f, 0.45f, 1.0f, 432.0f}};
+    encoder->setUniform(u_lightPos, lightPos, 3);
+    encoder->setUniform(u_lightColor, lightColor, 3);
+
     // OPAQUE PASS
 
     encoder->discard(BGFX_DISCARD_BINDINGS);
@@ -1673,7 +1702,8 @@ void field::render(const blackboard::app::Window &window)
     encoder->setImage(1, gRevealTex, 0, bgfx::Access::Read);
     encoder->setImage(2, gbufAlbedo, 0, bgfx::Access::Read);
     encoder->setImage(3, gbufNormal, 0, bgfx::Access::Read);
-    encoder->setImage(4, gOutputColor, 0, bgfx::Access::Write);
+    encoder->setImage(4, gbufDepth, 0, bgfx::Access::Read);
+    encoder->setImage(5, gOutputColor, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity
@@ -1833,7 +1863,7 @@ void field::render(const blackboard::app::Window &window)
     // Copy to output
     encoder->setImage(0, gMBOutputColor, 0, bgfx::Access::Read);
     encoder->setImage(1, gOutputColor, 0, bgfx::Access::Write);
-    encoder->dispatch(VIEW_POSTPROCESS, csBlitProgram, xGroups, yGroups);
+    encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
 
     // TAA resolve
     bgfx::TextureHandle taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;
@@ -1842,7 +1872,7 @@ void field::render(const blackboard::app::Window &window)
     {
         encoder->setImage(0, gOutputColor, 0, bgfx::Access::Read);
         encoder->setImage(1, taaOutput, 0, bgfx::Access::Write);
-        encoder->dispatch(VIEW_POSTPROCESS, csBlitProgram, xGroups, yGroups);
+        encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
         firstTAAFrame = false;
     }
     else
@@ -1857,7 +1887,7 @@ void field::render(const blackboard::app::Window &window)
         // Copy to output
         encoder->setImage(0, taaOutput, 0, bgfx::Access::Read);
         encoder->setImage(1, gOutputColor, 0, bgfx::Access::Write);
-        encoder->dispatch(VIEW_POSTPROCESS, csBlitProgram, xGroups, yGroups);
+        encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
     }
 
     // Bloom
@@ -1871,7 +1901,7 @@ void field::render(const blackboard::app::Window &window)
 
     screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
 
-    encoder->submit(VIEW_BLIT, blitProgram);
+    encoder->submit(VIEW_BLIT, tonemapProgram);
 
     bgfx::end(encoder);
 
@@ -1923,6 +1953,10 @@ void field::cleanup()
         bgfx::destroy(u_jitter);
     if (bgfx::isValid(u_pbrData))
         bgfx::destroy(u_pbrData);
+    if (bgfx::isValid(u_lightPos))
+        bgfx::destroy(u_lightPos);
+    if (bgfx::isValid(u_lightColor))
+        bgfx::destroy(u_lightColor);
 
     if (bgfx::isValid(u_mbSampleStepMultiplier))
         bgfx::destroy(u_mbSampleStepMultiplier);
@@ -1943,10 +1977,10 @@ void field::cleanup()
         bgfx::destroy(programOitDepthPostPass);
     if (bgfx::isValid(oitCompProgram))
         bgfx::destroy(oitCompProgram);
+    if (bgfx::isValid(tonemapProgram))
+        bgfx::destroy(tonemapProgram);
     if (bgfx::isValid(blitProgram))
         bgfx::destroy(blitProgram);
-    if (bgfx::isValid(csBlitProgram))
-        bgfx::destroy(csBlitProgram);
     if (bgfx::isValid(taaResolveProgram))
         bgfx::destroy(taaResolveProgram);
     if (bgfx::isValid(mbVelocityProgram))

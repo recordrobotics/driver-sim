@@ -31,10 +31,10 @@
 #include <spirv/vs_pass.sc.bin.h>
 #include <wgsl/vs_pass.sc.bin.h>
 
-#include <glsl/fs_blit.sc.bin.h>
-#include <essl/fs_blit.sc.bin.h>
-#include <spirv/fs_blit.sc.bin.h>
-#include <wgsl/fs_blit.sc.bin.h>
+#include <glsl/fs_tonemap.sc.bin.h>
+#include <essl/fs_tonemap.sc.bin.h>
+#include <spirv/fs_tonemap.sc.bin.h>
+#include <wgsl/fs_tonemap.sc.bin.h>
 
 #include <glsl/cs_blit.sc.bin.h>
 #include <essl/cs_blit.sc.bin.h>
@@ -104,7 +104,7 @@
 #include <dxbc/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
 #include <dxbc/vs_pass.sc.bin.h>
-#include <dxbc/fs_blit.sc.bin.h>
+#include <dxbc/fs_tonemap.sc.bin.h>
 
 #include <dxbc/cs_blit.sc.bin.h>
 #include <dxbc/cs_oit_comp.sc.bin.h>
@@ -128,7 +128,7 @@
 #include <dxil/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
 #include <dxil/vs_pass.sc.bin.h>
-#include <dxil/fs_blit.sc.bin.h>
+#include <dxil/fs_tonemap.sc.bin.h>
 
 #include <dxil/cs_blit.sc.bin.h>
 #include <dxil/cs_oit_comp.sc.bin.h>
@@ -152,7 +152,7 @@
 #include <metal/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
 #include <metal/vs_pass.sc.bin.h>
-#include <metal/fs_blit.sc.bin.h>
+#include <metal/fs_tonemap.sc.bin.h>
 
 #include <metal/cs_blit.sc.bin.h>
 #include <metal/cs_oit_comp.sc.bin.h>

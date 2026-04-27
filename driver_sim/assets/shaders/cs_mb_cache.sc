@@ -3,7 +3,7 @@
 SAMPLER2D(s_velocity, 0);
 SAMPLER2D(s_color, 1);
 IMAGE2D_WO(s_prevVelocity, rgba32f, 2);
-IMAGE2D_WO(s_prevColor, rgba8, 3);
+IMAGE2D_WO(s_prevColor, rgba32f, 3);
 
 // Guertin's functions https://research.nvidia.com/sites/default/files/pubs/2013-11_A-Fast-and/Guertin2013MotionBlur-small.pdf
 // ----------------------------------------------------------

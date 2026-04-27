@@ -2,9 +2,9 @@
 
 IMAGE2D_RO(s_velocity, rg16f, 0);
 IMAGE2D_RO(s_depth, r32f, 1);
-IMAGE2D_RO(s_taaCurrent, rgba8, 2);
+IMAGE2D_RO(s_taaCurrent, rgba32f, 2);
 SAMPLER2D(s_taaHistory, 3);
-IMAGE2D_WO(s_taaOutput, rgba8, 4);
+IMAGE2D_WO(s_taaOutput, rgba32f, 4);
 
 float Mitchell(float x) {
     float ax = abs(x);

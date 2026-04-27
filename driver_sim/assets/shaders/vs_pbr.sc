@@ -1,5 +1,5 @@
 $input a_position, a_normal
-$output v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition
+$output v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition, v_worldPosition
 
 #include <bgfx_shader.sh>
 
@@ -11,8 +11,8 @@ void main()
 {
 	bool writeMotionVectors = u_pbrData.x > 0.5;
 
-	//vec4 position = mul(u_modelViewProj, vec4(a_position, 1.0) );
-	vec4 position = mul(u_viewProj, mul(u_model[0], vec4(a_position, 1.0) ));
+	vec4 worldPosition = mul(u_model[0], vec4(a_position, 1.0) );
+	vec4 position = mul(u_viewProj, worldPosition);
 	vec4 viewPos = mul(u_modelView, vec4(a_position, 1.0) );
 	v_viewPosition = viewPos.xyz;
 
@@ -24,6 +24,8 @@ void main()
 		v_previousPosition = previousPosition;
 		v_currentPosition = position;
 	}
+
+	v_worldPosition = worldPosition.xyz;
 
 	gl_Position = position;
 }

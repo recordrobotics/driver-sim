@@ -1,4 +1,4 @@
-$input v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition
+$input v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition, v_worldPosition
 
 #include <bgfx_shader.sh>
 

@@ -1,4 +1,4 @@
-$input v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition
+$input v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition, v_worldPosition
 
 #include <bgfx_shader.sh>
 #include "utils.sh"
@@ -13,7 +13,7 @@ float w(float z, float a) {
 
 void main()
 {
-    vec4 color = pbr(u_baseColor.rgb, v_worldNormal, u_baseColor.a);
+    vec4 color = pbr(u_baseColor.rgb, v_worldPosition, mtxGetColumn(u_invView, 3).xyz, v_worldNormal, u_baseColor.a);
 
     color.rgb *= color.a;
 

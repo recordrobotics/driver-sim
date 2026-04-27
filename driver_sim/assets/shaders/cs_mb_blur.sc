@@ -7,7 +7,7 @@
 SAMPLER2D(s_color, 0);
 SAMPLER2D(s_velocity, 1);
 SAMPLER2D(s_neighbormax, 2);
-IMAGE2D_WO(s_output, rgba8, 3);
+IMAGE2D_WO(s_output, rgba32f, 3);
 SAMPLER2D(s_tilemax, 4);
 SAMPLER2D(s_prevColor, 5);
 SAMPLER2D(s_prevVelocity, 6);
