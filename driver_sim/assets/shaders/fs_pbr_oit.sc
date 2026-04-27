@@ -5,6 +5,7 @@ $input v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition
 #include "pbr.sh"
 
 uniform vec4 u_baseColor;
+uniform vec4 u_pbrData;
 
 float w(float z, float a) {
     return a * clamp(0.03 / (1e-5 + pow(z / 200.0, 5.0) ), 0.01, 3000.0);

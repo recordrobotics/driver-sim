@@ -7,7 +7,7 @@ IMAGE2D_RO(s_albedo, rgba8, 2);
 IMAGE2D_RO(s_normal, rgba16f, 3);
 IMAGE2D_WO(s_output, rgba8, 4);
 
-NUM_THREADS(8, 8, 1)
+NUM_THREADS(16, 16, 1)
 void main()
 {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);

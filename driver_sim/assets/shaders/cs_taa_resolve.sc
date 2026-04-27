@@ -106,7 +106,7 @@ vec3 ClipAABB(vec3 aabbMin, vec3 aabbMax, vec3 prevSample, vec3 avg)
     #endif
 }
 
-NUM_THREADS(8, 8, 1)
+NUM_THREADS(16, 16, 1)
 void main()
 {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
@@ -154,7 +154,7 @@ void main()
         }
     }
 
-    vec2 motionVector = imageLoad(s_velocity, closestDepthPixelPosition).xy * vec2(0.5, -0.5);
+    vec2 motionVector = imageLoad(s_velocity, closestDepthPixelPosition).xy * vec2(-1, 1); // velocity is prev-current, and y needs to be flipped for uv
     vec2 uv = (vec2(pixel) + 0.5) / u_viewRect.zw;
     vec2 historyTexCoord = uv - motionVector;
     vec3 sourceSample = sourceSampleTotal / sourceSampleWeight;
