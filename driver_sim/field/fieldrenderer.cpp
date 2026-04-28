@@ -20,6 +20,8 @@
 
 #include <blackboard_app/logger.h>
 
+#include "texture.h"
+
 #include "fieldrenderer.h"
 #include "shaders.h"
 
@@ -98,33 +100,33 @@ bgfx::ProgramHandle mbBlurProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle mbBlurSimpleProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle mbCacheProgram = BGFX_INVALID_HANDLE;
 
-bgfx::TextureHandle gAccumTex;
-bgfx::TextureHandle gRevealTex;
+Texture gAccumTex;
+Texture gRevealTex;
 
-bgfx::TextureHandle gbufAlbedo;
-bgfx::TextureHandle gbufNormal;
-bgfx::TextureHandle gbufVelocity;
-bgfx::TextureHandle gFullVelocity;
-bgfx::TextureHandle gMBPreviousVelocity;
-bgfx::TextureHandle gbufDepth;
+Texture gbufAlbedo;
+Texture gbufNormal;
+Texture gbufVelocity;
+Texture gFullVelocity;
+Texture gMBPreviousVelocity;
+Texture gbufDepth;
 
-bgfx::TextureHandle gOutputColor;
-bgfx::TextureHandle gMBPreviousOutputColor;
+Texture gOutputColor;
+Texture gMBPreviousOutputColor;
 
-bgfx::TextureHandle gTAABuffer0;
-bgfx::TextureHandle gTAABuffer1;
+Texture gTAABuffer0;
+Texture gTAABuffer1;
 
-bgfx::TextureHandle gMBTileMaxX;
-bgfx::TextureHandle gMBTileMax;
-bgfx::TextureHandle gMBNeighborMax;
-bgfx::TextureHandle gMBBufferA;
-bgfx::TextureHandle gMBBufferB;
-bgfx::TextureHandle gMBVelocity;
-bgfx::TextureHandle gMBOutputColor;
+Texture gMBTileMaxX;
+Texture gMBTileMax;
+Texture gMBNeighborMax;
+Texture gMBBufferA;
+Texture gMBBufferB;
+Texture gMBVelocity;
+Texture gMBOutputColor;
 
-bgfx::FrameBufferHandle gBufFbo;
-bgfx::FrameBufferHandle gOitFbo;
-bgfx::FrameBufferHandle gOitDepthPostPassFbo;
+FrameBuffer gBufFbo;
+FrameBuffer gOitFbo;
+FrameBuffer gOitDepthPostPassFbo;
 
 bgfx::UniformHandle s_tex;
 bgfx::UniformHandle s_taaHistory;
@@ -141,317 +143,188 @@ bgfx::UniformHandle s_mbBuffer;
 
 void initOIT(uint16_t width, uint16_t height)
 {
-    gAccumTex = bgfx::createTexture2D(
+    gAccumTex = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    if (!bgfx::isValid(gAccumTex))
-    {
-        logger->error("Failed to create accumulation texture for OIT.");
-        throw std::runtime_error("Failed to create accumulation texture for OIT.");
-    }
-
-    gRevealTex = bgfx::createTexture2D(
+    gRevealTex = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::R16F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    if (!bgfx::isValid(gRevealTex))
-    {
-        logger->error("Failed to create revealage texture for OIT.");
-        throw std::runtime_error("Failed to create revealage texture for OIT.");
-    }
+    gOitFbo = FrameBuffer({gAccumTex,
+                           gRevealTex,
+                           gbufDepth});
 
-    bgfx::TextureHandle attachments[] =
-        {
-            gAccumTex,
-            gRevealTex,
-            gbufDepth};
+    gOitDepthPostPassFbo = FrameBuffer({gbufVelocity,
+                                        gbufDepth});
 
-    gOitFbo = bgfx::createFrameBuffer(
-        BX_COUNTOF(attachments),
-        attachments,
-        true);
-
-    if (!bgfx::isValid(gOitFbo))
-    {
-        logger->error("Failed to create framebuffer for OIT.");
-        throw std::runtime_error("Failed to create framebuffer for OIT.");
-    }
-
-    bgfx::TextureHandle depthPostPassAttachments[] =
-        {
-            gbufVelocity,
-            gbufDepth};
-
-    gOitDepthPostPassFbo = bgfx::createFrameBuffer(
-        BX_COUNTOF(depthPostPassAttachments),
-        depthPostPassAttachments,
-        true);
-
-    if (!bgfx::isValid(gOitDepthPostPassFbo))
-    {
-        logger->error("Failed to create framebuffer for OIT Depth Post-Pass.");
-        throw std::runtime_error("Failed to create framebuffer for OIT Depth Post-Pass.");
-    }
-
-    gOutputColor = bgfx::createTexture2D(
+    gOutputColor = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
-
-    if (!bgfx::isValid(gOutputColor))
-    {
-        logger->error("Failed to create output color texture.");
-        throw std::runtime_error("Failed to create output color texture.");
-    }
 }
 
 void initTAA(uint16_t width, uint16_t height)
 {
-    gTAABuffer0 = bgfx::createTexture2D(
+    gTAABuffer0 = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gTAABuffer0))
-    {
-        logger->error("Failed to create TAA buffer 0 texture.");
-        throw std::runtime_error("Failed to create TAA buffer 0 texture.");
-    }
-
-    gTAABuffer1 = bgfx::createTexture2D(
+    gTAABuffer1 = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
-
-    if (!bgfx::isValid(gTAABuffer1))
-    {
-        logger->error("Failed to create TAA buffer 1 texture.");
-        throw std::runtime_error("Failed to create TAA buffer 1 texture.");
-    }
 }
 
 void initGBuffer(uint16_t width, uint16_t height)
 {
-    gbufAlbedo = bgfx::createTexture2D(
+    gbufAlbedo = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA8,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    if (!bgfx::isValid(gbufAlbedo))
-    {
-        logger->error("Failed to create albedo texture for G-buffer.");
-        throw std::runtime_error("Failed to create albedo texture for G-buffer.");
-    }
-
-    gbufNormal = bgfx::createTexture2D(
+    gbufNormal = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA8S,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    if (!bgfx::isValid(gbufNormal))
-    {
-        logger->error("Failed to create normal texture for G-buffer.");
-        throw std::runtime_error("Failed to create normal texture for G-buffer.");
-    }
-
-    gbufVelocity = bgfx::createTexture2D(
+    gbufVelocity = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gbufVelocity))
-    {
-        logger->error("Failed to create velocity texture for G-buffer.");
-        throw std::runtime_error("Failed to create velocity texture for G-buffer.");
-    }
-
-    gFullVelocity = bgfx::createTexture2D(
+    gFullVelocity = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gFullVelocity))
-    {
-        logger->error("Failed to create full velocity texture.");
-        throw std::runtime_error("Failed to create full velocity texture.");
-    }
-
-    gbufDepth = bgfx::createTexture2D(
+    gbufDepth = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::D24S8,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    if (!bgfx::isValid(gbufDepth))
-    {
-        logger->error("Failed to create depth texture for G-buffer.");
-        throw std::runtime_error("Failed to create depth texture for G-buffer.");
-    }
-
-    bgfx::TextureHandle attachments[] =
-        {
-            gbufAlbedo,
-            gbufNormal,
-            gbufVelocity,
-            gbufDepth};
-
-    gBufFbo = bgfx::createFrameBuffer(
-        BX_COUNTOF(attachments),
-        attachments,
-        true);
-
-    if (!bgfx::isValid(gBufFbo))
-    {
-        logger->error("Failed to create framebuffer for G-buffer.");
-        throw std::runtime_error("Failed to create framebuffer for G-buffer.");
-    }
+    gBufFbo = FrameBuffer({gbufAlbedo,
+                           gbufNormal,
+                           gbufVelocity,
+                           gbufDepth});
 }
 
 void initMotionBlur(uint16_t width, uint16_t height)
 {
-    gMBTileMaxX = bgfx::createTexture2D(
-        SCALE_MB_BUFFERS ? uint16_t(width / (float)MB_SAMPLE_STEP_MULTIPLIER) : width,
+    gMBTileMaxX = Texture(
+        width,
         height,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBTileMaxX))
-    {
-        logger->error("Failed to create tile max texture for motion blur.");
-        throw std::runtime_error("Failed to create tile max texture for motion blur.");
-    }
-
-    gMBTileMax = bgfx::createTexture2D(
-        SCALE_MB_BUFFERS ? uint16_t(width / (float)MB_SAMPLE_STEP_MULTIPLIER) : width,
-        SCALE_MB_BUFFERS ? uint16_t(height / (float)MB_SAMPLE_STEP_MULTIPLIER) : height,
+    gMBTileMax = Texture(
+        width,
+        height,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBTileMax))
-    {
-        logger->error("Failed to create tile max texture for motion blur.");
-        throw std::runtime_error("Failed to create tile max texture for motion blur.");
-    }
-
-    gMBNeighborMax = bgfx::createTexture2D(
-        SCALE_MB_BUFFERS ? uint16_t(width / (float)MB_SAMPLE_STEP_MULTIPLIER) : width,
-        SCALE_MB_BUFFERS ? uint16_t(height / (float)MB_SAMPLE_STEP_MULTIPLIER) : height,
+    gMBNeighborMax = Texture(
+        width,
+        height,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBNeighborMax))
-    {
-        logger->error("Failed to create neighbor max texture for motion blur.");
-        throw std::runtime_error("Failed to create neighbor max texture for motion blur.");
-    }
-
-    gMBBufferA = bgfx::createTexture2D(
-        SCALE_MB_BUFFERS ? uint16_t(width / (float)MB_SAMPLE_STEP_MULTIPLIER) : width,
-        SCALE_MB_BUFFERS ? uint16_t(height / (float)MB_SAMPLE_STEP_MULTIPLIER) : height,
+    gMBBufferA = Texture(
+        width,
+        height,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBBufferA))
-    {
-        logger->error("Failed to create motion blur buffer A texture.");
-        throw std::runtime_error("Failed to create motion blur buffer A texture.");
-    }
-
-    gMBBufferB = bgfx::createTexture2D(
-        SCALE_MB_BUFFERS ? uint16_t(width / (float)MB_SAMPLE_STEP_MULTIPLIER) : width,
-        SCALE_MB_BUFFERS ? uint16_t(height / (float)MB_SAMPLE_STEP_MULTIPLIER) : height,
+    gMBBufferB = Texture(
+        width,
+        height,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBBufferB))
-    {
-        logger->error("Failed to create motion blur buffer B texture.");
-        throw std::runtime_error("Failed to create motion blur buffer B texture.");
-    }
-
-    gMBOutputColor = bgfx::createTexture2D(
+    gMBOutputColor = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBOutputColor))
-    {
-        logger->error("Failed to create motion blur output color texture.");
-        throw std::runtime_error("Failed to create motion blur output color texture.");
-    }
-
-    gMBVelocity = bgfx::createTexture2D(
+    gMBVelocity = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBVelocity))
-    {
-        logger->error("Failed to create motion blur velocity texture.");
-        throw std::runtime_error("Failed to create motion blur velocity texture.");
-    }
-
-    gMBPreviousVelocity = bgfx::createTexture2D(
+    gMBPreviousVelocity = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    if (!bgfx::isValid(gMBPreviousVelocity))
-    {
-        logger->error("Failed to create previous motion blur velocity texture.");
-        throw std::runtime_error("Failed to create previous motion blur velocity texture.");
-    }
-
-    gMBPreviousOutputColor = bgfx::createTexture2D(
+    gMBPreviousOutputColor = Texture(
         width, height,
+        1.0f, 1.0f,
         false,
         1,
         bgfx::TextureFormat::RGBA32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
-
-    if (!bgfx::isValid(gMBPreviousOutputColor))
-    {
-        logger->error("Failed to create previous motion blur output color texture.");
-        throw std::runtime_error("Failed to create previous motion blur output color texture.");
-    }
 }
 
 static const bgfx::EmbeddedShader s_embeddedShaders[] =
@@ -1459,6 +1332,62 @@ static void toNormalMatrix(float normalMatrix[9], const float model[16])
 
 static constexpr uint32_t HALTON_SAMPLES = 8;
 
+void ensureTextures(uint16_t width, uint16_t height)
+{
+    gAccumTex.beginFrame();
+    gRevealTex.beginFrame();
+
+    gbufAlbedo.beginFrame();
+    gbufNormal.beginFrame();
+    gbufVelocity.beginFrame();
+    gFullVelocity.beginFrame();
+    gMBPreviousVelocity.beginFrame();
+    gbufDepth.beginFrame();
+
+    gOutputColor.beginFrame();
+    gMBPreviousOutputColor.beginFrame();
+
+    gTAABuffer0.beginFrame();
+    gTAABuffer1.beginFrame();
+
+    gMBTileMaxX.beginFrame();
+    gMBTileMax.beginFrame();
+    gMBNeighborMax.beginFrame();
+    gMBBufferA.beginFrame();
+    gMBBufferB.beginFrame();
+    gMBOutputColor.beginFrame();
+    gMBVelocity.beginFrame();
+
+    gAccumTex.ensure(width, height);
+    gRevealTex.ensure(width, height);
+
+    gOitFbo.ensure(width, height);
+    gOitDepthPostPassFbo.ensure(width, height);
+
+    gbufAlbedo.ensure(width, height);
+    gbufNormal.ensure(width, height);
+    gbufVelocity.ensure(width, height);
+    gFullVelocity.ensure(width, height);
+    gMBPreviousVelocity.ensure(width, height);
+    gbufDepth.ensure(width, height);
+
+    gBufFbo.ensure(width, height);
+
+    gOutputColor.ensure(width, height);
+    gMBPreviousOutputColor.ensure(width, height);
+
+    gTAABuffer0.ensure(width, height);
+    gTAABuffer1.ensure(width, height);
+
+    gMBTileMaxX.ensure(width, height);
+    gMBTileMax.ensure(width, height);
+    gMBNeighborMax.ensure(width, height);
+    gMBBufferA.ensure(width, height);
+    gMBBufferB.ensure(width, height);
+    gMBOutputColor.ensure(width, height);
+    gMBVelocity.ensure(width, height);
+}
+
 void field::render(const blackboard::app::Window &window)
 {
     updateOrbitCameraFromInput();
@@ -1467,6 +1396,8 @@ void field::render(const blackboard::app::Window &window)
 
     uint16_t m_width = window.width;
     uint16_t m_height = window.height;
+
+    ensureTextures(m_width, m_height);
 
     float haltonX = 2.0f * Halton(jitterIndex + 1, 2) - 1.0f;
     float haltonY = 2.0f * Halton(jitterIndex + 1, 3) - 1.0f;
@@ -1528,7 +1459,7 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
     bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
     bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo);
+    bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo.handle);
     bgfx::setViewClear(VIEW_GBUFFER,
                        BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
                        0x00000000,
@@ -1619,7 +1550,7 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewTransform(VIEW_OIT, view, proj);
     bgfx::setViewRect(VIEW_OIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
 
-    bgfx::setViewFrameBuffer(VIEW_OIT, gOitFbo);
+    bgfx::setViewFrameBuffer(VIEW_OIT, gOitFbo.handle);
     bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear accum to 0
     bgfx::setPaletteColor(1, 1, 1, 1, 1); // Clear reveal to 1
     bgfx::setViewClear(VIEW_OIT,
@@ -1664,7 +1595,7 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewTransform(VIEW_OIT_DEPTH_POST_PASS, view, proj);
     bgfx::setViewRect(VIEW_OIT_DEPTH_POST_PASS, 0, 0, uint16_t(m_width), uint16_t(m_height));
 
-    bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo);
+    bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo.handle);
 
 #if 0 // IF TRANSPARENT MOTION VECTORS AND DEPTH (transparent TAA)
     for (auto &d : staticTransparentBatches)
@@ -1698,12 +1629,12 @@ void field::render(const blackboard::app::Window &window)
     int yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
     // OIT Composition
-    encoder->setImage(0, gAccumTex, 0, bgfx::Access::Read);
-    encoder->setImage(1, gRevealTex, 0, bgfx::Access::Read);
-    encoder->setImage(2, gbufAlbedo, 0, bgfx::Access::Read);
-    encoder->setImage(3, gbufNormal, 0, bgfx::Access::Read);
-    encoder->setImage(4, gbufDepth, 0, bgfx::Access::Read);
-    encoder->setImage(5, gOutputColor, 0, bgfx::Access::Write);
+    encoder->setImage(0, gAccumTex.handle, 0, bgfx::Access::Read);
+    encoder->setImage(1, gRevealTex.handle, 0, bgfx::Access::Read);
+    encoder->setImage(2, gbufAlbedo.handle, 0, bgfx::Access::Read);
+    encoder->setImage(3, gbufNormal.handle, 0, bgfx::Access::Read);
+    encoder->setImage(4, gbufDepth.handle, 0, bgfx::Access::Read);
+    encoder->setImage(5, gOutputColor.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity
@@ -1746,10 +1677,10 @@ void field::render(const blackboard::app::Window &window)
     encoder->setUniform(u_mbVelocityData, &mbVelocityData, 3);
     encoder->setUniform(u_previousView, previousView);
     encoder->setUniform(u_previousProj, previousProj);
-    encoder->setTexture(0, s_depth, gbufDepth);
-    encoder->setTexture(1, s_velocity, gbufVelocity);
-    encoder->setImage(2, gMBVelocity, 0, bgfx::Access::Write);
-    encoder->setImage(3, gFullVelocity, 0, bgfx::Access::Write);
+    encoder->setTexture(0, s_depth, gbufDepth.handle);
+    encoder->setTexture(1, s_velocity, gbufVelocity.handle);
+    encoder->setImage(2, gMBVelocity.handle, 0, bgfx::Access::Write);
+    encoder->setImage(3, gFullVelocity.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, mbVelocityProgram, xGroups, yGroups);
 
     // SSAO
@@ -1762,14 +1693,14 @@ void field::render(const blackboard::app::Window &window)
         xGroups = (int)floorf(((float)m_width / (float)MB_SAMPLE_STEP_MULTIPLIER - 1) / 16 + 1);
         yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
         encoder->setUniform(u_mbSampleStepMultiplier, &sampleStepMultiplier);
-        encoder->setTexture(0, s_velocity, gMBVelocity);
-        encoder->setImage(1, gMBTileMaxX, 0, bgfx::Access::Write);
+        encoder->setTexture(0, s_velocity, gMBVelocity.handle);
+        encoder->setImage(1, gMBTileMaxX.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, mbTileMaxXProgram, xGroups, yGroups);
 
         yGroups = (int)floorf(((float)m_height / (float)MB_SAMPLE_STEP_MULTIPLIER - 1) / 16 + 1);
         encoder->setUniform(u_mbSampleStepMultiplier, &sampleStepMultiplier);
-        encoder->setTexture(0, s_mbTileMaxX, gMBTileMaxX);
-        encoder->setImage(1, gMBTileMax, 0, bgfx::Access::Write);
+        encoder->setTexture(0, s_mbTileMaxX, gMBTileMaxX.handle);
+        encoder->setImage(1, gMBTileMax.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, mbTileMaxYProgram, xGroups, yGroups);
     }
 
@@ -1788,17 +1719,17 @@ void field::render(const blackboard::app::Window &window)
         encoder->setUniform(u_mbJFAData, &mbJFAData, 2);
         if (SCALE_MB_BUFFERS)
         {
-            encoder->setTexture(0, s_mbTileMax, gMBTileMax);
-            encoder->setTexture(1, s_mbBuffer, i % 2 == 0 ? gMBBufferB : gMBBufferA);
-            encoder->setImage(2, i % 2 == 0 ? gMBBufferA : gMBBufferB, 0, bgfx::Access::Write);
+            encoder->setTexture(0, s_mbTileMax, gMBTileMax.handle);
+            encoder->setTexture(1, s_mbBuffer, i % 2 == 0 ? gMBBufferB.handle : gMBBufferA.handle);
+            encoder->setImage(2, i % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle, 0, bgfx::Access::Write);
             encoder->dispatch(VIEW_POSTPROCESS, mbJFAProgram, xGroups, yGroups);
         }
         else
         {
-            encoder->setTexture(0, s_depth, gbufDepth);
-            encoder->setTexture(1, s_velocity, gMBVelocity);
-            encoder->setTexture(2, s_mbBuffer, i % 2 == 0 ? gMBBufferB : gMBBufferA);
-            encoder->setImage(3, i % 2 == 0 ? gMBBufferA : gMBBufferB, 0, bgfx::Access::Write);
+            encoder->setTexture(0, s_depth, gbufDepth.handle);
+            encoder->setTexture(1, s_velocity, gMBVelocity.handle);
+            encoder->setTexture(2, s_mbBuffer, i % 2 == 0 ? gMBBufferB.handle : gMBBufferA.handle);
+            encoder->setImage(3, i % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle, 0, bgfx::Access::Write);
             encoder->dispatch(VIEW_POSTPROCESS, mbJFABacktrackingProgram, xGroups, yGroups);
         }
     }
@@ -1806,9 +1737,9 @@ void field::render(const blackboard::app::Window &window)
     if (SCALE_MB_BUFFERS)
     {
         // Compute neighbor max
-        encoder->setTexture(0, s_mbTileMax, gMBTileMax);
-        encoder->setTexture(1, s_mbBuffer, lastIterationIndex % 2 == 0 ? gMBBufferA : gMBBufferB);
-        encoder->setImage(2, gMBNeighborMax, 0, bgfx::Access::Write);
+        encoder->setTexture(0, s_mbTileMax, gMBTileMax.handle);
+        encoder->setTexture(1, s_mbBuffer, lastIterationIndex % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle);
+        encoder->setImage(2, gMBNeighborMax.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, mbNeighborMaxProgram, xGroups, yGroups);
     }
 
@@ -1831,62 +1762,62 @@ void field::render(const blackboard::app::Window &window)
 
     if (SCALE_MB_BUFFERS)
     {
-        encoder->setTexture(0, s_color, gOutputColor);
-        encoder->setTexture(1, s_velocity, gMBVelocity);
-        encoder->setTexture(2, s_mbNeighborMax, gMBNeighborMax);
-        encoder->setImage(3, gMBOutputColor, 0, bgfx::Access::Write);
-        encoder->setTexture(4, s_mbTileMax, gMBTileMax);
-        encoder->setTexture(5, s_prevColor, gMBPreviousOutputColor);
-        encoder->setTexture(6, s_prevVelocity, gMBPreviousVelocity);
+        encoder->setTexture(0, s_color, gOutputColor.handle);
+        encoder->setTexture(1, s_velocity, gMBVelocity.handle);
+        encoder->setTexture(2, s_mbNeighborMax, gMBNeighborMax.handle);
+        encoder->setImage(3, gMBOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->setTexture(4, s_mbTileMax, gMBTileMax.handle);
+        encoder->setTexture(5, s_prevColor, gMBPreviousOutputColor.handle);
+        encoder->setTexture(6, s_prevVelocity, gMBPreviousVelocity.handle);
         encoder->dispatch(VIEW_POSTPROCESS, mbBlurProgram, xGroups, yGroups);
     }
     else
     {
-        encoder->setTexture(0, s_color, gOutputColor);
-        encoder->setTexture(1, s_depth, gbufDepth);
-        encoder->setTexture(2, s_velocity, gMBVelocity);
-        encoder->setTexture(3, s_mbBuffer, lastIterationIndex % 2 == 0 ? gMBBufferA : gMBBufferB);
-        encoder->setImage(4, gMBOutputColor, 0, bgfx::Access::Write);
+        encoder->setTexture(0, s_color, gOutputColor.handle);
+        encoder->setTexture(1, s_depth, gbufDepth.handle);
+        encoder->setTexture(2, s_velocity, gMBVelocity.handle);
+        encoder->setTexture(3, s_mbBuffer, lastIterationIndex % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle);
+        encoder->setImage(4, gMBOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, mbBlurSimpleProgram, xGroups, yGroups);
     }
 
     if (SCALE_MB_BUFFERS)
     {
         // Cache
-        encoder->setTexture(0, s_velocity, gMBVelocity);
-        encoder->setTexture(1, s_color, gOutputColor);
-        encoder->setImage(2, gMBPreviousVelocity, 0, bgfx::Access::Write);
-        encoder->setImage(3, gMBPreviousOutputColor, 0, bgfx::Access::Write);
+        encoder->setTexture(0, s_velocity, gMBVelocity.handle);
+        encoder->setTexture(1, s_color, gOutputColor.handle);
+        encoder->setImage(2, gMBPreviousVelocity.handle, 0, bgfx::Access::Write);
+        encoder->setImage(3, gMBPreviousOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, mbCacheProgram, xGroups, yGroups);
     }
 
     // Copy to output
-    encoder->setImage(0, gMBOutputColor, 0, bgfx::Access::Read);
-    encoder->setImage(1, gOutputColor, 0, bgfx::Access::Write);
+    encoder->setImage(0, gMBOutputColor.handle, 0, bgfx::Access::Read);
+    encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
 
     // TAA resolve
-    bgfx::TextureHandle taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;
+    Texture taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;
 
     if (firstTAAFrame)
     {
-        encoder->setImage(0, gOutputColor, 0, bgfx::Access::Read);
-        encoder->setImage(1, taaOutput, 0, bgfx::Access::Write);
+        encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, taaOutput.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
         firstTAAFrame = false;
     }
     else
     {
-        encoder->setImage(0, gFullVelocity, 0, bgfx::Access::Read);
-        encoder->setImage(1, gbufDepth, 0, bgfx::Access::Read);
-        encoder->setImage(2, gOutputColor, 0, bgfx::Access::Read);
-        encoder->setTexture(3, s_taaHistory, taaUseBuffer1 ? gTAABuffer0 : gTAABuffer1);
-        encoder->setImage(4, taaOutput, 0, bgfx::Access::Write);
+        encoder->setImage(0, gFullVelocity.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gbufDepth.handle, 0, bgfx::Access::Read);
+        encoder->setImage(2, gOutputColor.handle, 0, bgfx::Access::Read);
+        encoder->setTexture(3, s_taaHistory, taaUseBuffer1 ? gTAABuffer0.handle : gTAABuffer1.handle);
+        encoder->setImage(4, taaOutput.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, taaResolveProgram, xGroups, yGroups);
 
         // Copy to output
-        encoder->setImage(0, taaOutput, 0, bgfx::Access::Read);
-        encoder->setImage(1, gOutputColor, 0, bgfx::Access::Write);
+        encoder->setImage(0, taaOutput.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
     }
 
@@ -1896,7 +1827,7 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewName(VIEW_BLIT, "Field - Blit");
     bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
 
-    encoder->setTexture(0, s_tex, gOutputColor);
+    encoder->setTexture(0, s_tex, gOutputColor.handle);
     encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
 
     screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
@@ -2002,54 +1933,34 @@ void field::cleanup()
     if (bgfx::isValid(mbCacheProgram))
         bgfx::destroy(mbCacheProgram);
 
-    if (bgfx::isValid(gAccumTex))
-        bgfx::destroy(gAccumTex);
-    if (bgfx::isValid(gRevealTex))
-        bgfx::destroy(gRevealTex);
-    if (bgfx::isValid(gOitFbo))
-        bgfx::destroy(gOitFbo);
-    if (bgfx::isValid(gOitDepthPostPassFbo))
-        bgfx::destroy(gOitDepthPostPassFbo);
+    gAccumTex.destroy();
+    gRevealTex.destroy();
 
-    if (bgfx::isValid(gbufAlbedo))
-        bgfx::destroy(gbufAlbedo);
-    if (bgfx::isValid(gbufNormal))
-        bgfx::destroy(gbufNormal);
-    if (bgfx::isValid(gbufVelocity))
-        bgfx::destroy(gbufVelocity);
-    if (bgfx::isValid(gFullVelocity))
-        bgfx::destroy(gFullVelocity);
-    if (bgfx::isValid(gMBPreviousVelocity))
-        bgfx::destroy(gMBPreviousVelocity);
-    if (bgfx::isValid(gbufDepth))
-        bgfx::destroy(gbufDepth);
-    if (bgfx::isValid(gBufFbo))
-        bgfx::destroy(gBufFbo);
+    gOitFbo.destroy();
+    gOitDepthPostPassFbo.destroy();
 
-    if (bgfx::isValid(gOutputColor))
-        bgfx::destroy(gOutputColor);
-    if (bgfx::isValid(gMBPreviousOutputColor))
-        bgfx::destroy(gMBPreviousOutputColor);
+    gbufAlbedo.destroy();
+    gbufNormal.destroy();
+    gbufVelocity.destroy();
+    gFullVelocity.destroy();
+    gMBPreviousVelocity.destroy();
+    gbufDepth.destroy();
 
-    if (bgfx::isValid(gTAABuffer0))
-        bgfx::destroy(gTAABuffer0);
-    if (bgfx::isValid(gTAABuffer1))
-        bgfx::destroy(gTAABuffer1);
+    gBufFbo.destroy();
 
-    if (bgfx::isValid(gMBTileMaxX))
-        bgfx::destroy(gMBTileMaxX);
-    if (bgfx::isValid(gMBTileMax))
-        bgfx::destroy(gMBTileMax);
-    if (bgfx::isValid(gMBNeighborMax))
-        bgfx::destroy(gMBNeighborMax);
-    if (bgfx::isValid(gMBBufferA))
-        bgfx::destroy(gMBBufferA);
-    if (bgfx::isValid(gMBBufferB))
-        bgfx::destroy(gMBBufferB);
-    if (bgfx::isValid(gMBOutputColor))
-        bgfx::destroy(gMBOutputColor);
-    if (bgfx::isValid(gMBVelocity))
-        bgfx::destroy(gMBVelocity);
+    gOutputColor.destroy();
+    gMBPreviousOutputColor.destroy();
+
+    gTAABuffer0.destroy();
+    gTAABuffer1.destroy();
+
+    gMBTileMaxX.destroy();
+    gMBTileMax.destroy();
+    gMBNeighborMax.destroy();
+    gMBBufferA.destroy();
+    gMBBufferB.destroy();
+    gMBOutputColor.destroy();
+    gMBVelocity.destroy();
 
     if (bgfx::isValid(s_tex))
         bgfx::destroy(s_tex);
