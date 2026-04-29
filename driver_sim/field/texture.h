@@ -2,9 +2,11 @@
 
 #include <bgfx/bgfx.h>
 #include <vector>
+#include <string>
 
 typedef struct Texture
 {
+    std::string name;
     bgfx::TextureHandle handle;
     uint16_t width;
     uint16_t height;
@@ -22,11 +24,11 @@ typedef struct Texture
     }
 
     Texture(const Texture &other)
-        : handle(other.handle), width(other.width), height(other.height), widthFraction(other.widthFraction), heightFraction(other.heightFraction), hasMips(other.hasMips), numLayers(other.numLayers), format(other.format), flags(other.flags), hasResized(other.hasResized)
+        : name(other.name), handle(other.handle), width(other.width), height(other.height), widthFraction(other.widthFraction), heightFraction(other.heightFraction), hasMips(other.hasMips), numLayers(other.numLayers), format(other.format), flags(other.flags), hasResized(other.hasResized)
     {
     }
 
-    Texture(uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags);
+    Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags);
 
     /**
      * Ensures that the texture is the correct size for the given view dimensions.
@@ -41,8 +43,9 @@ typedef struct Texture
 
 typedef struct FrameBuffer
 {
+    std::string name;
     bgfx::FrameBufferHandle handle;
-    std::vector<Texture> attachments;
+    std::vector<Texture *> attachments;
     std::vector<bgfx::TextureHandle> attachmentHandles;
 
     FrameBuffer()
@@ -50,11 +53,16 @@ typedef struct FrameBuffer
     {
     }
     FrameBuffer(const FrameBuffer &other)
-        : handle(other.handle), attachments(other.attachments), attachmentHandles(other.attachmentHandles)
+        : name(other.name), handle(other.handle), attachments(other.attachments), attachmentHandles(other.attachmentHandles)
     {
     }
-    FrameBuffer(std::vector<Texture> attachments);
+    FrameBuffer(std::string name, std::vector<Texture *> attachments);
 
     bool ensure(uint16_t viewWidth, uint16_t viewHeight);
     void destroy();
 } FrameBuffer;
+
+#define TEXTURE(out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags) \
+    out_var = Texture(#out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags);
+#define FRAMEBUFFER(out_var, ...) \
+    out_var = FrameBuffer(#out_var, {__VA_ARGS__});
