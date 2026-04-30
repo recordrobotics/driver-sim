@@ -137,6 +137,14 @@ namespace blackboard::app
         {
           ImGui_ImplSDL3_ProcessEvent(&event);
           const bool is_main_window = event.window.windowID == SDL_GetWindowID(main_window->window);
+          
+          // Toggle fullscreen on F11
+          if (event.type == SDL_EVENT_KEY_DOWN && is_main_window) {
+            if (event.key.key == SDLK_F11) {
+              main_window->fullscreen = !main_window->fullscreen;
+              SDL_SetWindowFullscreen(main_window->window, main_window->fullscreen ? true : false);
+            }
+          }
 
           if (event.type == SDL_EVENT_QUIT)
             running = false;
