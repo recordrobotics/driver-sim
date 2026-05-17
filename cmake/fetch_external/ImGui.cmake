@@ -4,24 +4,11 @@ include(FetchContent)
 
 FetchContent_Declare(imgui
     GIT_REPOSITORY "git@github.com:ocornut/imgui.git"
-    GIT_TAG v1.92.7-docking
+    GIT_TAG v1.92.8-docking
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/imgui
 )
 FetchContent_MakeAvailable(imgui)
-
-FetchContent_Declare(imguizmo
-    GIT_REPOSITORY "git@github.com:CedricGuillemet/ImGuizmo.git"
-    GIT_TAG master
-    GIT_SHALLOW 1
-    SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/imguizmo
-)
-FetchContent_MakeAvailable(imguizmo)
-
-file(GLOB imguizmo_SOURCES
-    ${imguizmo_SOURCE_DIR}/*.h
-    ${imguizmo_SOURCE_DIR}/*.cpp
-)
 
 set(imgui_SOURCES
    ${imgui_SOURCE_DIR}/imgui.cpp
@@ -46,15 +33,27 @@ set(imgui_HEADERS
     # ${imgui_color_text_edit_SOURCE_DIR}/TextEditor.h
 )
 
-add_library(ImGui ${imgui_HEADERS} ${imgui_SOURCES} ${imguizmo_SOURCES})
+add_library(imgui ${imgui_HEADERS} ${imgui_SOURCES})
 
-target_link_libraries(ImGui
-    PUBLIC
-    SDL3::SDL3
-)
-
-target_include_directories(ImGui
+target_include_directories(imgui
     PUBLIC
     $<BUILD_INTERFACE:${imgui_SOURCE_DIR}>
     # $<BUILD_INTERFACE:${FETCHCONTENT_BASE_DIR}/SDL/include>
 )
+
+target_link_libraries(imgui
+    PUBLIC
+    SDL3::SDL3
+)
+
+FetchContent_Declare(imguizmo
+    GIT_REPOSITORY "git@github.com:CedricGuillemet/ImGuizmo.git"
+    GIT_TAG master
+    GIT_SHALLOW 1
+    SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/imguizmo
+)
+
+set(IMGUIZMO_BUILD_EXAMPLE FALSE CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(imguizmo)
+target_link_libraries(imguizmo PUBLIC imgui)

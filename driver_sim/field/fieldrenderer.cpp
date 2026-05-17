@@ -6,10 +6,6 @@
 #include <bx/pixelformat.h>
 #include <imgui/imgui.h>
 
-#include <fastgltf/core.hpp>
-#include <fastgltf/tools.hpp>
-#include <fastgltf/types.hpp>
-
 #include <vector>
 #include <algorithm>
 #include <cstring>
@@ -24,6 +20,7 @@
 
 #include "fieldrenderer.h"
 #include "shaders.h"
+#include "mesh.h"
 
 static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 16;
 static constexpr float MB_PERPEN_ERROR_THRESHOLD = 0.3f;
@@ -49,7 +46,7 @@ typedef struct MBVelocityComponent
 
 static constexpr MBVelocityComponent MB_CAMERA_ROTATION_COMPONENT = {1.0f, 0.0f, 1.0f};
 static constexpr MBVelocityComponent MB_CAMERA_MOVEMENT_COMPONENT = {1.0f, 0.0f, 1.0f};
-static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {50.0f, 0.0f, 1.0f};
+static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {1.0f, 0.0f, 1.0f};
 
 using namespace blackboard::logger;
 
@@ -83,7 +80,9 @@ bgfx::UniformHandle u_mbBlurData;
 bgfx::ProgramHandle program = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programOitInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitDepthPostPass = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programOitDepthPostPassInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle tonemapProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
@@ -372,84 +371,26 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
 
         BGFX_EMBEDDED_SHADER_END()};
 
-struct MaterialGPU
+typedef struct Transform
 {
-    float baseColor[4]; // includes alpha
-    bool transparent;
-};
+    float matrix[16];
 
-struct MeshBatch
-{
-    bgfx::VertexBufferHandle vbh;
-    bgfx::IndexBufferHandle ibh;
-    float baseColor[4];
-};
-
-struct MaterialKey
-{
-    uint32_t baseColor[4];
-
-    bool operator==(const MaterialKey &other) const
+    Transform()
     {
-        return baseColor[0] == other.baseColor[0] &&
-               baseColor[1] == other.baseColor[1] &&
-               baseColor[2] == other.baseColor[2] &&
-               baseColor[3] == other.baseColor[3];
+        bx::mtxIdentity(matrix);
     }
-};
 
-struct MaterialKeyHash
-{
-    std::size_t operator()(const MaterialKey &key) const
+    Transform(bx::Vec3 position, bx::Vec3 rotation)
     {
-        std::size_t h = 2166136261u;
-        for (std::size_t i = 0; i < 4; ++i)
-        {
-            h ^= key.baseColor[i];
-            h *= 16777619u;
-        }
-        return h;
+        bx::mtxSRT(matrix, 1.0f, 1.0f, 1.0f, rotation.x, rotation.y, rotation.z, position.x, position.y, position.z);
     }
-};
+} Transform;
 
-/// Encode normal vector as RGBA8 color value.
-///
-/// @param[in] _x X component of the normal.
-/// @param[in] _y Y component of the normal.
-/// @param[in] _z Z component of the normal.
-/// @param[in] _w W component.
-///
-/// @returns Packed RGBA8 value.
-///
-inline uint32_t encodeNormalRgba8(float _x, float _y = 0.0f, float _z = 0.0f, float _w = 0.0f)
+typedef struct InstanceData
 {
-    const float src[] =
-        {
-            _x * 0.5f + 0.5f,
-            _y * 0.5f + 0.5f,
-            _z * 0.5f + 0.5f,
-            _w * 0.5f + 0.5f,
-        };
-    uint32_t dst;
-    bx::packRgba8(&dst, src);
-    return dst;
-}
-
-struct Vertex
-{
-    float x, y, z;
-    uint32_t normal;
-
-    static bgfx::VertexLayout layout;
-
-    static void init()
-    {
-        layout.begin()
-            .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
-            .add(bgfx::Attrib::Normal, 4, bgfx::AttribType::Uint8, true, true)
-            .end();
-    }
-};
+    Transform transform;
+    Transform previousTransform;
+} InstanceData;
 
 struct UVVertex
 {
@@ -467,20 +408,10 @@ struct UVVertex
     }
 };
 
-bgfx::VertexLayout Vertex::layout;
 bgfx::VertexLayout UVVertex::layout;
 
-struct BatchBuildData
-{
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-    MaterialGPU material;
-};
-
-std::vector<MeshBatch> staticOpaqueBatches;
-std::vector<MeshBatch> staticTransparentBatches;
-
-MeshBatch testObjectMesh;
+std::vector<Mesh> fieldMeshes;
+std::vector<Mesh> testObjectMeshes;
 
 struct OrbitCamera
 {
@@ -538,45 +469,9 @@ bx::Vec3 getOrbitEye()
     };
 }
 
-uint32_t floatToBits(float value)
-{
-    uint32_t bits = 0;
-    std::memcpy(&bits, &value, sizeof(bits));
-    return bits;
-}
-
-MaterialKey makeMaterialKey(const MaterialGPU &material)
-{
-    return {
-        {
-            floatToBits(material.baseColor[0]),
-            floatToBits(material.baseColor[1]),
-            floatToBits(material.baseColor[2]),
-            floatToBits(material.baseColor[3]),
-        }};
-}
-
-MaterialGPU convertMaterial(const fastgltf::Material &m)
-{
-    MaterialGPU out{};
-
-    auto &base = m.pbrData.baseColorFactor;
-
-    out.baseColor[0] = base[0];
-    out.baseColor[1] = base[1];
-    out.baseColor[2] = base[2];
-    out.baseColor[3] = base[3];
-
-    out.transparent =
-        m.alphaMode == fastgltf::AlphaMode::Blend ||
-        out.baseColor[3] < 0.999f;
-
-    return out;
-}
-
 void field::init(const blackboard::app::Window &window)
 {
-    Vertex::init();
+    MeshVertex::init();
     UVVertex::init();
 
     s_tex = bgfx::createUniform("s_tex", bgfx::UniformType::Sampler);
@@ -622,300 +517,21 @@ void field::init(const blackboard::app::Window &window)
 
         logger->info("Loaded field config file: {0}", configFile);
 
-        std::string fieldModelFile = fieldDirectory + "model.glb";
         fastgltf::Parser parser;
 
-        auto gltfData = fastgltf::GltfDataBuffer::FromPath(fieldModelFile);
+        Mesh::fromGltfModel(fieldMeshes, parser.loadGltfBinary(
+                                                   fastgltf::GltfDataBuffer::FromPath(fieldDirectory + "model.glb").get(),
+                                                   fieldDirectory,
+                                                   fastgltf::Options::LoadGLBBuffers |
+                                                       fastgltf::Options::DontRequireValidAssetMember)
+                                             .get());
 
-        auto asset = parser.loadGltfBinary(
-            gltfData.get(),
-            fieldDirectory,
-            fastgltf::Options::LoadGLBBuffers |
-                fastgltf::Options::DontRequireValidAssetMember);
-
-        const std::size_t sceneIndex = asset->defaultScene.value_or(0);
-
-        std::unordered_map<MaterialKey, BatchBuildData, MaterialKeyHash> opaqueBatchMap;
-        std::unordered_map<MaterialKey, BatchBuildData, MaterialKeyHash> transparentBatchMap;
-
-        fastgltf::iterateSceneNodes(asset.get(), sceneIndex, fastgltf::math::fmat4x4(), [&](fastgltf::Node &node, const fastgltf::math::fmat4x4 &worldMatrix)
-                                    {
-            if (!node.meshIndex.has_value() || node.meshIndex.value() >= asset->meshes.size())
-            {
-                return;
-            }
-
-            auto &mesh = asset->meshes[node.meshIndex.value()];
-            for (auto &primitive : mesh.primitives)
-            {
-                auto positionIt = primitive.findAttribute("POSITION");
-                if (positionIt == primitive.attributes.end())
-                {
-                    logger->warn("Skipping primitive without POSITION attribute.");
-                    continue;
-                }
-
-                if (!primitive.indicesAccessor.has_value())
-                {
-                    logger->warn("Skipping primitive without indices accessor.");
-                    continue;
-                }
-                auto &positionAccessor = asset->accessors[positionIt->accessorIndex];
-                auto& indicesAccessor = asset->accessors[primitive.indicesAccessor.value()];
-
-                if (positionAccessor.count == 0 || indicesAccessor.count == 0)
-                {
-                    logger->warn("Skipping primitive with empty geometry data.");
-                    continue;
-                }
-
-                MaterialGPU mat{{1.0f, 1.0f, 1.0f, 1.0f}, false};
-                if (primitive.materialIndex.has_value() && primitive.materialIndex.value() < asset->materials.size())
-                {
-                    mat = convertMaterial(asset->materials[primitive.materialIndex.value()]);
-                }
-
-                const MaterialKey key = makeMaterialKey(mat);
-                auto &batch = mat.transparent ? transparentBatchMap[key] : opaqueBatchMap[key];
-                if (batch.vertices.empty())
-                {
-                    batch.material = mat;
-                }
-
-                const uint32_t baseVertex = static_cast<uint32_t>(batch.vertices.size());
-                batch.vertices.reserve(batch.vertices.size() + positionAccessor.count);
-                batch.indices.reserve(batch.indices.size() + indicesAccessor.count);
-
-                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
-                    asset.get(),
-                    positionAccessor,
-                    [&](fastgltf::math::fvec3 pos, std::size_t index)
-                    {
-                        fastgltf::math::fvec4 worldPos = worldMatrix * fastgltf::math::fvec4(pos.x(), pos.y(), pos.z(), 1.0f);
-                        Vertex v{};
-                        v.x = worldPos.x();
-                        v.y = worldPos.y();
-                        v.z = worldPos.z();
-                        v.normal = 0;
-                        batch.vertices.push_back(v);
-                    });
-
-                auto normalIt = primitive.findAttribute("NORMAL");
-                if (normalIt != primitive.attributes.end())
-                {
-                    auto &normalAccessor = asset->accessors[normalIt->accessorIndex];
-                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
-                        asset.get(),
-                        normalAccessor,
-                        [&](fastgltf::math::fvec3 norm, std::size_t index)
-                        {
-                            fastgltf::math::fmat3x3 normalMatrix = fastgltf::math::transpose(fastgltf::math::inverse(fastgltf::math::fmat3x3(worldMatrix)));
-                            fastgltf::math::fvec3 worldNorm = normalMatrix * norm;
-                            batch.vertices[baseVertex + index].normal = encodeNormalRgba8(worldNorm.x(), worldNorm.y(), worldNorm.z());
-                        });
-                }
-                    
-                fastgltf::iterateAccessor<uint32_t>(
-                    asset.get(),
-                    indicesAccessor,
-                    [&](uint32_t idx)
-                    {
-                        batch.indices.push_back(baseVertex + idx);
-                    });
-            } });
-
-        staticOpaqueBatches.reserve(opaqueBatchMap.size());
-        staticTransparentBatches.reserve(transparentBatchMap.size());
-
-        for (auto &entry : opaqueBatchMap)
-        {
-            auto &batchData = entry.second;
-            if (batchData.vertices.empty() || batchData.indices.empty())
-            {
-                continue;
-            }
-
-            MeshBatch gpuBatch;
-            gpuBatch.vbh = bgfx::createVertexBuffer(
-                bgfx::copy(batchData.vertices.data(), static_cast<uint32_t>(batchData.vertices.size() * sizeof(Vertex))),
-                Vertex::layout);
-
-            if (!bgfx::isValid(gpuBatch.vbh))
-            {
-                logger->error("Failed to create vertex buffer for opaque batch.");
-                throw std::runtime_error("Failed to create vertex buffer for opaque batch.");
-            }
-
-            gpuBatch.ibh = bgfx::createIndexBuffer(
-                bgfx::copy(batchData.indices.data(), static_cast<uint32_t>(batchData.indices.size() * sizeof(uint32_t))),
-                BGFX_BUFFER_INDEX32);
-
-            if (!bgfx::isValid(gpuBatch.ibh))
-            {
-                logger->error("Failed to create index buffer for opaque batch.");
-                throw std::runtime_error("Failed to create index buffer for opaque batch.");
-            }
-
-            gpuBatch.baseColor[0] = batchData.material.baseColor[0];
-            gpuBatch.baseColor[1] = batchData.material.baseColor[1];
-            gpuBatch.baseColor[2] = batchData.material.baseColor[2];
-            gpuBatch.baseColor[3] = batchData.material.baseColor[3];
-
-            staticOpaqueBatches.push_back(gpuBatch);
-        }
-
-        for (auto &entry : transparentBatchMap)
-        {
-            auto &batchData = entry.second;
-            if (batchData.vertices.empty() || batchData.indices.empty())
-            {
-                continue;
-            }
-
-            MeshBatch gpuBatch;
-            gpuBatch.vbh = bgfx::createVertexBuffer(
-                bgfx::copy(batchData.vertices.data(), static_cast<uint32_t>(batchData.vertices.size() * sizeof(Vertex))),
-                Vertex::layout);
-
-            if (!bgfx::isValid(gpuBatch.vbh))
-            {
-                logger->error("Failed to create vertex buffer for transparent batch.");
-                throw std::runtime_error("Failed to create vertex buffer for transparent batch.");
-            }
-
-            gpuBatch.ibh = bgfx::createIndexBuffer(
-                bgfx::copy(batchData.indices.data(), static_cast<uint32_t>(batchData.indices.size() * sizeof(uint32_t))),
-                BGFX_BUFFER_INDEX32);
-
-            if (!bgfx::isValid(gpuBatch.ibh))
-            {
-                logger->error("Failed to create index buffer for transparent batch.");
-                throw std::runtime_error("Failed to create index buffer for transparent batch.");
-            }
-
-            gpuBatch.baseColor[0] = batchData.material.baseColor[0];
-            gpuBatch.baseColor[1] = batchData.material.baseColor[1];
-            gpuBatch.baseColor[2] = batchData.material.baseColor[2];
-            gpuBatch.baseColor[3] = batchData.material.baseColor[3];
-
-            staticTransparentBatches.push_back(gpuBatch);
-        }
-
-        std::string testObjectModelFile = fieldDirectory + "model_0.glb";
-
-        gltfData = fastgltf::GltfDataBuffer::FromPath(testObjectModelFile);
-
-        asset = parser.loadGltfBinary(
-            gltfData.get(),
-            fieldDirectory,
-            fastgltf::Options::LoadGLBBuffers |
-                fastgltf::Options::DontRequireValidAssetMember);
-
-        const std::size_t sceneIndex2 = asset->defaultScene.value_or(0);
-
-        fastgltf::iterateSceneNodes(asset.get(), sceneIndex2, fastgltf::math::fmat4x4(), [&](fastgltf::Node &node, const fastgltf::math::fmat4x4 &worldMatrix)
-                                    {
-            if (!node.meshIndex.has_value() || node.meshIndex.value() >= asset->meshes.size())
-            {
-                return;
-            }
-
-            auto &mesh = asset->meshes[node.meshIndex.value()];
-            for (auto &primitive : mesh.primitives)
-            {
-                auto positionIt = primitive.findAttribute("POSITION");
-                if (positionIt == primitive.attributes.end())
-                {
-                    logger->warn("Skipping primitive without POSITION attribute.");
-                    continue;
-                }
-
-                if (!primitive.indicesAccessor.has_value())
-                {
-                    logger->warn("Skipping primitive without indices accessor.");
-                    continue;
-                }
-                auto &positionAccessor = asset->accessors[positionIt->accessorIndex];
-                auto& indicesAccessor = asset->accessors[primitive.indicesAccessor.value()];
-
-                if (positionAccessor.count == 0 || indicesAccessor.count == 0)
-                {
-                    logger->warn("Skipping primitive with empty geometry data.");
-                    continue;
-                }
-
-                MaterialGPU mat{{1.0f, 1.0f, 1.0f, 1.0f}, false};
-                if (primitive.materialIndex.has_value() && primitive.materialIndex.value() < asset->materials.size())
-                {
-                    mat = convertMaterial(asset->materials[primitive.materialIndex.value()]);
-                }
-
-                std::vector<Vertex> vertices;
-                std::vector<uint32_t> indices;
-
-                vertices.reserve(positionAccessor.count);
-                indices.reserve(indicesAccessor.count);
-
-                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
-                    asset.get(),
-                    positionAccessor,
-                    [&](fastgltf::math::fvec3 pos, std::size_t index)
-                    {
-                        fastgltf::math::fvec4 worldPos = worldMatrix * fastgltf::math::fvec4(pos.x(), pos.y(), pos.z(), 1.0f);
-                        Vertex v{};
-                        v.x = worldPos.x();
-                        v.y = worldPos.y();
-                        v.z = worldPos.z();
-                        v.normal = 0;
-                        vertices.push_back(v);
-                    });
-
-                auto normalIt = primitive.findAttribute("NORMAL");
-                if (normalIt != primitive.attributes.end())
-                {
-                    auto &normalAccessor = asset->accessors[normalIt->accessorIndex];
-                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
-                        asset.get(),
-                        normalAccessor,
-                        [&](fastgltf::math::fvec3 norm, std::size_t index)
-                        {
-                            fastgltf::math::fmat3x3 normalMatrix = fastgltf::math::transpose(fastgltf::math::inverse(fastgltf::math::fmat3x3(worldMatrix)));
-                            fastgltf::math::fvec3 worldNorm = normalMatrix * norm;
-                            vertices[index].normal = encodeNormalRgba8(worldNorm.x(), worldNorm.y(), worldNorm.z());
-                        });
-                }
-                    
-                fastgltf::iterateAccessor<uint32_t>(
-                    asset.get(),
-                    indicesAccessor,
-                    [&](uint32_t idx)
-                    {
-                        indices.push_back(idx);
-                    });
-
-                testObjectMesh.vbh = bgfx::createVertexBuffer(
-                    bgfx::copy(vertices.data(), static_cast<uint32_t>(vertices.size() * sizeof(Vertex))),
-                    Vertex::layout);
-                if (!bgfx::isValid(testObjectMesh.vbh))
-                {
-                    logger->error("Failed to create vertex buffer for test object.");
-                    throw std::runtime_error("Failed to create vertex buffer for test object.");
-                }
-
-                testObjectMesh.ibh = bgfx::createIndexBuffer(
-                    bgfx::copy(indices.data(), static_cast<uint32_t>(indices.size() * sizeof(uint32_t))),
-                    BGFX_BUFFER_INDEX32);
-                if (!bgfx::isValid(testObjectMesh.ibh))
-                {
-                    logger->error("Failed to create index buffer for test object.");
-                    throw std::runtime_error("Failed to create index buffer for test object.");
-                }
-
-                testObjectMesh.baseColor[0] = mat.baseColor[0];
-                testObjectMesh.baseColor[1] = mat.baseColor[1];
-                testObjectMesh.baseColor[2] = mat.baseColor[2];
-                testObjectMesh.baseColor[3] = mat.baseColor[3];
-            } });
+        Mesh::fromGltfModel(testObjectMeshes, parser.loadGltfBinary(
+                                                        fastgltf::GltfDataBuffer::FromPath(fieldDirectory + "model_0.glb").get(),
+                                                        fieldDirectory,
+                                                        fastgltf::Options::LoadGLBBuffers |
+                                                            fastgltf::Options::DontRequireValidAssetMember)
+                                                  .get());
 
         const auto type = bgfx::getRendererType();
 
@@ -949,6 +565,16 @@ void field::init(const blackboard::app::Window &window)
             throw std::runtime_error("Failed to create OIT rendering program.");
         }
 
+        programOitInstanced =
+            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
+
+        if (!bgfx::isValid(programOitInstanced))
+        {
+            logger->error("Failed to create OIT instanced rendering program.");
+            throw std::runtime_error("Failed to create OIT instanced rendering program.");
+        }
+
         programOitDepthPostPass =
             bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
                                 bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
@@ -957,6 +583,16 @@ void field::init(const blackboard::app::Window &window)
         {
             logger->error("Failed to create OIT depth post-pass program.");
             throw std::runtime_error("Failed to create OIT depth post-pass program.");
+        }
+
+        programOitDepthPostPassInstanced =
+            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
+
+        if (!bgfx::isValid(programOitDepthPostPassInstanced))
+        {
+            logger->error("Failed to create OIT instanced depth post-pass program.");
+            throw std::runtime_error("Failed to create OIT instanced depth post-pass program.");
         }
 
         oitCompProgram =
@@ -1261,38 +897,45 @@ static constexpr float BALL_EXTENT_Z = 4.5f;
 
 typedef struct BallData
 {
-    float position[3] = {0.0f, 0.0f, 0.0f};
-    float velocity[3] = {0.0f, 0.0f, 0.0f};
-    float target[3] = {0.0f, 0.0f, 0.0f};
-    float prevPosition[3] = {0.0f, 0.0f, 0.0f};
+    bx::Vec3 position = {0.0f, 0.0f, 0.0f};
+    bx::Vec3 velocity = {0.0f, 0.0f, 0.0f};
+    bx::Vec3 target = {0.0f, 0.0f, 0.0f};
+
+    InstanceData instanceData = {};
 
     void update(float deltaTime)
     {
+        instanceData.previousTransform = instanceData.transform;
+
         const float force = 0.8f;
-        float dx = target[0] - position[0];
-        float dy = target[1] - position[1];
-        float dz = target[2] - position[2];
+        float dx = target.x - position.x;
+        float dy = target.y - position.y;
+        float dz = target.z - position.z;
 
         if (dx * dx + dy * dy + dz * dz < 0.01f)
         {
-            target[0] = randomFloat(-BALL_EXTENT_X, BALL_EXTENT_X);
-            target[1] = randomFloat(0.0f, BALL_EXTENT_Y);
-            target[2] = randomFloat(-BALL_EXTENT_Z, BALL_EXTENT_Z);
+            target.x = randomFloat(-BALL_EXTENT_X, BALL_EXTENT_X);
+            target.y = randomFloat(0.0f, BALL_EXTENT_Y);
+            target.z = randomFloat(-BALL_EXTENT_Z, BALL_EXTENT_Z);
         }
         else
         {
-            velocity[0] += force * dx * deltaTime;
-            velocity[1] += force * dy * deltaTime;
-            velocity[2] += force * dz * deltaTime;
+            velocity.x += force * dx * deltaTime;
+            velocity.y += force * dy * deltaTime;
+            velocity.z += force * dz * deltaTime;
 
-            position[0] += velocity[0] * deltaTime;
-            position[1] += velocity[1] * deltaTime;
-            position[2] += velocity[2] * deltaTime;
+            position.x += velocity.x * deltaTime;
+            position.y += velocity.y * deltaTime;
+            position.z += velocity.z * deltaTime;
         }
+
+        instanceData.transform = {
+            position,
+            {-3.14 / 2.0, 0, 0}};
     }
 } BallData;
 
-std::array<BallData, 1024> balls = {};
+std::array<BallData, 1> balls = {};
 
 bool firstTAAFrame = true;
 bool taaUseBuffer1 = false;
@@ -1412,6 +1055,99 @@ void ensureTextures(uint16_t width, uint16_t height)
     gMBVelocity.ensure(width, height);
 }
 
+void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
+{
+    float pbrData[4] = {
+        mesh.material.writesObjectMotionVectors ? 1.0f : 0.0f,
+        mesh.material.metallic,
+        mesh.material.roughness,
+        0.0f};
+
+    if (!forceDepthTest && mesh.material.type == MaterialType::Transparent)
+    {
+        encoder->setState(
+            BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_INDEPENDENT |
+                BGFX_STATE_DEPTH_TEST_GREATER
+                // RT0
+                | BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE,
+                                        BGFX_STATE_BLEND_ONE),
+            // RT1
+            BGFX_STATE_BLEND_FUNC_RT_1(BGFX_STATE_BLEND_ZERO,
+                                       BGFX_STATE_BLEND_INV_SRC_ALPHA));
+    }
+    else
+    {
+        encoder->setState(
+            BGFX_STATE_WRITE_RGB |
+            BGFX_STATE_WRITE_A |
+            BGFX_STATE_DEPTH_TEST_GREATER |
+            BGFX_STATE_WRITE_Z);
+    }
+
+    encoder->setVertexBuffer(0, mesh.vertexBuffer);
+    encoder->setIndexBuffer(mesh.indexBuffer);
+
+    encoder->setUniform(u_baseColor, mesh.material.baseColor.data());
+    encoder->setUniform(u_previousModelViewProj, previousViewProj);
+    encoder->setUniform(u_pbrData, pbrData);
+}
+
+void drawMeshes(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes, float modelMatrix[16], float normalMatrix[9])
+{
+    for (const auto &mesh : meshes)
+    {
+        setupMesh(encoder, mesh, false);
+        encoder->setTransform(modelMatrix);
+        encoder->setUniform(u_normalMatrix, normalMatrix);
+        if (mesh.material.type == MaterialType::Transparent)
+        {
+            encoder->submit(VIEW_OIT, programOit);
+
+#if 0 // IF TRANSPARENT MOTION VECTORS AND DEPTH (transparent TAA)
+            setupMesh(encoder, mesh, true);
+            encoder->setTransform(modelMatrix);
+            encoder->setUniform(u_normalMatrix, normalMatrix);
+            encoder->submit(VIEW_OIT_DEPTH_POST_PASS, programOitDepthPostPass);
+#endif
+        }
+        else
+        {
+            encoder->submit(VIEW_GBUFFER, program);
+        }
+    }
+}
+
+void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes, const std::vector<InstanceData> &instances)
+{
+    // figure out how big of a buffer is available
+    uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(instances.size(), sizeof(InstanceData));
+
+    bgfx::InstanceDataBuffer idb;
+    bgfx::allocInstanceDataBuffer(&idb, instanceCount, sizeof(InstanceData));
+
+    std::memcpy(idb.data, instances.data(), instanceCount * sizeof(InstanceData));
+
+    for (const auto &mesh : meshes)
+    {
+        setupMesh(encoder, mesh, false);
+        encoder->setInstanceDataBuffer(&idb);
+        if (mesh.material.type == MaterialType::Transparent)
+        {
+            encoder->submit(VIEW_OIT, programOitInstanced);
+
+#if 0 // IF TRANSPARENT MOTION VECTORS AND DEPTH (transparent TAA)
+            setupMesh(encoder, mesh, true);
+            encoder->setInstanceDataBuffer(&idb);
+            encoder->submit(VIEW_OIT_DEPTH_POST_PASS, programOitDepthPostPassInstanced);
+#endif
+        }
+        else
+        {
+            encoder->submit(VIEW_GBUFFER, programInstanced);
+        }
+    }
+}
+
 void field::render(const blackboard::app::Window &window)
 {
     ImGui::Begin("Rendering Debug");
@@ -1462,12 +1198,6 @@ void field::render(const blackboard::app::Window &window)
         std::memcpy(previousViewProj, viewProj, sizeof(viewProj));
         std::memcpy(previousView, view, sizeof(view));
         std::memcpy(previousProj, proj, sizeof(proj));
-
-        for (auto &ball : balls)
-        {
-            std::memcpy(ball.prevPosition, ball.position, sizeof(ball.position));
-        }
-
         firstFrame = false;
     }
 
@@ -1496,9 +1226,6 @@ void field::render(const blackboard::app::Window &window)
     encoder->setUniform(u_lightColor, lightColor, 3);
 
     // OPAQUE PASS
-
-    encoder->discard(BGFX_DISCARD_BINDINGS);
-
     bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
     bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
     bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
@@ -1508,97 +1235,10 @@ void field::render(const blackboard::app::Window &window)
                        0x00000000,
                        bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
 
-    float staticModel[16];
-    bx::mtxIdentity(staticModel);
-    float normalMatrix[9];
-    toNormalMatrix(normalMatrix, staticModel);
-
-    const float deltaTime = ImGui::GetIO().DeltaTime;
-    curTime += deltaTime;
-
-    float pbrData[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-    for (auto &d : staticOpaqueBatches)
-    {
-        encoder->setState(
-            BGFX_STATE_WRITE_RGB |
-            BGFX_STATE_WRITE_A |
-            BGFX_STATE_DEPTH_TEST_GREATER |
-            BGFX_STATE_WRITE_Z);
-
-        encoder->setTransform(staticModel);
-        encoder->setVertexBuffer(0, d.vbh);
-        encoder->setIndexBuffer(d.ibh);
-
-        encoder->setUniform(u_baseColor, d.baseColor);
-        encoder->setUniform(u_previousModelViewProj, previousViewProj);
-        encoder->setUniform(u_normalMatrix, normalMatrix);
-        encoder->setUniform(u_pbrData, pbrData);
-
-        encoder->submit(VIEW_GBUFFER, program);
-    }
-
-    // Test model
-    if (!freezeTemporalEffects)
-    {
-        for (auto &ball : balls)
-        {
-            ball.update(deltaTime);
-        }
-    }
-
-    encoder->setState(
-        BGFX_STATE_WRITE_RGB |
-        BGFX_STATE_WRITE_A |
-        BGFX_STATE_DEPTH_TEST_GREATER |
-        BGFX_STATE_WRITE_Z);
-
-    // 32 bytes stride = 2*4*4 bytes for vec4 position.
-    const uint16_t instanceStride = 2 * 4 * 4;
-
-    // figure out how big of a buffer is available
-    uint32_t drawnCubes = bgfx::getAvailInstanceDataBuffer(balls.size(), instanceStride);
-
-    bgfx::InstanceDataBuffer idb;
-    bgfx::allocInstanceDataBuffer(&idb, drawnCubes, instanceStride);
-
-    uint8_t *data = idb.data;
-
-    for (uint32_t ii = 0; ii < drawnCubes; ++ii)
-    {
-        float *pos = (float *)data;
-        std::memcpy(pos, balls[ii].position, sizeof(balls[ii].position));
-        pos[3] = 0.0f;
-
-        float *prevPos = (float *)&data[4 * 4];
-        std::memcpy(prevPos, balls[ii].prevPosition, sizeof(balls[ii].prevPosition));
-        prevPos[3] = 0.0f;
-
-        if (!freezeTemporalEffects)
-        {
-            std::memcpy(balls[ii].prevPosition, balls[ii].position, sizeof(balls[ii].position));
-        }
-        data += instanceStride;
-    }
-
-    encoder->setVertexBuffer(0, testObjectMesh.vbh);
-    encoder->setIndexBuffer(testObjectMesh.ibh);
-    encoder->setInstanceDataBuffer(&idb);
-
-    encoder->setUniform(u_baseColor, testObjectMesh.baseColor);
-    encoder->setUniform(u_previousModelViewProj, previousViewProj);
-    pbrData[0] = writeObjectMotionVectors ? 1.0f : 0.0f; // write motion vectors
-    encoder->setUniform(u_pbrData, pbrData);
-    pbrData[0] = 0.0f; // reset for other draws
-
-    encoder->submit(VIEW_GBUFFER, programInstanced);
-
     // TRANSPARENT PASS
     bgfx::setViewName(VIEW_OIT, "Field - OIT");
-
     bgfx::setViewTransform(VIEW_OIT, view, proj);
     bgfx::setViewRect(VIEW_OIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
-
     bgfx::setViewFrameBuffer(VIEW_OIT, gOitFbo.handle);
     bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear accum to 0
     bgfx::setPaletteColor(1, 1, 1, 1, 1); // Clear reveal to 1
@@ -1609,60 +1249,40 @@ void field::render(const blackboard::app::Window &window)
                        0,
                        1);
 
-    if (staticTransparentBatches.empty())
-    {
-        encoder->touch(VIEW_OIT); // needs to be cleared
-    }
-
-    for (auto &d : staticTransparentBatches)
-    {
-        encoder->setTransform(staticModel);
-        encoder->setVertexBuffer(0, d.vbh);
-        encoder->setIndexBuffer(d.ibh);
-
-        encoder->setUniform(u_baseColor, d.baseColor);
-        encoder->setUniform(u_previousModelViewProj, previousViewProj);
-        encoder->setUniform(u_pbrData, pbrData);
-        encoder->setUniform(u_normalMatrix, normalMatrix);
-
-        encoder->setState(
-            BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_INDEPENDENT |
-                BGFX_STATE_DEPTH_TEST_GREATER
-                // RT0
-                | BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE,
-                                        BGFX_STATE_BLEND_ONE),
-            // RT1
-            BGFX_STATE_BLEND_FUNC_RT_1(BGFX_STATE_BLEND_ZERO,
-                                       BGFX_STATE_BLEND_INV_SRC_ALPHA));
-
-        encoder->submit(VIEW_OIT, programOit);
-    }
-
     // Transparent depth post-pass
     bgfx::setViewName(VIEW_OIT_DEPTH_POST_PASS, "Field - OIT Depth Post-Pass");
-
     bgfx::setViewTransform(VIEW_OIT_DEPTH_POST_PASS, view, proj);
     bgfx::setViewRect(VIEW_OIT_DEPTH_POST_PASS, 0, 0, uint16_t(m_width), uint16_t(m_height));
-
     bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo.handle);
 
-#if 0 // IF TRANSPARENT MOTION VECTORS AND DEPTH (transparent TAA)
-    for (auto &d : staticTransparentBatches)
+    float staticModel[16];
+    bx::mtxIdentity(staticModel);
+    float normalMatrix[9];
+    toNormalMatrix(normalMatrix, staticModel);
+
+    const float deltaTime = ImGui::GetIO().DeltaTime;
+    curTime += deltaTime;
+
+    drawMeshes(encoder, fieldMeshes, staticModel, normalMatrix);
+
+    // Test model
+    if (!freezeTemporalEffects)
     {
-        encoder->setTransform(staticModel);
-        encoder->setVertexBuffer(0, d.vbh);
-        encoder->setIndexBuffer(d.ibh);
-        encoder->setUniform(u_previousModelViewProj, previousViewProj);
-        encoder->setUniform(u_pbrData, pbrData);
-        encoder->setUniform(u_normalMatrix, normalMatrix);
-
-        encoder->setState(
-            BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-            BGFX_STATE_WRITE_Z |
-            BGFX_STATE_DEPTH_TEST_GREATER);
-
-        encoder->submit(VIEW_OIT_DEPTH_POST_PASS, programOitDepthPostPass);
+        for (auto &ball : balls)
+        {
+            ball.update(deltaTime);
+        }
     }
+
+    std::vector<InstanceData> instanceData;
+    instanceData.reserve(balls.size());
+    std::ranges::transform(balls, std::back_inserter(instanceData),
+                           &BallData::instanceData);
+
+    drawMeshesInstanced(encoder, testObjectMeshes, instanceData);
+
+#if 0 // IF NO TRANSPARENT OBJECTS IN FIELD MODEL (RARE)
+        encoder->touch(VIEW_OIT); // needs to be cleared
 #endif
 
     // Post processing
@@ -1909,29 +1529,15 @@ void field::render(const blackboard::app::Window &window)
 
 void field::cleanup()
 {
-    for (auto &d : staticOpaqueBatches)
+    for (auto &mesh : fieldMeshes)
     {
-        if (bgfx::isValid(d.vbh))
-            bgfx::destroy(d.vbh);
-        if (bgfx::isValid(d.ibh))
-            bgfx::destroy(d.ibh);
+        mesh.destroy();
     }
 
-    for (auto &d : staticTransparentBatches)
+    for (auto &mesh : testObjectMeshes)
     {
-        if (bgfx::isValid(d.vbh))
-            bgfx::destroy(d.vbh);
-        if (bgfx::isValid(d.ibh))
-            bgfx::destroy(d.ibh);
+        mesh.destroy();
     }
-
-    if (bgfx::isValid(testObjectMesh.vbh))
-        bgfx::destroy(testObjectMesh.vbh);
-    if (bgfx::isValid(testObjectMesh.ibh))
-        bgfx::destroy(testObjectMesh.ibh);
-
-    staticOpaqueBatches.clear();
-    staticTransparentBatches.clear();
 
     if (bgfx::isValid(u_baseColor))
         bgfx::destroy(u_baseColor);
@@ -1969,8 +1575,12 @@ void field::cleanup()
         bgfx::destroy(programInstanced);
     if (bgfx::isValid(programOit))
         bgfx::destroy(programOit);
+    if (bgfx::isValid(programOitInstanced))
+        bgfx::destroy(programOitInstanced);
     if (bgfx::isValid(programOitDepthPostPass))
         bgfx::destroy(programOitDepthPostPass);
+    if (bgfx::isValid(programOitDepthPostPassInstanced))
+        bgfx::destroy(programOitDepthPostPassInstanced);
     if (bgfx::isValid(oitCompProgram))
         bgfx::destroy(oitCompProgram);
     if (bgfx::isValid(tonemapProgram))

@@ -58,7 +58,8 @@ target_link_libraries(${PROJECT_NAME}
     bgfx
     bx
     glm
-    ImGui
+    imgui
+    imguizmo
     spdlog
     bimg_decode
 )

@@ -1,0 +1,146 @@
+#include "mesh.h"
+
+#include <blackboard_app/logger.h>
+#include <bx/error.h>
+#include <bx/pixelformat.h>
+
+using namespace blackboard::logger;
+
+bgfx::VertexLayout MeshVertex::layout;
+
+/// Encode normal vector as RGBA8 color value.
+///
+/// @param[in] _x X component of the normal.
+/// @param[in] _y Y component of the normal.
+/// @param[in] _z Z component of the normal.
+/// @param[in] _w W component.
+///
+/// @returns Packed RGBA8 value.
+///
+inline uint32_t encodeNormalRgba8(fastgltf::math::fvec3 normal, float w)
+{
+    const float src[] =
+        {
+            normal.x() * 0.5f + 0.5f,
+            normal.y() * 0.5f + 0.5f,
+            normal.z() * 0.5f + 0.5f,
+            w * 0.5f + 0.5f,
+        };
+    uint32_t dst;
+    bx::packRgba8(&dst, src);
+    return dst;
+}
+
+void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset)
+{
+    const std::size_t sceneIndex = asset.defaultScene.value_or(0);
+
+    std::unordered_map<Material, size_t, MaterialHash> materialMap;
+
+    fastgltf::iterateSceneNodes(asset, sceneIndex, fastgltf::math::fmat4x4(), [&](const fastgltf::Node &node, const fastgltf::math::fmat4x4 &worldMatrix)
+                                {
+            if (!node.meshIndex.has_value() || node.meshIndex.value() >= asset.meshes.size())
+            {
+                return;
+            }
+            
+            fastgltf::math::fmat3x3 normalMatrix = fastgltf::math::transpose(fastgltf::math::inverse(fastgltf::math::fmat3x3(worldMatrix)));
+
+            auto &gltfMesh = asset.meshes[node.meshIndex.value()];
+            for (auto &primitive : gltfMesh.primitives)
+            {
+                auto positionIt = primitive.findAttribute("POSITION");
+                if (positionIt == primitive.attributes.end())
+                {
+                    logger->warn("Skipping primitive without POSITION attribute.");
+                    continue;
+                }
+
+                if (!primitive.indicesAccessor.has_value())
+                {
+                    logger->warn("Skipping primitive without indices accessor.");
+                    continue;
+                }
+                auto &positionAccessor = asset.accessors[positionIt->accessorIndex];
+                auto& indicesAccessor = asset.accessors[primitive.indicesAccessor.value()];
+
+                if (positionAccessor.count == 0 || indicesAccessor.count == 0)
+                {
+                    logger->warn("Skipping primitive with empty geometry data.");
+                    continue;
+                }
+
+                Material mat;
+                if (primitive.materialIndex.has_value() && primitive.materialIndex.value() < asset.materials.size())
+                {
+                    mat = Material(asset.materials[primitive.materialIndex.value()]);
+                }
+
+                auto it = materialMap.find(mat);
+                Mesh* meshPtr = nullptr;
+                if (it == materialMap.end())
+                {
+                    materialMap[mat] = meshesOut.size();
+                    meshPtr = &meshesOut.emplace_back(mat);
+                } else
+                {
+                    meshPtr = &meshesOut[it->second];
+                }
+
+                Mesh& mesh = *meshPtr;
+
+                const uint32_t baseVertex = static_cast<uint32_t>(mesh.vertices.size());
+                mesh.vertices.reserve(mesh.vertices.size() + positionAccessor.count);
+                mesh.indices.reserve(mesh.indices.size() + indicesAccessor.count);
+
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
+                    asset,
+                    positionAccessor,
+                    [&](fastgltf::math::fvec3 pos, std::size_t index)
+                    {
+                        fastgltf::math::fvec4 worldPos = worldMatrix * fastgltf::math::fvec4(pos.x(), pos.y(), pos.z(), 1.0f);
+                        MeshVertex v{};
+                        v.x = worldPos.x();
+                        v.y = worldPos.y();
+                        v.z = worldPos.z();
+                        v.normal = 0;
+                        mesh.vertices.push_back(v);
+                    });
+
+                auto normalIt = primitive.findAttribute("NORMAL");
+                if (normalIt != primitive.attributes.end())
+                {
+                    auto &normalAccessor = asset.accessors[normalIt->accessorIndex];
+                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
+                        asset,
+                        normalAccessor,
+                        [&](fastgltf::math::fvec3 norm, std::size_t index)
+                        {
+                            fastgltf::math::fvec3 worldNorm = normalMatrix * norm;
+                            mesh.vertices[baseVertex + index].normal = encodeNormalRgba8(worldNorm, 0.0f);
+                        });
+                }
+                    
+                fastgltf::iterateAccessor<uint32_t>(
+                    asset,
+                    indicesAccessor,
+                    [&](uint32_t idx)
+                    {
+                        mesh.indices.push_back(baseVertex + idx);
+                    });
+            } });
+
+    for (auto &mesh : meshesOut)
+    {
+        if (!mesh.createBuffers())
+        {
+            logger->error("Failed to create buffers for mesh with material: type={}, baseColor=({}, {}, {}, {})",
+                          mesh.material.type,
+                          mesh.material.baseColor[0],
+                          mesh.material.baseColor[1],
+                          mesh.material.baseColor[2],
+                          mesh.material.baseColor[3]);
+            throw std::runtime_error("Failed to create buffers for mesh.");
+        }
+    }
+}

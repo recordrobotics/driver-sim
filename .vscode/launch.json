@@ -15,6 +15,32 @@
             "cwd": "${workspaceFolder}",
             "environment": [],
             "console": "internalConsole"
+        },
+        {
+            "name": "Launch (RenderDoc Capture)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "preLaunchTask": "CMake: build",
+            "program": "/usr/bin/env",
+            "args": [
+                "bash",
+                "${workspaceFolder}/scripts/renderdoc_capture.sh",
+                "${workspaceFolder}/build/driver_sim/driver_sim"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "windows": {
+                "program": "powershell",
+                "args": [
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    "${workspaceFolder}\\scripts\\renderdoc_capture.ps1",
+                    "-ExePath",
+                    "${workspaceFolder}\\build\\driver_sim\\driver_sim.exe"
+                ]
+            }
         }
     ]
 }

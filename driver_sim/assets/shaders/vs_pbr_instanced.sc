@@ -1,4 +1,4 @@
-$input a_position, a_normal, i_data0, i_data1
+$input a_position, a_normal, i_data0, i_data1, i_data2, i_data3, i_data4, i_data5, i_data6, i_data7
 $output v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition, v_worldPosition
 
 #include <bgfx_shader.sh>
@@ -6,20 +6,10 @@ $output v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition, v_
 uniform vec4 u_pbrData;
 uniform mat4 u_previousModelViewProj;
 
-mat4 mtxTranslation(vec3 translation)
-{
-	return mtxFromCols(
-		vec4(1.0, 0.0, 0.0, 0.0),
-		vec4(0.0, 1.0, 0.0, 0.0),
-		vec4(0.0, 0.0, 1.0, 0.0),
-		vec4(translation.x, translation.y, translation.z, 1.0)
-	);
-}
-
 void main()
 {
-	mat4 model = mtxTranslation(i_data0.xyz);
-	mat4 prevModel = mtxTranslation(i_data1.xyz);
+	mat4 model = mtxFromCols(i_data0, i_data1, i_data2, i_data3);
+	mat4 prevModel = mtxFromCols(i_data4, i_data5, i_data6, i_data7);
 	
 	bool writeMotionVectors = u_pbrData.x > 0.5;
 

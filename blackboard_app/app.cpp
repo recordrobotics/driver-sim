@@ -12,7 +12,7 @@
 #include <bgfx/platform.h>
 #include <imgui/backends/imgui_impl_sdl3.h>
 #include <imgui/imgui_internal.h>
-#include <imguizmo/ImGuizmo.h>
+#include <ImGuizmo.h>
 
 #include <algorithm>
 #include <iostream>
@@ -137,10 +137,12 @@ namespace blackboard::app
         {
           ImGui_ImplSDL3_ProcessEvent(&event);
           const bool is_main_window = event.window.windowID == SDL_GetWindowID(main_window->window);
-          
-          // Toggle fullscreen on F11
-          if (event.type == SDL_EVENT_KEY_DOWN && is_main_window) {
-            if (event.key.key == SDLK_F11) {
+
+          if (event.type == SDL_EVENT_KEY_DOWN && is_main_window)
+          {
+            // Toggle fullscreen on F11
+            if (event.key.key == SDLK_F11 && false) // TODO: make this a setting and add window position persistence (including fullscreen state)
+            {
               main_window->fullscreen = !main_window->fullscreen;
               SDL_SetWindowFullscreen(main_window->window, main_window->fullscreen ? true : false);
             }
