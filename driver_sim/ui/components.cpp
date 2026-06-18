@@ -15,7 +15,7 @@ void ui::DrawCenteredText(const char *text, float yOffset)
     ImGui::TextUnformatted(text);
 }
 
-void ui::DrawProgress(const char *label, float value)
+void ui::DrawProgress(const std::string_view &label, float value, bool isError)
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
@@ -26,7 +26,7 @@ void ui::DrawProgress(const char *label, float value)
     ImGui::SetCursorPosX((winSize.x - width) * 0.5f);
 
     char buf[128];
-    sprintf(buf, "%s (%.0f%%)", label, value * 100.0f);
+    snprintf(buf, sizeof(buf), "%.*s (%.0f%%)", static_cast<int>(label.size()), label.data(), value * 100.0f);
 
     ImGui::PushFont(nullptr, 16.0f);
     ImGui::TextColored(string_hex_to_rgba_float("#A7A7A7ff"), "%s", buf);
@@ -37,7 +37,7 @@ void ui::DrawProgress(const char *label, float value)
     ImGui::SetCursorPosX((winSize.x - width) * 0.5f);
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg, string_hex_to_rgba_float("#2D2A2Aff"));
-    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, string_hex_to_rgba_float("#42A749ff"));
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, isError ? string_hex_to_rgba_float("#c83c3c") : string_hex_to_rgba_float("#42A749ff"));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f * globalScale);
     ImGui::ProgressBar(value, ImVec2(width, 7 * globalScale), "");
     ImGui::PopStyleVar();

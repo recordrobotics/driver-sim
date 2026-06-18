@@ -12,6 +12,9 @@ file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/fonts")
 file(GLOB_RECURSE IMAGES CONFIGURE_DEPENDS ./assets/images/*)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/images")
 
+file(GLOB_RECURSE PACKAGED_ASSETS CONFIGURE_DEPENDS ./packaged/*)
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/packaged")
+
 foreach(FONT_FILE IN LISTS FONTS)
     get_filename_component(FONT_FILENAME ${FONT_FILE} NAME)
     string(REGEX REPLACE "[^A-Za-z0-9_]" "_" FONT_FILENAME_REP ${FONT_FILENAME})
@@ -31,6 +34,17 @@ foreach(IMAGES_FILE IN LISTS IMAGES)
         INPUT_FILE ${IMAGES_FILE}
         OUTPUT_FILE ${CMAKE_BINARY_DIR}/include/generated/images/${IMAGES_FILENAME}.h
         ARRAY_NAME ${IMAGES_FILENAME_REP}_bytes
+    )
+endforeach()
+
+foreach(PACKAGED_ASSET IN LISTS PACKAGED_ASSETS)
+    get_filename_component(ASSET_FILENAME ${PACKAGED_ASSET} NAME)
+    string(REGEX REPLACE "[^A-Za-z0-9_]" "_" ASSET_FILENAME_REP ${ASSET_FILENAME})
+
+    bgfx_compile_binary_to_header(
+        INPUT_FILE ${PACKAGED_ASSET}
+        OUTPUT_FILE ${CMAKE_BINARY_DIR}/include/generated/packaged/${ASSET_FILENAME}.h
+        ARRAY_NAME ${ASSET_FILENAME_REP}_bytes
     )
 endforeach()
 
@@ -71,9 +85,9 @@ bgfx_compile_shaders(
 )
 
 if(WINDOWS)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS})
+    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
 elseif(MACOS)
-    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS})
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUNDLE True
         RESOURCE True
@@ -83,7 +97,7 @@ elseif(MACOS)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
 )
 elseif(LINUX)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES})
+    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC cxx_std_20)
@@ -93,6 +107,9 @@ target_link_libraries(${PROJECT_NAME}
     blackboard::app
     nlohmann_json::nlohmann_json
     fastgltf::fastgltf
+    picosha2
+    cpr::cpr
+    miniz
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -101,6 +118,7 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_BINARY_DIR}/include/generated/fonts
     ${CMAKE_BINARY_DIR}/include/generated/images
     ${CMAKE_BINARY_DIR}/include/generated/shaders
+    ${CMAKE_BINARY_DIR}/include/generated/packaged
 )
 
 if(WINDOWS)

@@ -20,6 +20,15 @@
 
 #include "assets.h"
 
+#include "fetch/storedasset.h"
+#include "fetch/remotestoredasset.h"
+#include "fetch/packagedstoredasset.h"
+
+#include <code.zip.h>
+#include <jni.zip.h>
+
+#include "settings/settingsstore.h"
+
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
@@ -39,26 +48,18 @@ enum Page
   PAGE_3D_FIELD
 };
 
-ui::Transition pageTransition{PAGE_3D_FIELD};
+ui::Transition pageTransition{PAGE_LOADING};
 
-float javaProgress = 0.0f;
-float elasticProgress = 0.0f;
-float jniProgress = 0.0f;
-float unpackProgress = 0.0f;
-float javaSpeed = 0.0f;
-float elasticSpeed = 0.0f;
-float jniSpeed = 0.0f;
-float unpackSpeed = 0.0f;
-float javaRetargetTime = 0.0f;
-float elasticRetargetTime = 0.0f;
-float jniRetargetTime = 0.0f;
-float unpackRetargetTime = 0.0f;
-
-bool driverStationSelected = true;
-bool simGuiSelected = false;
+std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> javaAsset;
+std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> dashboardAsset;
+std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> fieldAsset;
+std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> robotAsset;
+std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> jniAsset;
+std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> robotCodeAsset;
 
 void init()
 {
+  settings::loadSettings();
   set_theme();
 
   const auto dpi{app_ptr->main_window->effective_display_resolution()};
@@ -85,63 +86,22 @@ void init()
   load_image((void *)logo_png_bytes, sizeof(logo_png_bytes), logo);
 
   field::init(*app_ptr->main_window);
+
+  std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
+  javaAsset = std::make_unique<RemoteStoredAsset>("jdk", "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5", prefPath, "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/eclipse?project=jdk");
+  dashboardAsset = std::make_unique<RemoteStoredAsset>("elastic", "6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7", prefPath, "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/Elastic-Windows_portable.zip");
+  fieldAsset = std::make_unique<RemoteStoredAsset>("field", "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31", prefPath, "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip");
+  robotAsset = std::make_unique<RemoteStoredAsset>("robot", "1e5429e6bfadd417130a0cea55ccc06f39868caf8f04f3adfa20308543a1b937", prefPath, "https://hamster1.ddns.net/robot.zip");
+  jniAsset = std::make_unique<PackagedStoredAsset>("jni", "752978587791a85031f51f87cc6b032cb59b18f0189c2e9a3423eaf1eabc7e89", prefPath, std::span<const uint8_t>(jni_zip_bytes, sizeof(jni_zip_bytes)));
+  robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "59fbd64b3a1a4d06e7d496d6ccb75c38387a80947f41f93ca7d35a5d57135d26", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
+
+  javaAsset->verifyOrDownload();
+  dashboardAsset->verifyOrDownload();
+  fieldAsset->verifyOrDownload();
+  robotAsset->verifyOrDownload();
+  jniAsset->verifyOrDownload();
+  robotCodeAsset->verifyOrDownload();
 }
-
-#pragma region Fake Progress Bar
-
-void resetLoadingProgress()
-{
-  javaProgress = elasticProgress = jniProgress = unpackProgress = 0.0f;
-  javaSpeed = elasticSpeed = jniSpeed = unpackSpeed = 0.0f;
-  javaRetargetTime = elasticRetargetTime = jniRetargetTime = unpackRetargetTime = 0.0f;
-}
-
-float randomFloat(float minValue, float maxValue)
-{
-  thread_local std::mt19937 rng(std::random_device{}());
-  std::uniform_real_distribution<float> dist(minValue, maxValue);
-  return dist(rng);
-}
-
-void retargetProgress(float &speed, float &retargetTime)
-{
-  speed = randomFloat(0.04f, 0.22f);
-  retargetTime = randomFloat(0.15f, 0.90f);
-}
-
-void updateProgressValue(float &value, float &speed, float &retargetTime, float deltaTime)
-{
-  if (value >= 1.0f)
-  {
-    value = 1.0f;
-    return;
-  }
-
-  retargetTime -= deltaTime;
-  if (retargetTime <= 0.0f)
-  {
-    retargetProgress(speed, retargetTime);
-  }
-
-  value = std::min(1.0f, value + speed * deltaTime);
-}
-
-void updateLoadingProgress()
-{
-  const float deltaTime = ImGui::GetIO().DeltaTime;
-
-  updateProgressValue(javaProgress, javaSpeed, javaRetargetTime, deltaTime);
-  updateProgressValue(elasticProgress, elasticSpeed, elasticRetargetTime, deltaTime);
-  updateProgressValue(jniProgress, jniSpeed, jniRetargetTime, deltaTime);
-  updateProgressValue(unpackProgress, unpackSpeed, unpackRetargetTime, deltaTime);
-
-  if (javaProgress >= 1.0f && elasticProgress >= 1.0f && jniProgress >= 1.0f && unpackProgress >= 1.0f)
-  {
-    pageTransition.transition(PAGE_SELECT);
-  }
-}
-
-#pragma endregion
 
 void drawBackground()
 {
@@ -200,19 +160,75 @@ void drawFooter()
   ImGui::PopFont();
 }
 
+inline std::string getProgressName(const std::string &assetName, AssetState state, std::string error)
+{
+  switch (state)
+  {
+  case AssetState::Verifying:
+    return "Verifying " + assetName + "...";
+  case AssetState::Downloading:
+    return "Downloading " + assetName + "...";
+  case AssetState::Writing:
+    return "Writing " + assetName + "...";
+  case AssetState::Extracting:
+    return "Extracting " + assetName + "...";
+  case AssetState::Cleanup:
+    return "Finalizing " + assetName + "...";
+  case AssetState::Complete:
+    return assetName + " is ready!";
+  case AssetState::Error:
+    return "Error (" + error + ") " + assetName;
+  default:
+    return "Unknown " + assetName;
+  }
+}
+
+inline void drawAssetProgress(const std::string &assetName, StoredAsset &asset)
+{
+  DrawProgress(getProgressName(assetName, asset.getState(), asset.getError()), asset.getProgress() / 100.0f, asset.getState() == AssetState::Error);
+}
+
 void drawPageLoading()
 {
   auto &style{ImGui::GetStyle()};
   float globalScale = style.FontScaleMain * style.FontScaleDpi;
 
-  updateLoadingProgress();
+  if (fieldAsset->getState() == AssetState::Complete)
+  {
+    field::startLoadFieldModel();
+  }
+
+  if (robotAsset->getState() == AssetState::Complete)
+  {
+    field::startLoadRobotModel();
+  }
+
+  if (
+      javaAsset->getState() == AssetState::Complete &&
+      dashboardAsset->getState() == AssetState::Complete &&
+      fieldAsset->getState() == AssetState::Complete &&
+      robotAsset->getState() == AssetState::Complete &&
+      jniAsset->getState() == AssetState::Complete &&
+      robotCodeAsset->getState() == AssetState::Complete)
+  {
+    pageTransition.transition(settings::showSelectPage ? PAGE_SELECT : PAGE_3D_FIELD,
+                              // instant transition if all assets were quick loaded
+                              javaAsset->isQuickLoaded() &&
+                                  dashboardAsset->isQuickLoaded() &&
+                                  fieldAsset->isQuickLoaded() &&
+                                  robotAsset->isQuickLoaded() &&
+                                  jniAsset->isQuickLoaded() &&
+                                  robotCodeAsset->isQuickLoaded());
+  }
 
   ImGui::Dummy(ImVec2(0, 22 * globalScale));
 
-  DrawProgress("Downloading Java 17...", javaProgress);
-  DrawProgress("Downloading Elastic Dashboard...", elasticProgress);
-  DrawProgress("Downloading JNI Libraries...", jniProgress);
-  DrawProgress("Unpacking robot code...", unpackProgress);
+  drawAssetProgress("Java 17", *javaAsset);
+  drawAssetProgress("Elastic Dashboard", *dashboardAsset);
+  drawAssetProgress("Field Model", *fieldAsset);
+  drawAssetProgress("Robot Model", *robotAsset);
+  drawAssetProgress("JNI Libraries", *jniAsset);
+  drawAssetProgress("Robot Code", *robotCodeAsset);
 }
 
 void drawPageSelect()
@@ -231,17 +247,39 @@ void drawPageSelect()
 
   ImGui::Dummy(ImVec2(0, 17 * globalScale));
 
+  bool driverStationSelected = settings::enabledExtensions.contains("halsim_ds_socket");
+  bool simGuiSelected = settings::enabledExtensions.contains("halsim_gui");
+
   SplitToggleButtonGroup({
       {"Driver Station", &driverStationSelected},
       {"Sim GUI", &simGuiSelected},
   });
 
+  if (driverStationSelected)
+  {
+    settings::enabledExtensions.insert("halsim_ds_socket");
+  }
+  else
+  {
+    settings::enabledExtensions.erase("halsim_ds_socket");
+  }
+
+  if (simGuiSelected)
+  {
+    settings::enabledExtensions.insert("halsim_gui");
+  }
+  else
+  {
+    settings::enabledExtensions.erase("halsim_gui");
+  }
+
   ImGui::Dummy(ImVec2(0, 17 * globalScale));
 
   if (UnderlineTextButton("Don't show again"))
   {
-    resetLoadingProgress();
-    pageTransition.transition(PAGE_LOADING);
+    settings::showSelectPage = false;
+    settings::saveSettings();
+    pageTransition.transition(PAGE_3D_FIELD);
   }
 
   ImGui::Dummy(ImVec2(0, 20 * globalScale));
@@ -249,7 +287,7 @@ void drawPageSelect()
   ImGui::SetCursorPosX((winSize.x - 28 * 2 * globalScale) / 2);
   if (CircularButton("go", 28 * globalScale))
   {
-    resetLoadingProgress();
+    settings::saveSettings();
     pageTransition.transition(PAGE_3D_FIELD);
   }
 }
@@ -314,6 +352,7 @@ void app_cleanup()
 {
   logo.destroy();
   field::cleanup();
+  settings::saveSettings();
 }
 
 int main(int argc, char *argv[])

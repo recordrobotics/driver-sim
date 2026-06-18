@@ -14,6 +14,8 @@ set( BGFX_BUILD_TOOLS ON CACHE INTERNAL "")
 set( BGFX_BUILD_TOOLS_SHADER ON CACHE INTERNAL "")
 set( BGFX_BUILD_EXAMPLES  OFF CACHE INTERNAL "" )
 set( BGFX_CUSTOM_TARGETS  OFF CACHE INTERNAL "" )
+set( BGFX_INSTALL  OFF CACHE INTERNAL "" )
+set (MINIZ_LIBRARIES "miniz" CACHE INTERNAL "" FORCE)
 
 FetchContent_GetProperties(bgfx)
 if(NOT bgfx_POPULATED)
@@ -63,3 +65,5 @@ if(EXISTS "${_bgfx_gl_file}")
 endif()
 
 add_subdirectory("${bgfx_SOURCE_DIR}" "${bgfx_BINARY_DIR}")
+
+target_compile_definitions(bimg_decode PRIVATE BIMG_CONFIG_PARSE_EXR=0)

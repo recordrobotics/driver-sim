@@ -11,8 +11,17 @@ ui::Transition::Transition(int startingPage, float duration) : currentPage(start
 {
 }
 
-void ui::Transition::transition(int page)
+void ui::Transition::transition(int page, bool instant)
 {
+    if (instant)
+    {
+        currentPage = page;
+        targetPage = page;
+        state = TRANSITION_NONE;
+        alpha = 0.0f;
+        return;
+    }
+
     if (state != TRANSITION_NONE)
     {
         return;

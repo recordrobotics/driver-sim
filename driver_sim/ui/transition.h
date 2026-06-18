@@ -14,7 +14,7 @@ namespace ui
     public:
         Transition(int startingPage, float duration = 0.30f);
 
-        void transition(int page);
+        void transition(int page, bool instant = false);
         void update();
         void draw();
 

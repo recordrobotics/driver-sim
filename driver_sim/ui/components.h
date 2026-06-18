@@ -1,6 +1,7 @@
 #pragma once
 
 #include <list>
+#include <string>
 
 namespace ui
 {
@@ -11,7 +12,7 @@ namespace ui
     } ToggleButton;
 
     void DrawCenteredText(const char *text, float yOffset = 0.0f);
-    void DrawProgress(const char *label, float value);
+    void DrawProgress(const std::string_view &label, float value, bool isError = false);
     void SplitToggleButtonGroup(std::list<ToggleButton> buttons);
     bool UnderlineTextButton(const char *text);
     bool CircularButton(const char *id, float radius);

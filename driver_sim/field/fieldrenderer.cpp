@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cmath>
 #include <unordered_map>
+#include <random>
 
 #include <nlohmann/json.hpp>
 
@@ -21,6 +22,9 @@
 #include "fieldrenderer.h"
 #include "shaders.h"
 #include "mesh.h"
+#include <future>
+
+#include "../settings/settingsstore.h"
 
 static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 16;
 static constexpr float MB_PERPEN_ERROR_THRESHOLD = 0.3f;
@@ -55,10 +59,6 @@ static constexpr uint16_t VIEW_OIT = 1;
 static constexpr uint16_t VIEW_OIT_DEPTH_POST_PASS = 2;
 static constexpr uint16_t VIEW_POSTPROCESS = 3;
 static constexpr uint16_t VIEW_BLIT = 4;
-
-bx::DefaultAllocator allocator;
-bx::FileReader reader;
-bx::Error err;
 
 bgfx::UniformHandle u_baseColor;
 bgfx::UniformHandle u_info;
@@ -139,6 +139,9 @@ bgfx::UniformHandle s_mbTileMaxX;
 bgfx::UniformHandle s_mbTileMax;
 bgfx::UniformHandle s_mbNeighborMax;
 bgfx::UniformHandle s_mbBuffer;
+
+std::future<void> fieldModelLoadingFuture;
+std::future<void> robotModelLoadingFuture;
 
 void initOIT(uint16_t width, uint16_t height)
 {
@@ -469,6 +472,133 @@ bx::Vec3 getOrbitEye()
     };
 }
 
+void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name)
+{
+    std::filesystem::path glbPath = directory + name + ".glb";
+    std::filesystem::path cachePath = directory + name + ".cache";
+
+    if (settings::cacheModels && std::filesystem::exists(cachePath))
+    {
+        logger->info("Loading {0} meshes from cache.", directory + name);
+        Mesh::fromSerialized(meshes, cachePath);
+    }
+    else
+    {
+        logger->info("Loading {0} meshes from GLTF model.", directory + name);
+        fastgltf::Parser parser;
+        Mesh::fromGltfModel(meshes, parser.loadGltfBinary(
+                                              fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(),
+                                              directory,
+                                              fastgltf::Options::LoadGLBBuffers |
+                                                  fastgltf::Options::DontRequireValidAssetMember)
+                                        .get());
+
+        if (settings::cacheModels)
+        {
+            logger->info("Caching {0} meshes to disk.", directory + name);
+            Mesh::toSerialized(meshes, cachePath);
+        }
+    }
+}
+
+void loadFieldModel()
+{
+    logger->info("Loading field model");
+    bx::DefaultAllocator allocator;
+    bx::FileReader reader;
+    bx::Error err;
+
+    std::string fieldDirectory = std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "field/";
+    std::string configFile = fieldDirectory + "config.json";
+    if (bx::open(&reader, configFile.c_str(), &err))
+    {
+        uint32_t size = (uint32_t)bx::getSize(&reader);
+
+        char *data = (char *)bx::alloc(&allocator, size + 1);
+        bx::read(&reader, data, size, &err);
+        data[size] = '\0';
+
+        nlohmann::json j = nlohmann::json::parse(data);
+
+        bx::close(&reader);
+        bx::free(&allocator, data);
+
+        logger->info("Loaded field config file: {0}", configFile);
+
+        loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model");
+
+        logger->info("Field initialized successfully.");
+    }
+    else
+    {
+        logger->error("Could not open field config file: {0}, error: {1}", configFile, err.getMessage().getCPtr());
+    }
+}
+
+void loadRobotModel()
+{
+    logger->info("Loading robot model");
+    bx::DefaultAllocator allocator;
+    bx::FileReader reader;
+    bx::Error err;
+
+    std::string robotDirectory = std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "robot/";
+    std::string configFile = robotDirectory + "config.json";
+    if (bx::open(&reader, configFile.c_str(), &err))
+    {
+        uint32_t size = (uint32_t)bx::getSize(&reader);
+
+        char *data = (char *)bx::alloc(&allocator, size + 1);
+        bx::read(&reader, data, size, &err);
+        data[size] = '\0';
+
+        nlohmann::json j = nlohmann::json::parse(data);
+
+        bx::close(&reader);
+        bx::free(&allocator, data);
+
+        logger->info("Loaded robot config file: {0}", configFile);
+
+        loadAndCacheMeshes(testObjectMeshes, robotDirectory, "model");
+
+        logger->info("Robot initialized successfully.");
+    }
+    else
+    {
+        logger->error("Could not open robot config file: {0}, error: {1}", configFile, err.getMessage().getCPtr());
+    }
+}
+
+bool startedLoadingFieldModel = false;
+
+void field::startLoadFieldModel()
+{
+    if (startedLoadingFieldModel)
+    {
+        return;
+    }
+
+    startedLoadingFieldModel = true;
+
+    logger->info("Starting loading field model in background thread.");
+    fieldModelLoadingFuture = std::async(std::launch::async, loadFieldModel);
+}
+
+bool startedLoadingRobotModel = false;
+
+void field::startLoadRobotModel()
+{
+    if (startedLoadingRobotModel)
+    {
+        return;
+    }
+
+    startedLoadingRobotModel = true;
+
+    logger->info("Starting loading robot model in background thread.");
+    robotModelLoadingFuture = std::async(std::launch::async, loadRobotModel);
+}
+
 void field::init(const blackboard::app::Window &window)
 {
     MeshVertex::init();
@@ -499,316 +629,275 @@ void field::init(const blackboard::app::Window &window)
     s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
     s_mbBuffer = bgfx::createUniform("s_buffer", bgfx::UniformType::Sampler);
 
-    std::string fieldDirectory = std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "field/";
+    const auto type = bgfx::getRendererType();
 
-    std::string configFile = fieldDirectory + "config.json";
-    if (bx::open(&reader, configFile.c_str(), &err))
+    program =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
+
+    if (!bgfx::isValid(program))
     {
-        uint32_t size = (uint32_t)bx::getSize(&reader);
-
-        char *data = (char *)bx::alloc(&allocator, size + 1);
-        bx::read(&reader, data, size, &err);
-        data[size] = '\0';
-
-        nlohmann::json j = nlohmann::json::parse(data);
-
-        bx::close(&reader);
-        bx::free(&allocator, data);
-
-        logger->info("Loaded field config file: {0}", configFile);
-
-        fastgltf::Parser parser;
-
-        Mesh::fromGltfModel(fieldMeshes, parser.loadGltfBinary(
-                                                   fastgltf::GltfDataBuffer::FromPath(fieldDirectory + "model.glb").get(),
-                                                   fieldDirectory,
-                                                   fastgltf::Options::LoadGLBBuffers |
-                                                       fastgltf::Options::DontRequireValidAssetMember)
-                                             .get());
-
-        Mesh::fromGltfModel(testObjectMeshes, parser.loadGltfBinary(
-                                                        fastgltf::GltfDataBuffer::FromPath(fieldDirectory + "model_0.glb").get(),
-                                                        fieldDirectory,
-                                                        fastgltf::Options::LoadGLBBuffers |
-                                                            fastgltf::Options::DontRequireValidAssetMember)
-                                                  .get());
-
-        const auto type = bgfx::getRendererType();
-
-        program =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
-
-        if (!bgfx::isValid(program))
-        {
-            logger->error("Failed to create main rendering program.");
-            throw std::runtime_error("Failed to create main rendering program.");
-        }
-
-        programInstanced =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
-
-        if (!bgfx::isValid(programInstanced))
-        {
-            logger->error("Failed to create main instanced rendering program.");
-            throw std::runtime_error("Failed to create main instanced rendering program.");
-        }
-
-        programOit =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
-
-        if (!bgfx::isValid(programOit))
-        {
-            logger->error("Failed to create OIT rendering program.");
-            throw std::runtime_error("Failed to create OIT rendering program.");
-        }
-
-        programOitInstanced =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
-
-        if (!bgfx::isValid(programOitInstanced))
-        {
-            logger->error("Failed to create OIT instanced rendering program.");
-            throw std::runtime_error("Failed to create OIT instanced rendering program.");
-        }
-
-        programOitDepthPostPass =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
-
-        if (!bgfx::isValid(programOitDepthPostPass))
-        {
-            logger->error("Failed to create OIT depth post-pass program.");
-            throw std::runtime_error("Failed to create OIT depth post-pass program.");
-        }
-
-        programOitDepthPostPassInstanced =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
-
-        if (!bgfx::isValid(programOitDepthPostPassInstanced))
-        {
-            logger->error("Failed to create OIT instanced depth post-pass program.");
-            throw std::runtime_error("Failed to create OIT instanced depth post-pass program.");
-        }
-
-        oitCompProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_oit_comp"), true);
-
-        if (!bgfx::isValid(oitCompProgram))
-        {
-            logger->error("Failed to create OIT composition program.");
-            throw std::runtime_error("Failed to create OIT composition program.");
-        }
-
-        tonemapProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                                bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tonemap"), true);
-
-        if (!bgfx::isValid(tonemapProgram))
-        {
-            logger->error("Failed to create tonemap program.");
-            throw std::runtime_error("Failed to create tonemap program.");
-        }
-
-        blitProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_blit"), true);
-
-        if (!bgfx::isValid(blitProgram))
-        {
-            logger->error("Failed to create blit program.");
-            throw std::runtime_error("Failed to create blit program.");
-        }
-
-        taaResolveProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
-
-        if (!bgfx::isValid(taaResolveProgram))
-        {
-            logger->error("Failed to create TAA resolve program.");
-            throw std::runtime_error("Failed to create TAA resolve program.");
-        }
-
-        mbVelocityProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
-        if (!bgfx::isValid(mbVelocityProgram))
-        {
-            logger->error("Failed to create motion blur velocity program.");
-            throw std::runtime_error("Failed to create motion blur velocity program.");
-        }
-
-        mbTileMaxXProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_x"), true);
-        if (!bgfx::isValid(mbTileMaxXProgram))
-        {
-            logger->error("Failed to create motion blur tile max X program.");
-            throw std::runtime_error("Failed to create motion blur tile max X program.");
-        }
-
-        mbTileMaxYProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_y"), true);
-        if (!bgfx::isValid(mbTileMaxYProgram))
-        {
-            logger->error("Failed to create motion blur tile max Y program.");
-            throw std::runtime_error("Failed to create motion blur tile max Y program.");
-        }
-
-        mbJFAProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa"), true);
-        if (!bgfx::isValid(mbJFAProgram))
-        {
-            logger->error("Failed to create motion blur JFA program.");
-            throw std::runtime_error("Failed to create motion blur JFA program.");
-        }
-
-        mbJFABacktrackingProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa_backtracking"), true);
-        if (!bgfx::isValid(mbJFABacktrackingProgram))
-        {
-            logger->error("Failed to create motion blur JFA backtracking program.");
-            throw std::runtime_error("Failed to create motion blur JFA backtracking program.");
-        }
-
-        mbNeighborMaxProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_neighbormax"), true);
-        if (!bgfx::isValid(mbNeighborMaxProgram))
-        {
-            logger->error("Failed to create motion blur neighbor max program.");
-            throw std::runtime_error("Failed to create motion blur neighbor max program.");
-        }
-
-        mbBlurProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur"), true);
-        if (!bgfx::isValid(mbBlurProgram))
-        {
-            logger->error("Failed to create motion blur blur program.");
-            throw std::runtime_error("Failed to create motion blur blur program.");
-        }
-
-        mbBlurSimpleProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur_simple"), true);
-        if (!bgfx::isValid(mbBlurSimpleProgram))
-        {
-            logger->error("Failed to create motion blur simple blur program.");
-            throw std::runtime_error("Failed to create motion blur simple blur program.");
-        }
-
-        mbCacheProgram =
-            bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_cache"), true);
-        if (!bgfx::isValid(mbCacheProgram))
-        {
-            logger->error("Failed to create motion blur cache program.");
-            throw std::runtime_error("Failed to create motion blur cache program.");
-        }
-
-        u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
-
-        if (!bgfx::isValid(u_baseColor))
-        {
-            logger->error("Failed to create uniform: u_baseColor");
-            throw std::runtime_error("Failed to create uniform: u_baseColor");
-        }
-
-        u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4);
-
-        if (!bgfx::isValid(u_info))
-        {
-            logger->error("Failed to create uniform: u_info");
-            throw std::runtime_error("Failed to create uniform: u_info");
-        }
-
-        u_normalMatrix = bgfx::createUniform("u_normalMatrix", bgfx::UniformType::Mat3);
-        if (!bgfx::isValid(u_normalMatrix))
-        {
-            logger->error("Failed to create uniform: u_normalMatrix");
-            throw std::runtime_error("Failed to create uniform: u_normalMatrix");
-        }
-
-        u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
-        if (!bgfx::isValid(u_previousModelViewProj))
-        {
-            logger->error("Failed to create uniform: u_previousModelViewProj");
-            throw std::runtime_error("Failed to create uniform: u_previousModelViewProj");
-        }
-
-        u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
-        if (!bgfx::isValid(u_previousView))
-        {
-            logger->error("Failed to create uniform: u_previousView");
-            throw std::runtime_error("Failed to create uniform: u_previousView");
-        }
-
-        u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformType::Mat4);
-        if (!bgfx::isValid(u_previousProj))
-        {
-            logger->error("Failed to create uniform: u_previousProj");
-            throw std::runtime_error("Failed to create uniform: u_previousProj");
-        }
-
-        u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformType::Vec4);
-        if (!bgfx::isValid(u_jitter))
-        {
-            logger->error("Failed to create uniform: u_jitter");
-            throw std::runtime_error("Failed to create uniform: u_jitter");
-        }
-
-        u_pbrData = bgfx::createUniform("u_pbrData", bgfx::UniformType::Vec4);
-        if (!bgfx::isValid(u_pbrData))
-        {
-            logger->error("Failed to create uniform: u_pbrData");
-            throw std::runtime_error("Failed to create uniform: u_pbrData");
-        }
-
-        u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, 3);
-        if (!bgfx::isValid(u_lightPos))
-        {
-            logger->error("Failed to create uniform: u_lightPos");
-            throw std::runtime_error("Failed to create uniform: u_lightPos");
-        }
-
-        u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, 3);
-        if (!bgfx::isValid(u_lightColor))
-        {
-            logger->error("Failed to create uniform: u_lightColor");
-            throw std::runtime_error("Failed to create uniform: u_lightColor");
-        }
-
-        u_mbSampleStepMultiplier = bgfx::createUniform("u_mbSampleStepMultiplier", bgfx::UniformType::Vec4);
-        if (!bgfx::isValid(u_mbSampleStepMultiplier))
-        {
-            logger->error("Failed to create uniform: u_mbSampleStepMultiplier");
-            throw std::runtime_error("Failed to create uniform: u_mbSampleStepMultiplier");
-        }
-
-        u_mbVelocityData = bgfx::createUniform("u_mbVelocityData", bgfx::UniformType::Vec4, 3);
-        if (!bgfx::isValid(u_mbVelocityData))
-        {
-            logger->error("Failed to create uniform: u_mbVelocityData");
-            throw std::runtime_error("Failed to create uniform: u_mbVelocityData");
-        }
-
-        u_mbJFAData = bgfx::createUniform("u_mbJFAData", bgfx::UniformType::Vec4, 2);
-        if (!bgfx::isValid(u_mbJFAData))
-        {
-            logger->error("Failed to create uniform: u_mbJFAData");
-            throw std::runtime_error("Failed to create uniform: u_mbJFAData");
-        }
-
-        u_mbBlurData = bgfx::createUniform("u_mbBlurData", bgfx::UniformType::Vec4, 2);
-        if (!bgfx::isValid(u_mbBlurData))
-        {
-            logger->error("Failed to create uniform: u_mbBlurData");
-            throw std::runtime_error("Failed to create uniform: u_mbBlurData");
-        }
-
-        logger->info("Field initialized successfully.");
+        logger->error("Failed to create main rendering program.");
+        throw std::runtime_error("Failed to create main rendering program.");
     }
-    else
+
+    programInstanced =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
+
+    if (!bgfx::isValid(programInstanced))
     {
-        logger->error("Could not open field config file: {0}, error: {1}", configFile, err.getMessage().getCPtr());
+        logger->error("Failed to create main instanced rendering program.");
+        throw std::runtime_error("Failed to create main instanced rendering program.");
+    }
+
+    programOit =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
+
+    if (!bgfx::isValid(programOit))
+    {
+        logger->error("Failed to create OIT rendering program.");
+        throw std::runtime_error("Failed to create OIT rendering program.");
+    }
+
+    programOitInstanced =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
+
+    if (!bgfx::isValid(programOitInstanced))
+    {
+        logger->error("Failed to create OIT instanced rendering program.");
+        throw std::runtime_error("Failed to create OIT instanced rendering program.");
+    }
+
+    programOitDepthPostPass =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
+
+    if (!bgfx::isValid(programOitDepthPostPass))
+    {
+        logger->error("Failed to create OIT depth post-pass program.");
+        throw std::runtime_error("Failed to create OIT depth post-pass program.");
+    }
+
+    programOitDepthPostPassInstanced =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
+
+    if (!bgfx::isValid(programOitDepthPostPassInstanced))
+    {
+        logger->error("Failed to create OIT instanced depth post-pass program.");
+        throw std::runtime_error("Failed to create OIT instanced depth post-pass program.");
+    }
+
+    oitCompProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_oit_comp"), true);
+
+    if (!bgfx::isValid(oitCompProgram))
+    {
+        logger->error("Failed to create OIT composition program.");
+        throw std::runtime_error("Failed to create OIT composition program.");
+    }
+
+    tonemapProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tonemap"), true);
+
+    if (!bgfx::isValid(tonemapProgram))
+    {
+        logger->error("Failed to create tonemap program.");
+        throw std::runtime_error("Failed to create tonemap program.");
+    }
+
+    blitProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_blit"), true);
+
+    if (!bgfx::isValid(blitProgram))
+    {
+        logger->error("Failed to create blit program.");
+        throw std::runtime_error("Failed to create blit program.");
+    }
+
+    taaResolveProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
+
+    if (!bgfx::isValid(taaResolveProgram))
+    {
+        logger->error("Failed to create TAA resolve program.");
+        throw std::runtime_error("Failed to create TAA resolve program.");
+    }
+
+    mbVelocityProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
+    if (!bgfx::isValid(mbVelocityProgram))
+    {
+        logger->error("Failed to create motion blur velocity program.");
+        throw std::runtime_error("Failed to create motion blur velocity program.");
+    }
+
+    mbTileMaxXProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_x"), true);
+    if (!bgfx::isValid(mbTileMaxXProgram))
+    {
+        logger->error("Failed to create motion blur tile max X program.");
+        throw std::runtime_error("Failed to create motion blur tile max X program.");
+    }
+
+    mbTileMaxYProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_y"), true);
+    if (!bgfx::isValid(mbTileMaxYProgram))
+    {
+        logger->error("Failed to create motion blur tile max Y program.");
+        throw std::runtime_error("Failed to create motion blur tile max Y program.");
+    }
+
+    mbJFAProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa"), true);
+    if (!bgfx::isValid(mbJFAProgram))
+    {
+        logger->error("Failed to create motion blur JFA program.");
+        throw std::runtime_error("Failed to create motion blur JFA program.");
+    }
+
+    mbJFABacktrackingProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa_backtracking"), true);
+    if (!bgfx::isValid(mbJFABacktrackingProgram))
+    {
+        logger->error("Failed to create motion blur JFA backtracking program.");
+        throw std::runtime_error("Failed to create motion blur JFA backtracking program.");
+    }
+
+    mbNeighborMaxProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_neighbormax"), true);
+    if (!bgfx::isValid(mbNeighborMaxProgram))
+    {
+        logger->error("Failed to create motion blur neighbor max program.");
+        throw std::runtime_error("Failed to create motion blur neighbor max program.");
+    }
+
+    mbBlurProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur"), true);
+    if (!bgfx::isValid(mbBlurProgram))
+    {
+        logger->error("Failed to create motion blur blur program.");
+        throw std::runtime_error("Failed to create motion blur blur program.");
+    }
+
+    mbBlurSimpleProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur_simple"), true);
+    if (!bgfx::isValid(mbBlurSimpleProgram))
+    {
+        logger->error("Failed to create motion blur simple blur program.");
+        throw std::runtime_error("Failed to create motion blur simple blur program.");
+    }
+
+    mbCacheProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_cache"), true);
+    if (!bgfx::isValid(mbCacheProgram))
+    {
+        logger->error("Failed to create motion blur cache program.");
+        throw std::runtime_error("Failed to create motion blur cache program.");
+    }
+
+    u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_baseColor))
+    {
+        logger->error("Failed to create uniform: u_baseColor");
+        throw std::runtime_error("Failed to create uniform: u_baseColor");
+    }
+
+    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_info))
+    {
+        logger->error("Failed to create uniform: u_info");
+        throw std::runtime_error("Failed to create uniform: u_info");
+    }
+
+    u_normalMatrix = bgfx::createUniform("u_normalMatrix", bgfx::UniformType::Mat3);
+    if (!bgfx::isValid(u_normalMatrix))
+    {
+        logger->error("Failed to create uniform: u_normalMatrix");
+        throw std::runtime_error("Failed to create uniform: u_normalMatrix");
+    }
+
+    u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousModelViewProj))
+    {
+        logger->error("Failed to create uniform: u_previousModelViewProj");
+        throw std::runtime_error("Failed to create uniform: u_previousModelViewProj");
+    }
+
+    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousView))
+    {
+        logger->error("Failed to create uniform: u_previousView");
+        throw std::runtime_error("Failed to create uniform: u_previousView");
+    }
+
+    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousProj))
+    {
+        logger->error("Failed to create uniform: u_previousProj");
+        throw std::runtime_error("Failed to create uniform: u_previousProj");
+    }
+
+    u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_jitter))
+    {
+        logger->error("Failed to create uniform: u_jitter");
+        throw std::runtime_error("Failed to create uniform: u_jitter");
+    }
+
+    u_pbrData = bgfx::createUniform("u_pbrData", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_pbrData))
+    {
+        logger->error("Failed to create uniform: u_pbrData");
+        throw std::runtime_error("Failed to create uniform: u_pbrData");
+    }
+
+    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_lightPos))
+    {
+        logger->error("Failed to create uniform: u_lightPos");
+        throw std::runtime_error("Failed to create uniform: u_lightPos");
+    }
+
+    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_lightColor))
+    {
+        logger->error("Failed to create uniform: u_lightColor");
+        throw std::runtime_error("Failed to create uniform: u_lightColor");
+    }
+
+    u_mbSampleStepMultiplier = bgfx::createUniform("u_mbSampleStepMultiplier", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_mbSampleStepMultiplier))
+    {
+        logger->error("Failed to create uniform: u_mbSampleStepMultiplier");
+        throw std::runtime_error("Failed to create uniform: u_mbSampleStepMultiplier");
+    }
+
+    u_mbVelocityData = bgfx::createUniform("u_mbVelocityData", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_mbVelocityData))
+    {
+        logger->error("Failed to create uniform: u_mbVelocityData");
+        throw std::runtime_error("Failed to create uniform: u_mbVelocityData");
+    }
+
+    u_mbJFAData = bgfx::createUniform("u_mbJFAData", bgfx::UniformType::Vec4, 2);
+    if (!bgfx::isValid(u_mbJFAData))
+    {
+        logger->error("Failed to create uniform: u_mbJFAData");
+        throw std::runtime_error("Failed to create uniform: u_mbJFAData");
+    }
+
+    u_mbBlurData = bgfx::createUniform("u_mbBlurData", bgfx::UniformType::Vec4, 2);
+    if (!bgfx::isValid(u_mbBlurData))
+    {
+        logger->error("Failed to create uniform: u_mbBlurData");
+        throw std::runtime_error("Failed to create uniform: u_mbBlurData");
     }
 
     initGBuffer(window.width, window.height);
@@ -885,11 +974,13 @@ float previousJitterY = 0.0f;
 bool firstFrame = true;
 
 bool freezeTemporalEffects = false;
-bool writeObjectMotionVectors = true;
-bool enableMotionBlur = true;
-bool enableTAA = true;
 
-extern float randomFloat(float min, float max);
+float randomFloat(float minValue, float maxValue)
+{
+    thread_local std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<float> dist(minValue, maxValue);
+    return dist(rng);
+}
 
 static constexpr float BALL_EXTENT_X = 9.5f;
 static constexpr float BALL_EXTENT_Y = 5.5f;
@@ -1148,14 +1239,31 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes
     }
 }
 
+bool createdFieldMeshBuffers = false;
+bool createdRobotMeshBuffers = false;
+
 void field::render(const blackboard::app::Window &window)
 {
     ImGui::Begin("Rendering Debug");
     ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
-    ImGui::Checkbox("Write Object Motion Vectors", &writeObjectMotionVectors);
-    ImGui::Checkbox("Enable Motion Blur", &enableMotionBlur);
-    ImGui::Checkbox("Enable TAA", &enableTAA);
+    ImGui::Checkbox("Write Object Motion Vectors", &settings::writeObjectMotionVectors);
+    ImGui::Checkbox("Enable Motion Blur", &settings::enableMotionBlur);
+    ImGui::Checkbox("Enable TAA", &settings::enableTAA);
     ImGui::End();
+
+    if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
+        fieldModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+    {
+        Mesh::createBuffersForMeshes(fieldMeshes);
+        createdFieldMeshBuffers = true;
+    }
+
+    if (!createdRobotMeshBuffers && robotModelLoadingFuture.valid() &&
+        robotModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+    {
+        Mesh::createBuffersForMeshes(testObjectMeshes);
+        createdRobotMeshBuffers = true;
+    }
 
     updateOrbitCameraFromInput();
     const bx::Vec3 at = orbitCamera.target;
@@ -1169,7 +1277,7 @@ void field::render(const blackboard::app::Window &window)
     float jitterX;
     float jitterY;
 
-    if (enableTAA)
+    if (settings::enableTAA)
     {
         float haltonX = 2.0f * Halton(jitterIndex + 1, 2) - 1.0f;
         float haltonY = 2.0f * Halton(jitterIndex + 1, 3) - 1.0f;
@@ -1263,7 +1371,10 @@ void field::render(const blackboard::app::Window &window)
     const float deltaTime = ImGui::GetIO().DeltaTime;
     curTime += deltaTime;
 
-    drawMeshes(encoder, fieldMeshes, staticModel, normalMatrix);
+    if (createdFieldMeshBuffers)
+    {
+        drawMeshes(encoder, fieldMeshes, staticModel, normalMatrix);
+    }
 
     // Test model
     if (!freezeTemporalEffects)
@@ -1279,7 +1390,10 @@ void field::render(const blackboard::app::Window &window)
     std::ranges::transform(balls, std::back_inserter(instanceData),
                            &BallData::instanceData);
 
-    drawMeshesInstanced(encoder, testObjectMeshes, instanceData);
+    if (createdRobotMeshBuffers)
+    {
+        drawMeshesInstanced(encoder, testObjectMeshes, instanceData);
+    }
 
 #if 0 // IF NO TRANSPARENT OBJECTS IN FIELD MODEL (RARE)
         encoder->touch(VIEW_OIT); // needs to be cleared
@@ -1356,7 +1470,7 @@ void field::render(const blackboard::app::Window &window)
 
     // Motion blur
 
-    if (enableMotionBlur)
+    if (settings::enableMotionBlur)
     {
         if (SCALE_MB_BUFFERS)
         {
@@ -1472,7 +1586,7 @@ void field::render(const blackboard::app::Window &window)
         encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
     }
 
-    if (enableTAA)
+    if (settings::enableTAA)
     {
         // TAA resolve
         Texture taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;

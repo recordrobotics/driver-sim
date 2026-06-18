@@ -129,8 +129,11 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                         mesh.indices.push_back(baseVertex + idx);
                     });
             } });
+}
 
-    for (auto &mesh : meshesOut)
+void Mesh::createBuffersForMeshes(std::vector<Mesh> &meshes)
+{
+    for (auto &mesh : meshes)
     {
         if (!mesh.createBuffers())
         {
@@ -142,5 +145,63 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                           mesh.material.baseColor[3]);
             throw std::runtime_error("Failed to create buffers for mesh.");
         }
+    }
+}
+
+void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path)
+{
+    std::ofstream outFile(path, std::ios::binary);
+    if (!outFile)
+    {
+        logger->error("Failed to open file for writing: {}", path.string());
+        throw std::runtime_error("Failed to open file for writing.");
+    }
+
+    uint32_t meshCount = static_cast<uint32_t>(meshes.size());
+    outFile.write(reinterpret_cast<const char *>(&meshCount), sizeof(meshCount));
+
+    for (const auto &mesh : meshes)
+    {
+        outFile.write(reinterpret_cast<const char *>(&mesh.material), sizeof(mesh.material));
+
+        uint32_t vertexCount = static_cast<uint32_t>(mesh.vertices.size());
+        outFile.write(reinterpret_cast<const char *>(&vertexCount), sizeof(vertexCount));
+        outFile.write(reinterpret_cast<const char *>(mesh.vertices.data()), vertexCount * sizeof(MeshVertex));
+
+        uint32_t indexCount = static_cast<uint32_t>(mesh.indices.size());
+        outFile.write(reinterpret_cast<const char *>(&indexCount), sizeof(indexCount));
+        outFile.write(reinterpret_cast<const char *>(mesh.indices.data()), indexCount * sizeof(uint32_t));
+    }
+}
+
+void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path)
+{
+    std::ifstream inFile(path, std::ios::binary);
+    if (!inFile)
+    {
+        logger->error("Failed to open file for reading: {}", path.string());
+        throw std::runtime_error("Failed to open file for reading.");
+    }
+
+    uint32_t meshCount;
+    inFile.read(reinterpret_cast<char *>(&meshCount), sizeof(meshCount));
+
+    for (uint32_t i = 0; i < meshCount; ++i)
+    {
+        Mesh mesh;
+
+        inFile.read(reinterpret_cast<char *>(&mesh.material), sizeof(mesh.material));
+
+        uint32_t vertexCount;
+        inFile.read(reinterpret_cast<char *>(&vertexCount), sizeof(vertexCount));
+        mesh.vertices.resize(vertexCount);
+        inFile.read(reinterpret_cast<char *>(mesh.vertices.data()), vertexCount * sizeof(MeshVertex));
+
+        uint32_t indexCount;
+        inFile.read(reinterpret_cast<char *>(&indexCount), sizeof(indexCount));
+        mesh.indices.resize(indexCount);
+        inFile.read(reinterpret_cast<char *>(mesh.indices.data()), indexCount * sizeof(uint32_t));
+
+        meshesOut.push_back(std::move(mesh));
     }
 }

@@ -5,6 +5,7 @@ set(FETCHCONTENT_QUIET off)
 
 set(FETCHCONTENT_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/_external)
 
+include(cmake/fetch_external/miniz.cmake)
 include(cmake/fetch_external/SDL.cmake)
 include(cmake/fetch_external/ImGui.cmake)
 include(cmake/fetch_external/bgfx.cmake)
@@ -12,3 +13,5 @@ include(cmake/fetch_external/glm.cmake)
 include(cmake/fetch_external/spdlog.cmake)
 include(cmake/fetch_external/nlohmann_json.cmake)
 include(cmake/fetch_external/fastgltf.cmake)
+include(cmake/fetch_external/picosha2.cmake)
+include(cmake/fetch_external/cpr.cmake)

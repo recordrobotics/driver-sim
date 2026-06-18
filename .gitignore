@@ -10,4 +10,6 @@ _external
 _build*/
 build*/
 
+driver_sim/packaged
+
 imgui.ini

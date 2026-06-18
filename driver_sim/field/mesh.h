@@ -159,4 +159,7 @@ typedef struct Mesh
     }
 
     static void fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset);
+    static void fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path);
+    static void toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path);
+    static void createBuffersForMeshes(std::vector<Mesh> &meshes);
 } Mesh;

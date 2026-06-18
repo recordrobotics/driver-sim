@@ -57,18 +57,19 @@ target_link_libraries(${PROJECT_NAME}
     SDL3::SDL3
     bgfx
     bx
+    bimg_decode
     glm
     imgui
     imguizmo
     spdlog
-    bimg_decode
 )
 
 target_include_directories(${PROJECT_NAME}
     PUBLIC
     ${CMAKE_SOURCE_DIR}
     ${FETCHCONTENT_BASE_DIR}
-    ${bgfx_cmake_SOURCE_DIR}/bx/inlcude
+    ${bgfx_SOURCE_DIR}/bimg/include
+    ${bgfx_SOURCE_DIR}/bx/include
     ${SDL3_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}/include/generated/shaders
 )
@@ -76,7 +77,7 @@ target_include_directories(${PROJECT_NAME}
 if(WINDOWS)
 target_include_directories(${PROJECT_NAME}
     PUBLIC
-    ${bgfx_cmake_SOURCE_DIR}/bx/include/compat/msvc
+    ${bgfx_SOURCE_DIR}/bx/include/compat/msvc
 )
 endif()
 
