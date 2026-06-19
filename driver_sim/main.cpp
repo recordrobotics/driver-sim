@@ -142,10 +142,8 @@ void initFieldView()
                                                                           "-jar", prefPath + "code/libs/2026-robot.jar",
                                                                           settings::extraArguments},
                                                                       .working_directory = prefPath + "code",
-                                                                      .environment = {{"HALSIM_EXTENSIONS",
-                                                                                       // map each extension to the string path and then join with ',' separator
-                                                                                       std::accumulate(settings::enabledExtensions.begin(), settings::enabledExtensions.end(), std::string(), [prefPath](const std::string &acc, const std::string &ext)
-                                                                                                       { return acc + prefPath + "jni/jni/release/" + ext + ".dll;"; })}},
+                                                                      .environment = {{"HALSIM_EXTENSIONS", std::accumulate(settings::enabledExtensions.begin(), settings::enabledExtensions.end(), std::string(), [prefPath](const std::string &acc, const std::string &ext)
+                                                                                                                            { return acc + prefPath + "jni/jni/release/" + ext + ".dll;"; })}},
                                                                       .kill_parent_on_child_exit = false,
                                                                       .auto_restart = true},
                                                 logger);

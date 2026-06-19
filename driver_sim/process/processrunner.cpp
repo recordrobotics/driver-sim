@@ -80,6 +80,7 @@ bool ProcessRunner::start()
                 }
                 if (ec)
                 {
+                    logger->error("Error while polling process: {}, {}", ec.message(), config.commandLine[0]);
                     break; // stream closed or process exited
                 }
 
