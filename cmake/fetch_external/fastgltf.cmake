@@ -3,12 +3,13 @@ cmake_minimum_required(VERSION 3.21)
 include(FetchContent)
 
 set(FASTGLTF_BUILD_SHARED_LIBS OFF CACHE BOOL "Build fastgltf as static" FORCE)
-set(FASTGLTF_BUILD_EXAMPLES OFF CACHE BOOL "Don't build examples" FORCE)
+set(FASTGLTF_ENABLE_EXAMPLES  OFF CACHE BOOL "Don't build examples" FORCE)
+set(FASTGLTF_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     fastgltf
     GIT_REPOSITORY https://github.com/spnda/fastgltf.git
-    GIT_TAG v0.9.0
+    GIT_TAG main
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/fastgltf
 )

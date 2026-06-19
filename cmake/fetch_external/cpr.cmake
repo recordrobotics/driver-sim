@@ -10,5 +10,6 @@ FetchContent_Declare(
     cpr
     GIT_REPOSITORY https://github.com/libcpr/cpr.git
     GIT_TAG        1.14.2
+    GIT_SHALLOW 1
 )
 FetchContent_MakeAvailable(cpr)

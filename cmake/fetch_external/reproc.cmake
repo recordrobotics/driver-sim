@@ -9,5 +9,6 @@ FetchContent_Declare(
     reproc++
     GIT_REPOSITORY https://github.com/daandemeyer/reproc.git
     GIT_TAG        v14.2.7
+    GIT_SHALLOW 1
 )
 FetchContent_MakeAvailable(reproc++)
