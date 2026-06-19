@@ -145,7 +145,6 @@ StoredAsset::~StoredAsset()
 {
     if (workerThread.joinable())
     {
-        logger->info("Requesting stop for asset worker thread during destruction");
         workerThread.request_stop();
     }
 }

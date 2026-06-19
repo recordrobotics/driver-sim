@@ -20,6 +20,8 @@ namespace settings
     std::string extraArguments;
 
     std::unordered_set<std::string> enabledExtensions;
+    bool launchElastic = true;
+    bool launchRobotCode = true;
 
     void loadDefaultSettings()
     {
@@ -33,6 +35,8 @@ namespace settings
         extraArguments = "";
 
         enabledExtensions = {"halsim_ds_socket"};
+        launchElastic = true;
+        launchRobotCode = true;
     }
 
     void loadSettings()
@@ -71,6 +75,8 @@ namespace settings
             cacheModels = j.value("cacheModels", cacheModels);
             extraArguments = j.value("extraArguments", extraArguments);
             enabledExtensions = j.value("enabledExtensions", enabledExtensions);
+            launchElastic = j.value("launchElastic", launchElastic);
+            launchRobotCode = j.value("launchRobotCode", launchRobotCode);
             logger->info("Settings loaded successfully from {0}", settingsPath);
         }
         else
@@ -93,6 +99,8 @@ namespace settings
         j["cacheModels"] = cacheModels;
         j["extraArguments"] = extraArguments;
         j["enabledExtensions"] = enabledExtensions;
+        j["launchElastic"] = launchElastic;
+        j["launchRobotCode"] = launchRobotCode;
         std::string jsonString = j.dump(4);
         bx::Error error;
         bx::FileWriter writer;

@@ -18,4 +18,6 @@ namespace settings
     extern std::string extraArguments;
 
     extern std::unordered_set<std::string> enabledExtensions;
+    extern bool launchElastic;
+    extern bool launchRobotCode;
 }

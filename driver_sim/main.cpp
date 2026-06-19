@@ -9,6 +9,7 @@
 #include <imgui/imgui.h>
 
 #include <algorithm>
+#include <numeric>
 #include <random>
 #include <list>
 
@@ -28,11 +29,15 @@
 #include <jni.zip.h>
 
 #include "settings/settingsstore.h"
+#include "process/processrunner.h"
+
+#include <blackboard_app/logger.h>
 
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
 using namespace ui;
+using namespace blackboard::logger;
 
 #define LOAD_FONT(font, set_as_default) \
   blackboard::gui::load_font(#font, (void *)font##_bytes, sizeof(font##_bytes), 12.0f, dpi, set_as_default);
@@ -56,8 +61,10 @@ std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> field
 std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> robotAsset;
 std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> jniAsset;
 std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> robotCodeAsset;
+std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> elasticProcess;
+std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> javaProcess;
 
-void init()
+void initApp()
 {
   settings::loadSettings();
   set_theme();
@@ -95,12 +102,63 @@ void init()
   jniAsset = std::make_unique<PackagedStoredAsset>("jni", "752978587791a85031f51f87cc6b032cb59b18f0189c2e9a3423eaf1eabc7e89", prefPath, std::span<const uint8_t>(jni_zip_bytes, sizeof(jni_zip_bytes)));
   robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "59fbd64b3a1a4d06e7d496d6ccb75c38387a80947f41f93ca7d35a5d57135d26", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
 
-  javaAsset->verifyOrDownload();
-  dashboardAsset->verifyOrDownload();
   fieldAsset->verifyOrDownload();
   robotAsset->verifyOrDownload();
-  jniAsset->verifyOrDownload();
-  robotCodeAsset->verifyOrDownload();
+
+  if (settings::launchElastic)
+  {
+    dashboardAsset->verifyOrDownload();
+  }
+
+  if (settings::launchRobotCode)
+  {
+    javaAsset->verifyOrDownload();
+    jniAsset->verifyOrDownload();
+    robotCodeAsset->verifyOrDownload();
+  }
+}
+
+bool hasInitializedFieldView = false;
+
+void initFieldView()
+{
+  if (hasInitializedFieldView)
+    return;
+  hasInitializedFieldView = true;
+
+  std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
+
+  elasticProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{
+                                                       .commandLine = {prefPath + "elastic/elastic_dashboard.exe"},
+                                                       .working_directory = prefPath + "elastic",
+                                                       .environment = {},
+                                                       .kill_parent_on_child_exit = true,
+                                                       .auto_restart = false},
+                                                   logger);
+
+  javaProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{.commandLine = {
+                                                                          prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
+                                                                          "-Djava.library.path=" + prefPath + "jni/jni/release",
+                                                                          "-jar", prefPath + "code/libs/2026-robot.jar",
+                                                                          settings::extraArguments},
+                                                                      .working_directory = prefPath + "code",
+                                                                      .environment = {{"HALSIM_EXTENSIONS",
+                                                                                       // map each extension to the string path and then join with ',' separator
+                                                                                       std::accumulate(settings::enabledExtensions.begin(), settings::enabledExtensions.end(), std::string(), [prefPath](const std::string &acc, const std::string &ext)
+                                                                                                       { return acc + prefPath + "jni/jni/release/" + ext + ".dll;"; })}},
+                                                                      .kill_parent_on_child_exit = false,
+                                                                      .auto_restart = true},
+                                                logger);
+
+  if (settings::launchElastic)
+  {
+    elasticProcess->start();
+  }
+
+  if (settings::launchRobotCode)
+  {
+    javaProcess->start();
+  }
 }
 
 void drawBackground()
@@ -204,31 +262,44 @@ void drawPageLoading()
   }
 
   if (
-      javaAsset->getState() == AssetState::Complete &&
-      dashboardAsset->getState() == AssetState::Complete &&
       fieldAsset->getState() == AssetState::Complete &&
       robotAsset->getState() == AssetState::Complete &&
-      jniAsset->getState() == AssetState::Complete &&
-      robotCodeAsset->getState() == AssetState::Complete)
+      (!settings::launchElastic || dashboardAsset->getState() == AssetState::Complete) &&
+      (!settings::launchRobotCode || (javaAsset->getState() == AssetState::Complete &&
+                                      jniAsset->getState() == AssetState::Complete &&
+                                      robotCodeAsset->getState() == AssetState::Complete)))
   {
     pageTransition.transition(settings::showSelectPage ? PAGE_SELECT : PAGE_3D_FIELD,
                               // instant transition if all assets were quick loaded
-                              javaAsset->isQuickLoaded() &&
-                                  dashboardAsset->isQuickLoaded() &&
-                                  fieldAsset->isQuickLoaded() &&
+                              fieldAsset->isQuickLoaded() &&
                                   robotAsset->isQuickLoaded() &&
-                                  jniAsset->isQuickLoaded() &&
-                                  robotCodeAsset->isQuickLoaded());
+                                  (!settings::launchElastic || dashboardAsset->isQuickLoaded()) &&
+                                  (!settings::launchRobotCode || (javaAsset->isQuickLoaded() &&
+                                                                  jniAsset->isQuickLoaded() &&
+                                                                  robotCodeAsset->isQuickLoaded())));
+    if (!settings::showSelectPage)
+    {
+      initFieldView();
+    }
   }
 
   ImGui::Dummy(ImVec2(0, 22 * globalScale));
 
-  drawAssetProgress("Java 17", *javaAsset);
-  drawAssetProgress("Elastic Dashboard", *dashboardAsset);
+  if (settings::launchRobotCode)
+  {
+    drawAssetProgress("Java 17", *javaAsset);
+  }
+  if (settings::launchElastic)
+  {
+    drawAssetProgress("Elastic Dashboard", *dashboardAsset);
+  }
   drawAssetProgress("Field Model", *fieldAsset);
   drawAssetProgress("Robot Model", *robotAsset);
-  drawAssetProgress("JNI Libraries", *jniAsset);
-  drawAssetProgress("Robot Code", *robotCodeAsset);
+  if (settings::launchRobotCode)
+  {
+    drawAssetProgress("JNI Libraries", *jniAsset);
+    drawAssetProgress("Robot Code", *robotCodeAsset);
+  }
 }
 
 void drawPageSelect()
@@ -280,6 +351,7 @@ void drawPageSelect()
     settings::showSelectPage = false;
     settings::saveSettings();
     pageTransition.transition(PAGE_3D_FIELD);
+    initFieldView();
   }
 
   ImGui::Dummy(ImVec2(0, 20 * globalScale));
@@ -289,6 +361,7 @@ void drawPageSelect()
   {
     settings::saveSettings();
     pageTransition.transition(PAGE_3D_FIELD);
+    initFieldView();
   }
 }
 
@@ -361,7 +434,7 @@ int main(int argc, char *argv[])
                            blackboard::renderer::Api::AUTO); // autodetect renderer api
   app_ptr = &app;
   app.on_update = app_update;
-  app.on_init = init;
+  app.on_init = initApp;
   app.run();
 
   app_cleanup();
