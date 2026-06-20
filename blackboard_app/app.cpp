@@ -121,12 +121,7 @@ namespace blackboard::app
 
     if (ImGui::GetCurrentContext() && main_window)
     {
-      auto layout_ui = resources::path() / "imgui.ini";
-      if (!std::filesystem::exists(layout_ui))
-      {
-        layout_ui = resources::path() / "assets/layouts/default_imgui.ini";
-      }
-      ImGui::LoadIniSettingsFromDisk(layout_ui.string().c_str());
+      ImGui::LoadIniSettingsFromDisk(gui::imgui_ini_path.c_str());
       const auto [drawable_width, drawable_height] = main_window->get_size_in_pixels();
       on_resize(drawable_width, drawable_height);
 
@@ -198,7 +193,7 @@ namespace blackboard::app
   {
     if (blackboard::gui::isInit())
     {
-      ImGui::SaveIniSettingsToDisk((resources::path() / "imgui.ini").string().c_str());
+      ImGui::SaveIniSettingsToDisk(gui::imgui_ini_path.c_str());
 
       ImGui_ImplSDL3_Shutdown();
       renderer::ImGui_Impl_sdl_bgfx_Shutdown();

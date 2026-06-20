@@ -43,4 +43,6 @@ namespace blackboard::gui
 
     // input format #aa1199ff
     ImVec4 string_hex_to_rgba_float(const std::string &color);
+
+    extern std::string imgui_ini_path;
 } // namespace blackboard::gui

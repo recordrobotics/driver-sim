@@ -15,8 +15,11 @@
 
 #include "logger.h"
 
+#include <SDL3/SDL.h>
+
 namespace blackboard::gui
 {
+  std::string imgui_ini_path;
 
   void init()
   {
@@ -25,6 +28,11 @@ namespace blackboard::gui
     ImGui::CreateContext();
     // Set up input output configs
     ImGuiIO &io = ImGui::GetIO();
+
+    std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
+    imgui_ini_path = prefPath + "imgui.ini";
+    io.IniFilename = imgui_ini_path.c_str();
+
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
