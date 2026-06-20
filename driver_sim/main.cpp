@@ -106,8 +106,11 @@ void initApp()
   dashboardAsset = std::make_unique<RemoteStoredAsset>("elastic", "6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7", prefPath, "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/Elastic-Windows_portable.zip");
   fieldAsset = std::make_unique<RemoteStoredAsset>("field", "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31", prefPath, "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip");
   robotAsset = std::make_unique<RemoteStoredAsset>("robot", "1e5429e6bfadd417130a0cea55ccc06f39868caf8f04f3adfa20308543a1b937", prefPath, "https://hamster1.ddns.net/robot.zip");
-  jniAsset = std::make_unique<RemoteStoredAsset>("jni", "752978587791a85031f51f87cc6b032cb59b18f0189c2e9a3423eaf1eabc7e89", prefPath, "https://hamster1.ddns.net/jni.zip");
-  robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "59fbd64b3a1a4d06e7d496d6ccb75c38387a80947f41f93ca7d35a5d57135d26", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
+  jniAsset = std::make_unique<RemoteStoredAsset>("jni", "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5", prefPath, "https://hamster1.ddns.net/jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip");
+  robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "87ced927e5e269b012d557198bf1a5c0228ab16806f03c5cd57ac607d457e3b4", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
+
+  // make sure we remove deleted deploy files or old robot code
+  robotCodeAsset->cleanReplaceFolders = {"src", "libs"};
 
   fieldAsset->verifyOrDownload();
   robotAsset->verifyOrDownload();
@@ -147,12 +150,12 @@ void initFieldView()
 
   javaProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{.commandLine = {
                                                                           prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
-                                                                          "-Djava.library.path=" + prefPath + "jni/jni/release",
+                                                                          "-Djava.library.path=" + prefPath + "jni/release",
                                                                           "-jar", prefPath + "code/libs/2026-robot.jar",
                                                                           settings::extraArguments},
                                                                       .working_directory = prefPath + "code",
                                                                       .environment = {{"HALSIM_EXTENSIONS", std::accumulate(settings::enabledExtensions.begin(), settings::enabledExtensions.end(), std::string(), [prefPath](const std::string &acc, const std::string &ext)
-                                                                                                                            { return acc + prefPath + "jni/jni/release/" + ext + ".dll;"; })}},
+                                                                                                                            { return acc + prefPath + "jni/release/" + ext + ".dll;"; })}},
                                                                       .kill_parent_on_child_exit = false,
                                                                       .auto_restart = true},
                                                 logger);

@@ -95,6 +95,15 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
         if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
         {
             logger->trace("Creating directory: {}", outputPath.string());
+            if (fs::exists(outputPath) && fs::is_directory(outputPath))
+            {
+                fs::path dirName = outputPath.has_filename() ? outputPath.filename() : outputPath.parent_path().filename();
+                if (std::find(cleanReplaceFolders.begin(), cleanReplaceFolders.end(), dirName.string()) != cleanReplaceFolders.end())
+                {
+                    logger->trace("Cleaning directory: {}", outputPath.string());
+                    fs::remove_all(outputPath);
+                }
+            }
             fs::create_directories(outputPath);
             continue;
         }
