@@ -23,6 +23,8 @@ namespace settings
     bool launchElastic = true;
     bool launchRobotCode = true;
 
+    uint64_t javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
+
     void loadDefaultSettings()
     {
         logger->info("Loading default settings.");
@@ -37,6 +39,56 @@ namespace settings
         enabledExtensions = {"halsim_ds_socket"};
         launchElastic = true;
         launchRobotCode = true;
+
+        javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
+    }
+
+    uint64_t parseHumanSizeToBytes(const std::string &sizeStr)
+    {
+        std::string numberPart;
+        std::string unitPart;
+
+        for (char c : sizeStr)
+        {
+            if (std::isdigit(c))
+            {
+                numberPart += c;
+            }
+            else if (std::isalpha(c))
+            {
+                unitPart += std::tolower(c);
+            }
+        }
+
+        uint64_t number = std::stoull(numberPart);
+        uint64_t multiplier = 1;
+
+        if (unitPart == "kb")
+            multiplier = 1024ull;
+        else if (unitPart == "mb")
+            multiplier = 1024ull * 1024ull;
+        else if (unitPart == "gb")
+            multiplier = 1024ull * 1024ull * 1024ull;
+        else if (unitPart == "tb")
+            multiplier = 1024ull * 1024ull * 1024ull * 1024ull;
+
+        return number * multiplier;
+    }
+
+    std::string humanReadableSize(uint64_t bytes)
+    {
+        const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+        int unitIndex = 0;
+
+        while (bytes >= 1024ull && unitIndex < 4)
+        {
+            bytes /= 1024ull;
+            unitIndex++;
+        }
+
+        char buffer[64];
+        std::snprintf(buffer, sizeof(buffer), "%llu %s", bytes, units[unitIndex]);
+        return std::string(buffer);
     }
 
     void loadSettings()
@@ -77,6 +129,7 @@ namespace settings
             enabledExtensions = j.value("enabledExtensions", enabledExtensions);
             launchElastic = j.value("launchElastic", launchElastic);
             launchRobotCode = j.value("launchRobotCode", launchRobotCode);
+            javaLogMaxBytes = parseHumanSizeToBytes(j.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
             logger->info("Settings loaded successfully from {0}", settingsPath);
         }
         else
@@ -101,6 +154,7 @@ namespace settings
         j["enabledExtensions"] = enabledExtensions;
         j["launchElastic"] = launchElastic;
         j["launchRobotCode"] = launchRobotCode;
+        j["javaLogMaxBytes"] = humanReadableSize(javaLogMaxBytes);
         std::string jsonString = j.dump(4);
         bx::Error error;
         bx::FileWriter writer;

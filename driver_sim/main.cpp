@@ -4,6 +4,7 @@
 #include <blackboard_app/gui.h>
 #include <blackboard_app/resources.h>
 #include <blackboard_app/window.h>
+#include <blackboard_app/logger.h>
 
 #include <bgfx/bgfx.h>
 #include <imgui/imgui.h>
@@ -12,6 +13,7 @@
 #include <numeric>
 #include <random>
 #include <list>
+#include <future>
 
 #include "ui/components.h"
 #include "ui/theme.h"
@@ -30,8 +32,7 @@
 
 #include "settings/settingsstore.h"
 #include "process/processrunner.h"
-
-#include <blackboard_app/logger.h>
+#include "javalogmanager.h"
 
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
@@ -63,6 +64,8 @@ std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> j
 std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> robotCodeAsset;
 std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> elasticProcess;
 std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> javaProcess;
+
+std::future<void> javaLogEnforceFuture;
 
 void initApp()
 {
@@ -116,6 +119,8 @@ void initApp()
     jniAsset->verifyOrDownload();
     robotCodeAsset->verifyOrDownload();
   }
+
+  javaLogEnforceFuture = std::async(std::launch::async, java_log_manager::enforceFolderLimits);
 }
 
 bool hasInitializedFieldView = false;
@@ -421,9 +426,11 @@ void app_update()
 
 void app_cleanup()
 {
+  javaLogEnforceFuture = std::async(std::launch::async, java_log_manager::enforceFolderLimits);
   logo.destroy();
   field::cleanup();
   settings::saveSettings();
+  javaLogEnforceFuture.wait();
 }
 
 int main(int argc, char *argv[])
