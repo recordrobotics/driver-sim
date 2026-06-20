@@ -5,19 +5,26 @@
 
 #include <SDL3/SDL.h>
 
+#include <bimg/decode.h>
+#include <bx/allocator.h>
+
 #include <iostream>
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif // _WIN32
 
+#include <logo.png.h>
+
 namespace blackboard::app
 {
-
   Window::~Window()
   {
     logger::logger->info("Window {} destroyed", title);
   }
+
+  static bx::DefaultAllocator s_allocator;
 
   void Window::init_platform_window()
   {
@@ -30,6 +37,38 @@ namespace blackboard::app
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     window = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
+
+    bimg::ImageContainer *image = bimg::imageParse(
+        &s_allocator,
+        (void *)logo_png_bytes,
+        static_cast<uint32_t>(sizeof(logo_png_bytes)),
+        bimg::TextureFormat::BGRA8);
+
+    if (image == nullptr)
+    {
+      logger::logger->error("Could not load icon");
+    }
+    else
+    {
+      SDL_Surface *surface = SDL_CreateSurfaceFrom(
+          image->m_width,
+          image->m_height,
+          SDL_PIXELFORMAT_ABGR8888,
+          image->m_data,
+          image->m_width * 4);
+
+      if (surface)
+      {
+        SDL_SetWindowIcon(window, surface);
+        SDL_DestroySurface(surface);
+      }
+      else
+      {
+        logger::logger->error("Could not create surface for icon");
+      }
+
+      bimg::imageFree(image);
+    }
   }
 
   std::pair<uint16_t, uint16_t> Window::get_size_in_pixels() const

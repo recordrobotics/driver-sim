@@ -4,7 +4,7 @@
 
 using namespace TinyProcessLib;
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <cstdlib>
 extern "C" char **_environ;
 #define ENV_PTR _environ

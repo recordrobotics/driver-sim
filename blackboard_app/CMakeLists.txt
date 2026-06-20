@@ -50,7 +50,13 @@ bgfx_compile_shaders(
   AS_HEADERS
 )
 
-add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS} ${VS_SHADERS} ${FS_SHADERS})
+bgfx_compile_binary_to_header(
+    INPUT_FILE ${CMAKE_CURRENT_LIST_DIR}/../driver_sim/assets/images/logo.png
+    OUTPUT_FILE ${CMAKE_BINARY_DIR}/include/generated/images/logo.png.h
+    ARRAY_NAME logo_png_bytes
+)
+
+add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS} ${VS_SHADERS} ${FS_SHADERS} ${CMAKE_CURRENT_LIST_DIR}/../driver_sim/assets/images/logo.png)
 add_library(blackboard::app ALIAS ${PROJECT_NAME})
 find_package(X11)
 target_link_libraries(${PROJECT_NAME}
@@ -72,6 +78,7 @@ target_include_directories(${PROJECT_NAME}
     ${bgfx_SOURCE_DIR}/bx/include
     ${SDL3_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}/include/generated/shaders
+    ${CMAKE_BINARY_DIR}/include/generated/images
 )
 
 if(WINDOWS)

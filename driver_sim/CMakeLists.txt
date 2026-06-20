@@ -85,7 +85,12 @@ bgfx_compile_shaders(
 )
 
 if(WINDOWS)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
+    add_executable(${PROJECT_NAME} WIN32 
+            ${SOURCES} ${HEADERS}
+            ${FONTS} ${IMAGES}
+            ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS}
+            ${PACKAGED_ASSETS}
+            ${CMAKE_CURRENT_LIST_DIR}/assets/app.rc)
 elseif(MACOS)
     add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
     set_target_properties(${PROJECT_NAME} PROPERTIES

@@ -1,5 +1,10 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <blackboard_app/app.h>
 #include <blackboard_app/gui.h>
 #include <blackboard_app/resources.h>
@@ -433,7 +438,15 @@ void app_cleanup()
   javaLogEnforceFuture.wait();
 }
 
+#ifdef _WIN32
+int WINAPI WinMain(
+    HINSTANCE,
+    HINSTANCE,
+    LPSTR,
+    int)
+#else
 int main(int argc, char *argv[])
+#endif
 {
   blackboard::app::App app("Driver Sim",
                            blackboard::renderer::Api::AUTO); // autodetect renderer api
