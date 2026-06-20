@@ -11,28 +11,11 @@
 
 namespace blackboard::logger
 {
-
-  std::filesystem::path path()
-  {
-#ifdef __APPLE__
-    if (const char *base_path = SDL_GetBasePath(); base_path)
-    {
-      return std::filesystem::path{base_path}.parent_path().parent_path() / "log";
-    }
-#else
-    if (const char *base_path = SDL_GetBasePath(); base_path)
-    {
-      return std::filesystem::path{base_path}.parent_path().parent_path() / "log";
-    }
-#endif
-    return strdup("/");
-  }
-
   void init()
   {
     static constexpr size_t file_size{5u * 1024u * 1024u};
     static constexpr size_t rotating_files{5u};
-    static const std::filesystem::path filename{path() / "driversim.log"};
+    static const std::filesystem::path filename{std::filesystem::path{SDL_GetPrefPath(NULL, "DriverSim")} / "logs" / "driversim.log"};
 
     auto console_sink_trace = std::make_shared<spdlog::sinks::stdout_sink_mt>();
     console_sink_trace->set_pattern("[%^%l%$] %v");
