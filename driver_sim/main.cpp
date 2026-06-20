@@ -430,7 +430,22 @@ void app_update()
     field::render(*app_ptr->main_window);
   }
   drawUI();
-  ImGui::ShowMetricsWindow();
+
+  {
+    ImGuiIO &io = ImGui::GetIO();
+    const ImGuiViewport *viewport{ImGui::GetMainViewport()};
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10, viewport->WorkPos.y + 10), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+
+    const static ImGuiWindowFlags window_flags{
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize};
+
+    ImGui::Begin("FPS", nullptr, window_flags);
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#ffffffc4"));
+    ImGui::Text("%.1f FPS", io.Framerate);
+    ImGui::PopStyleColor();
+    ImGui::End();
+  }
 }
 
 void app_cleanup()

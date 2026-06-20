@@ -118,6 +118,7 @@ target_link_libraries(${PROJECT_NAME}
     tiny-process-library
     ntcore
     wpiutil
+    wpimath
 )
 
 target_include_directories(${PROJECT_NAME}

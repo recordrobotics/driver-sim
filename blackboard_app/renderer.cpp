@@ -59,9 +59,9 @@ namespace blackboard::renderer
 #endif
     bgfx::init(bgfx_init);
 
+#ifdef _DEBUG
     bgfx::setDebug(BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS);
-    //  bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0xFF0000FF, 1.0f, 0);
-    //  bgfx::setViewRect(0, 0, 0, drawable_width, drawable_height);
+#endif
 
     switch (bgfx::getRendererType())
     {

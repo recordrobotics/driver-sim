@@ -26,8 +26,73 @@
 
 #include <networktables/NetworkTable.h>
 #include <networktables/NetworkTableInstance.h>
+#include <networktables/StructTopic.h>
+
+#include <frc/geometry/Pose3d.h>
+#include <frc/geometry/struct/Pose3dStruct.h>
 
 #include "../settings/settingsstore.h"
+
+enum class ModelRotationAxis
+{
+    X,
+    Y,
+    Z
+};
+
+typedef struct ModelRotationConfig
+{
+    ModelRotationAxis axis;
+    float angleDegrees;
+} ModelRotationConfig;
+
+static ModelRotationAxis axisFromString(const std::string &s)
+{
+    std::string sLower = s;
+    std::transform(sLower.begin(), sLower.end(), sLower.begin(), ::tolower);
+
+    if (sLower == "x")
+        return ModelRotationAxis::X;
+    if (sLower == "y")
+        return ModelRotationAxis::Y;
+    if (sLower == "z")
+        return ModelRotationAxis::Z;
+    throw std::runtime_error("Invalid rotation axis in config: " + s);
+}
+
+namespace nlohmann
+{
+    template <>
+    struct adl_serializer<ModelRotationConfig>
+    {
+        static ModelRotationConfig from_json(const json &j)
+        {
+            return {
+                axisFromString(j.at("axis").get<std::string>()),
+                j.at("degrees").get<float>()};
+        }
+    };
+}
+
+enum class WPILibCoordinateSystem
+{
+    WallBlue,
+    CenterRed
+};
+
+static WPILibCoordinateSystem coordinateSystemFromString(const std::string &s)
+{
+    std::string sLower = s;
+    std::transform(sLower.begin(), sLower.end(), sLower.begin(), ::tolower);
+
+    if (sLower == "wall-blue")
+        return WPILibCoordinateSystem::WallBlue;
+    if (sLower == "center-red")
+        return WPILibCoordinateSystem::CenterRed;
+    throw std::runtime_error("Invalid coordinate system in config: " + s);
+}
+
+static constexpr float INCHES_TO_METERS = 0.0254f;
 
 static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 16;
 static constexpr float MB_PERPEN_ERROR_THRESHOLD = 0.3f;
@@ -143,10 +208,21 @@ bgfx::UniformHandle s_mbTileMax;
 bgfx::UniformHandle s_mbNeighborMax;
 bgfx::UniformHandle s_mbBuffer;
 
+float fieldModelMatrix[16];
+float fieldNormalMatrix[9];
+
+WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
+float fieldWidthMeters = 1.0f;
+float fieldHeightMeters = 1.0f;
+
+float robotModelMatrix[16];
+
 std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
 
 nt::NetworkTableInstance ntInst;
+nt::StructTopic<frc::Pose3d> robotPoseTopic;
+nt::StructSubscriber<frc::Pose3d> robotPoseSub;
 
 void initOIT(uint16_t width, uint16_t height)
 {
@@ -388,9 +464,15 @@ typedef struct Transform
         bx::mtxIdentity(matrix);
     }
 
-    Transform(bx::Vec3 position, bx::Vec3 rotation)
+    Transform(float *modelMatrix, bx::Vec3 position, bx::Vec3 rotation)
     {
-        bx::mtxSRT(matrix, 1.0f, 1.0f, 1.0f, rotation.x, rotation.y, rotation.z, position.x, position.y, position.z);
+        float rotationMatrix[16];
+        bx::mtxRotateXYZ(rotationMatrix, rotation.x, rotation.y, rotation.z);
+        float translationMatrix[16];
+        bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
+        float relativeMatrix[16];
+        bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
+        bx::mtxMul(matrix, modelMatrix, relativeMatrix);
     }
 } Transform;
 
@@ -419,14 +501,34 @@ struct UVVertex
 bgfx::VertexLayout UVVertex::layout;
 
 std::vector<Mesh> fieldMeshes;
-std::vector<Mesh> testObjectMeshes;
+std::vector<Mesh> robotMeshes;
+
+typedef struct RobotData
+{
+    bool hasData = false;
+    bx::Vec3 position = {0.0f, 0.0f, 0.0f};
+    bx::Vec3 rotation = {0.0f, 0.0f, 0.0f};
+
+    InstanceData instanceData = {};
+
+    void update(float deltaTime)
+    {
+        instanceData.previousTransform = instanceData.transform;
+        instanceData.transform = {
+            robotModelMatrix,
+            position,
+            rotation};
+    }
+} RobotData;
+
+std::array<RobotData, 1> robots = {};
 
 struct OrbitCamera
 {
-    bx::Vec3 target{0.0f, 0.0f, 0.0f};
+    bx::Vec3 target{0.0f, 0.0f, 0.25f};
     float distance = 15.811388f;
-    float yaw = 3.14159265f;
-    float pitch = 0.32175055f;
+    float yaw = bx::toRad(90.0f);
+    float pitch = bx::toRad(18.0f);
     float minDistance = 2.0f;
     float maxDistance = 120.0f;
     float orbitSpeed = 0.008f;
@@ -458,8 +560,19 @@ void updateOrbitCameraFromInput()
         orbitCamera.yaw += io.MouseDelta.x * orbitCamera.orbitSpeed;
         orbitCamera.pitch += io.MouseDelta.y * orbitCamera.orbitSpeed;
 
-        constexpr float pitchLimit = 1.55334306f; // ~89 degrees in radians.
+        constexpr float pitchLimit = bx::toRad(89.0f);
         orbitCamera.pitch = std::clamp(orbitCamera.pitch, -pitchLimit, pitchLimit);
+    }
+    else if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+    {
+        bx::Vec3 forward{
+            std::cos(orbitCamera.pitch) * std::cos(orbitCamera.yaw),
+            -std::cos(orbitCamera.pitch) * std::sin(orbitCamera.yaw),
+            std::sin(orbitCamera.pitch)};
+        bx::Vec3 right = bx::normalize(bx::cross({0.0f, 0.0f, 1.0f}, forward));
+        bx::Vec3 up = bx::cross(forward, right);
+
+        orbitCamera.target = bx::add(orbitCamera.target, bx::mul(bx::add(bx::mul(right, -io.MouseDelta.x), bx::mul(up, io.MouseDelta.y)), orbitCamera.distance * 0.001f));
     }
 }
 
@@ -471,10 +584,98 @@ bx::Vec3 getOrbitEye()
     const float cosYaw = std::cos(orbitCamera.yaw);
 
     return {
-        orbitCamera.target.x + orbitCamera.distance * cosPitch * sinYaw,
-        orbitCamera.target.y + orbitCamera.distance * sinPitch,
-        orbitCamera.target.z + orbitCamera.distance * cosPitch * cosYaw,
-    };
+        orbitCamera.target.x + orbitCamera.distance * cosPitch * cosYaw,
+        orbitCamera.target.y - orbitCamera.distance * cosPitch * sinYaw,
+        orbitCamera.target.z + orbitCamera.distance * sinPitch};
+}
+
+static void toMat3(float m3[9], const float m4[16])
+{
+    m3[0] = m4[0];
+    m3[1] = m4[1];
+    m3[2] = m4[2];
+
+    m3[3] = m4[4];
+    m3[4] = m4[5];
+    m3[5] = m4[6];
+
+    m3[6] = m4[8];
+    m3[7] = m4[9];
+    m3[8] = m4[10];
+}
+
+static void mtx3Transpose(float out[9], const float in[9])
+{
+    out[0] = in[0];
+    out[1] = in[3];
+    out[2] = in[6];
+
+    out[3] = in[1];
+    out[4] = in[4];
+    out[5] = in[7];
+
+    out[6] = in[2];
+    out[7] = in[5];
+    out[8] = in[8];
+}
+
+static void toNormalMatrix(float normalMatrix[9], const float model[16])
+{
+    float mat3[9];
+    toMat3(mat3, model);
+    float inverse[9];
+    bx::mtx3Inverse(inverse, mat3);
+    mtx3Transpose(normalMatrix, inverse);
+}
+
+static void performRotationStack(float out[16], const std::vector<ModelRotationConfig> &rotations)
+{
+    float result[16];
+    float output[16];
+    bx::mtxIdentity(result);
+
+    for (const auto &rotation : rotations)
+    {
+        float rotationMtx[16];
+        switch (rotation.axis)
+        {
+            // invert x and y axis rotations to match advscope
+        case ModelRotationAxis::X:
+            bx::mtxRotateX(rotationMtx, -bx::toRad(rotation.angleDegrees));
+            break;
+        case ModelRotationAxis::Y:
+            bx::mtxRotateY(rotationMtx, -bx::toRad(rotation.angleDegrees));
+            break;
+        case ModelRotationAxis::Z:
+            bx::mtxRotateZ(rotationMtx, bx::toRad(rotation.angleDegrees));
+            break;
+        }
+
+        bx::mtxMul(output, result, rotationMtx);
+        std::memcpy(result, output, sizeof(float) * 16);
+    }
+
+    std::memcpy(out, result, sizeof(float) * 16);
+}
+
+static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
+{
+    switch (coordinateSystem)
+    {
+    case WPILibCoordinateSystem::WallBlue:
+        return frc::Pose3d(
+            units::meter_t{fieldWidthMeters} / 2.0 - pose.X(),
+            units::meter_t{fieldHeightMeters} / 2.0 - pose.Y(),
+            pose.Z(),
+            frc::Rotation3d(
+                -pose.Rotation().X(),
+                -pose.Rotation().Y(),
+                units::degree_t{180} - pose.Rotation().Z()));
+    case WPILibCoordinateSystem::CenterRed:
+        return pose;
+    default:
+        throw std::runtime_error("Invalid coordinate system");
+    }
 }
 
 void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name)
@@ -530,6 +731,13 @@ void loadFieldModel()
 
         logger->info("Loaded field config file: {0}", configFile);
 
+        performRotationStack(fieldModelMatrix, j["rotations"].get<std::vector<ModelRotationConfig>>());
+        toNormalMatrix(fieldNormalMatrix, fieldModelMatrix);
+
+        coordinateSystem = coordinateSystemFromString(j["coordinateSystem"].get<std::string>());
+        fieldWidthMeters = j["widthInches"].get<float>() * INCHES_TO_METERS;
+        fieldHeightMeters = j["heightInches"].get<float>() * INCHES_TO_METERS;
+
         loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model");
 
         logger->info("Field initialized successfully.");
@@ -564,7 +772,14 @@ void loadRobotModel()
 
         logger->info("Loaded robot config file: {0}", configFile);
 
-        loadAndCacheMeshes(testObjectMeshes, robotDirectory, "model");
+        float rotationMtx[16];
+        performRotationStack(rotationMtx, j["rotations"].get<std::vector<ModelRotationConfig>>());
+        const auto &position = j["position"].get<std::vector<float>>();
+        float translationMtx[16];
+        bx::mtxTranslate(translationMtx, position[0], position[1], position[2]);
+        bx::mtxMul(robotModelMatrix, rotationMtx, translationMtx);
+
+        loadAndCacheMeshes(robotMeshes, robotDirectory, "model");
 
         logger->info("Robot initialized successfully.");
     }
@@ -927,6 +1142,10 @@ void field::startNTClient()
                                         auto connInfo = std::get<nt::ConnectionInfo>(event.data);
                                         logger->warn("Disconnected from NetworkTables server at {}:{}", connInfo.remote_ip, connInfo.remote_port);
                                     } });
+
+    robotPoseTopic = ntInst.GetStructTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/Robot");
+    robotPoseSub = robotPoseTopic.Subscribe(frc::Pose3d{}, {.periodic = 0.02});
+
     ntInst.SetServer("127.0.0.1");
     ntInst.StartClient4("driver-sim");
 }
@@ -1000,59 +1219,6 @@ bool firstFrame = true;
 
 bool freezeTemporalEffects = false;
 
-float randomFloat(float minValue, float maxValue)
-{
-    thread_local std::mt19937 rng(std::random_device{}());
-    std::uniform_real_distribution<float> dist(minValue, maxValue);
-    return dist(rng);
-}
-
-static constexpr float BALL_EXTENT_X = 9.5f;
-static constexpr float BALL_EXTENT_Y = 5.5f;
-static constexpr float BALL_EXTENT_Z = 4.5f;
-
-typedef struct BallData
-{
-    bx::Vec3 position = {0.0f, 0.0f, 0.0f};
-    bx::Vec3 velocity = {0.0f, 0.0f, 0.0f};
-    bx::Vec3 target = {0.0f, 0.0f, 0.0f};
-
-    InstanceData instanceData = {};
-
-    void update(float deltaTime)
-    {
-        instanceData.previousTransform = instanceData.transform;
-
-        const float force = 0.8f;
-        float dx = target.x - position.x;
-        float dy = target.y - position.y;
-        float dz = target.z - position.z;
-
-        if (dx * dx + dy * dy + dz * dz < 0.01f)
-        {
-            target.x = randomFloat(-BALL_EXTENT_X, BALL_EXTENT_X);
-            target.y = randomFloat(0.0f, BALL_EXTENT_Y);
-            target.z = randomFloat(-BALL_EXTENT_Z, BALL_EXTENT_Z);
-        }
-        else
-        {
-            velocity.x += force * dx * deltaTime;
-            velocity.y += force * dy * deltaTime;
-            velocity.z += force * dz * deltaTime;
-
-            position.x += velocity.x * deltaTime;
-            position.y += velocity.y * deltaTime;
-            position.z += velocity.z * deltaTime;
-        }
-
-        instanceData.transform = {
-            position,
-            {-3.14 / 2.0, 0, 0}};
-    }
-} BallData;
-
-std::array<BallData, 1> balls = {};
-
 bool firstTAAFrame = true;
 bool taaUseBuffer1 = false;
 int jitterIndex = 0;
@@ -1072,45 +1238,6 @@ float Halton(uint32_t i, uint32_t b)
     }
 
     return r;
-}
-
-static void toMat3(float m3[9], const float m4[16])
-{
-    m3[0] = m4[0];
-    m3[1] = m4[1];
-    m3[2] = m4[2];
-
-    m3[3] = m4[4];
-    m3[4] = m4[5];
-    m3[5] = m4[6];
-
-    m3[6] = m4[8];
-    m3[7] = m4[9];
-    m3[8] = m4[10];
-}
-
-static void mtx3Transpose(float out[9], const float in[9])
-{
-    out[0] = in[0];
-    out[1] = in[3];
-    out[2] = in[6];
-
-    out[3] = in[1];
-    out[4] = in[4];
-    out[5] = in[7];
-
-    out[6] = in[2];
-    out[7] = in[5];
-    out[8] = in[8];
-}
-
-static void toNormalMatrix(float normalMatrix[9], const float model[16])
-{
-    float mat3[9];
-    toMat3(mat3, model);
-    float inverse[9];
-    bx::mtx3Inverse(inverse, mat3);
-    mtx3Transpose(normalMatrix, inverse);
 }
 
 static constexpr uint32_t HALTON_SAMPLES = 8;
@@ -1286,7 +1413,7 @@ void field::render(const blackboard::app::Window &window)
     if (!createdRobotMeshBuffers && robotModelLoadingFuture.valid() &&
         robotModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
-        Mesh::createBuffersForMeshes(testObjectMeshes);
+        Mesh::createBuffersForMeshes(robotMeshes);
         createdRobotMeshBuffers = true;
     }
 
@@ -1316,12 +1443,12 @@ void field::render(const blackboard::app::Window &window)
     }
 
     float view[16];
-    bx::mtxLookAt(view, eye, at);
+    bx::mtxLookAt(view, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
 
     float proj[16];
-    bx::mtxProjInf(proj, 60.0f, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Left, bx::NearFar::Reverse);
-    proj[8] += jitterX;
-    proj[9] += jitterY;
+    bx::mtxProjInf(proj, 60.0f, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
+    proj[8] -= jitterX;
+    proj[9] -= jitterY;
 
     float viewProj[16];
     bx::mtxMul(viewProj, view, proj);
@@ -1348,9 +1475,9 @@ void field::render(const blackboard::app::Window &window)
 
     // Light uniforms
     float lightPos[3][4] = {
-        {-7.0f, 6.0f, 0.0f, 0.0f},
-        {0.0f, 6.0f, 0.0f, 0.0f},
-        {7.0f, 6.0f, 0.0f, 0.0f}};
+        {-7.0f, 0.0f, 6.0f, 0.0f},
+        {0.0f, 0.0f, 6.0f, 0.0f},
+        {7.0f, 0.0f, 6.0f, 0.0f}};
     float lightColor[3][4] = {
         {1.0f, 0.25f, 0.25f, 432.0f},
         {1.0f, 1.0f, 1.0f, 432.0f},
@@ -1388,36 +1515,34 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewRect(VIEW_OIT_DEPTH_POST_PASS, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo.handle);
 
-    float staticModel[16];
-    bx::mtxIdentity(staticModel);
-    float normalMatrix[9];
-    toNormalMatrix(normalMatrix, staticModel);
-
     const float deltaTime = ImGui::GetIO().DeltaTime;
     curTime += deltaTime;
 
     if (createdFieldMeshBuffers)
     {
-        drawMeshes(encoder, fieldMeshes, staticModel, normalMatrix);
+        drawMeshes(encoder, fieldMeshes, fieldModelMatrix, fieldNormalMatrix);
     }
 
     // Test model
     if (!freezeTemporalEffects)
     {
-        for (auto &ball : balls)
+        for (auto &robot : robots)
         {
-            ball.update(deltaTime);
+            frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPoseSub.Get());
+            robot.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+            robot.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+            robot.hasData = true;
+            robot.update(deltaTime);
         }
     }
 
-    std::vector<InstanceData> instanceData;
-    instanceData.reserve(balls.size());
-    std::ranges::transform(balls, std::back_inserter(instanceData),
-                           &BallData::instanceData);
-
     if (createdRobotMeshBuffers)
     {
-        drawMeshesInstanced(encoder, testObjectMeshes, instanceData);
+        std::vector<InstanceData> instanceData;
+        instanceData.reserve(robots.size());
+        std::ranges::transform(robots, std::back_inserter(instanceData),
+                               &RobotData::instanceData);
+        drawMeshesInstanced(encoder, robotMeshes, instanceData);
     }
 
 #if 0 // IF NO TRANSPARENT OBJECTS IN FIELD MODEL (RARE)
@@ -1675,7 +1800,7 @@ void field::cleanup()
         mesh.destroy();
     }
 
-    for (auto &mesh : testObjectMeshes)
+    for (auto &mesh : robotMeshes)
     {
         mesh.destroy();
     }

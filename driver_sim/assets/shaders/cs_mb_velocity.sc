@@ -166,8 +166,8 @@ void main()
 	float total_velocity_length = max(FLT_MIN, length(total_velocity));
 	total_velocity = total_velocity * clamp(total_velocity_length, 0, 1) / total_velocity_length;
 
-    base_velocity.x *= -1; // flip x
-    total_velocity.x *= -1; // flip x
+    base_velocity.y *= -1; // flip y
+    total_velocity.y *= -1; // flip y
 
 	imageStore(s_output, uvi, vec4(total_velocity * (view_past_ndc_cache.w < 0 ? -1 : 1), depth));
 	imageStore(s_full_velocity_output, uvi, vec4(base_velocity * (view_past_ndc_cache.w < 0 ? -1 : 1), depth));
