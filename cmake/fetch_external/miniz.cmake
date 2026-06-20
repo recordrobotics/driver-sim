@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 include(FetchContent)
 
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
+
 set( BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
 set( BUILD_TESTS OFF CACHE INTERNAL "" FORCE)
 set ( INSTALL_PROJECT OFF CACHE INTERNAL "" FORCE)
