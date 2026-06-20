@@ -167,6 +167,8 @@ void initFieldView()
   {
     javaProcess->start();
   }
+
+  field::startNTClient();
 }
 
 void drawBackground()

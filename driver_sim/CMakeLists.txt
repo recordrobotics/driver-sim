@@ -116,6 +116,8 @@ target_link_libraries(${PROJECT_NAME}
     cpr::cpr
     miniz
     tiny-process-library
+    ntcore
+    wpiutil
 )
 
 target_include_directories(${PROJECT_NAME}

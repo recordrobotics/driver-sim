@@ -24,6 +24,9 @@
 #include "mesh.h"
 #include <future>
 
+#include <networktables/NetworkTable.h>
+#include <networktables/NetworkTableInstance.h>
+
 #include "../settings/settingsstore.h"
 
 static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 16;
@@ -142,6 +145,8 @@ bgfx::UniformHandle s_mbBuffer;
 
 std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
+
+nt::NetworkTableInstance ntInst;
 
 void initOIT(uint16_t width, uint16_t height)
 {
@@ -906,6 +911,26 @@ void field::init(const blackboard::app::Window &window)
     initMotionBlur(window.width, window.height);
 }
 
+void field::startNTClient()
+{
+    logger->info("Starting NetworkTables client");
+    ntInst = nt::NetworkTableInstance::Create();
+    ntInst.AddConnectionListener(true, [](const nt::Event &event)
+                                 {
+                                    if (event.Is(nt::EventFlags::kConnected))
+                                    {
+                                        auto connInfo = std::get<nt::ConnectionInfo>(event.data);
+                                        logger->info("Connected to NetworkTables server at {}:{}", connInfo.remote_ip, connInfo.remote_port);
+                                    }
+                                    else if( event.Is(nt::EventFlags::kDisconnected))
+                                    {
+                                        auto connInfo = std::get<nt::ConnectionInfo>(event.data);
+                                        logger->warn("Disconnected from NetworkTables server at {}:{}", connInfo.remote_ip, connInfo.remote_port);
+                                    } });
+    ntInst.SetServer("127.0.0.1");
+    ntInst.StartClient4("driver-sim");
+}
+
 void updateInfo(bgfx::Encoder *encoder, float cameraNear, float cameraFar)
 {
     float info[4] = {cameraNear, cameraFar, 0.0f, 0.0f};
@@ -1643,6 +1668,8 @@ void field::render(const blackboard::app::Window &window)
 
 void field::cleanup()
 {
+    nt::NetworkTableInstance::Destroy(ntInst);
+
     for (auto &mesh : fieldMeshes)
     {
         mesh.destroy();
