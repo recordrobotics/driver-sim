@@ -2,24 +2,50 @@
 
 #include <SDL3/SDL.h>
 
-bool ProcessRunner::start()
+using namespace TinyProcessLib;
+
+#if defined(_WIN32)
+#include <cstdlib>
+extern "C" char **_environ;
+#define ENV_PTR _environ
+#else
+#include <unistd.h>
+extern char **environ;
+#define ENV_PTR environ
+#endif
+
+Process::environment_type make_inherited_env(
+    const Process::environment_type &overrides)
 {
-    process = reproc::process();
+    Process::environment_type env;
 
-    options.working_directory = config.working_directory.c_str();
-    options.redirect.out.type = reproc::redirect::pipe;
-    options.redirect.err.type = reproc::redirect::pipe;
-    options.env.behavior = reproc::env::extend;
-    options.env.extra = config.environment;
-
-    std::error_code ec = process.start(config.commandLine, options);
-    if (ec)
+    // inherit parent environment
+    for (char **e = ENV_PTR; e && *e; ++e)
     {
-        logger->error("Failed to start process: {}, {}", ec.message(), config.commandLine[0]);
-        return false;
+        std::string entry(*e);
+
+        auto pos = entry.find('=');
+        if (pos == std::string::npos)
+            continue;
+
+        std::string key = entry.substr(0, pos);
+        std::string value = entry.substr(pos + 1);
+
+        env[key] = value;
     }
 
-    logger->info("Process started successfully. PID: {}:{}, {}", process.pid().first, process.pid().second.message(), config.commandLine[0]);
+    // append custom env
+    for (const auto &kv : overrides)
+    {
+        env[kv.first] = kv.second;
+    }
+
+    return env;
+}
+
+bool ProcessRunner::start()
+{
+    env = make_inherited_env(config.environment);
 
     worker_thread = std::jthread([this](std::stop_token stop_token)
                                  {
@@ -30,33 +56,19 @@ bool ProcessRunner::start()
             if (is_restart)
             {
                 logger->info("Auto-restarting process: {}", config.commandLine[0]);
-                process = reproc::process();
-                std::error_code start_ec = process.start(config.commandLine, options);
-                if (start_ec)
-                {
-                    logger->error("Failed to auto-restart process: {}, {}. Retrying in 2 seconds...", start_ec.message(), config.commandLine[0]);
-
-                    auto fail_delay = std::chrono::seconds(2);
-                    auto start_time = std::chrono::steady_clock::now();
-                    while (!stop_token.stop_requested() && (std::chrono::steady_clock::now() - start_time) < fail_delay)
-                    {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    }
-                    continue;
-                }
-                logger->info("Process auto-restarted successfully. PID: {}:{}, {}", process.pid().first, process.pid().second.message(), config.commandLine[0]);
             }
 
             is_restart = true;
 
+            std::mutex process_mutex;
             std::string stdout_buffer;
             std::string stderr_buffer;
 
             // aggregate stream chunks into complete lines
-            auto flush_lines = [](std::string &buffer, const uint8_t *bytes, size_t size,
+            auto flush_lines = [](std::string &buffer, const char *bytes, size_t size,
                                   const std::function<void(const std::string &)> &log_func)
             {
-                buffer.append(reinterpret_cast<const char *>(bytes), size);
+                buffer.append(bytes, size);
                 size_t pos;
                 while ((pos = buffer.find('\n')) != std::string::npos)
                 {
@@ -70,50 +82,75 @@ bool ProcessRunner::start()
                 }
             };
 
+            Process process(
+                config.commandLine,
+                config.working_directory,
+                env,
+                [&](const char *bytes, size_t n)
+                {
+                    std::scoped_lock lock(process_mutex);
+
+                    flush_lines(stdout_buffer, bytes, n,
+                        [this](const std::string &msg)
+                        {
+                            logger->info(msg);
+                        });
+                },
+                [&](const char *bytes, size_t n)
+                {
+                    std::scoped_lock lock(process_mutex);
+
+                    flush_lines(stderr_buffer, bytes, n,
+                        [this](const std::string &msg)
+                        {
+                            logger->error(msg);
+                        });
+                });
+
+            if (process.get_id() <= 0)
+            {
+                logger->error("Failed to start process: {}", config.commandLine[0]);
+
+                auto fail_delay = std::chrono::seconds(2);
+                auto start_time = std::chrono::steady_clock::now();
+
+                while (!stop_token.stop_requested() &&
+                       std::chrono::steady_clock::now() - start_time < fail_delay)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+
+                continue;
+            }
+
+            logger->info(
+                "Process started successfully. PID: {}, {}",
+                process.get_id(),
+                config.commandLine[0]);
+
+
+            int exit_status = -1;
+
             while (!stop_token.stop_requested())
             {
-                auto [events, ec] = process.poll(reproc::event::out | reproc::event::err, reproc::milliseconds(50));
+                if (process.try_get_exit_status(exit_status))
+                    break;
 
-                if (ec == std::errc::timed_out)
-                {
-                    continue;
-                }
-                if (ec)
-                {
-                    logger->error("Error while polling process: {}, {}", ec.message(), config.commandLine[0]);
-                    break; // stream closed or process exited
-                }
-
-                if (events & reproc::event::out)
-                {
-                    uint8_t buf[4096];
-                    auto [bytes, read_ec] = process.read(reproc::stream::out, buf, sizeof(buf));
-                    if (!read_ec && bytes > 0)
-                        flush_lines(stdout_buffer, buf, bytes, [this](const auto &msg)
-                                    { logger->info(msg); });
-                }
-                if (events & reproc::event::err)
-                {
-                    uint8_t buf[4096];
-                    auto [bytes, read_ec] = process.read(reproc::stream::err, buf, sizeof(buf));
-                    if (!read_ec && bytes > 0)
-                        flush_lines(stderr_buffer, buf, bytes, [this](const auto &msg)
-                                    { logger->error(msg); });
-                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
 
             if (stop_token.stop_requested())
             {
                 logger->info("Stop requested. Worker thread is terminating child process: {}", config.commandLine[0]);
-                std::error_code kill_ec = process.kill();
-                if (kill_ec)
-                {
-                    logger->error("Failed to kill process: {}, {}", kill_ec.message(), config.commandLine[0]);
-                }
+                process.kill(true);
             }
 
-            auto [status, wait_ec] = process.wait(reproc::infinite);
-            logger->info("Process exited with status {}. {}", status, config.commandLine[0]);
+            exit_status = process.get_exit_status();
+
+            logger->info(
+                "Process exited with status {}. {}",
+                exit_status,
+                config.commandLine[0]);
 
             if (stop_token.stop_requested())
             {
@@ -132,7 +169,6 @@ bool ProcessRunner::start()
                 break;
             }
 
-            // throttle restarts
             logger->warn("Process {} exited unexpectedly. Auto-restarting in 1 second...", config.commandLine[0]);
             auto restart_delay = std::chrono::seconds(1);
             auto start_time = std::chrono::steady_clock::now();

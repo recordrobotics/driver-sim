@@ -1,15 +1,12 @@
 #pragma once
 
-#include <reproc++/reproc.hpp>
-#include <reproc++/drain.hpp>
 #include <string>
 #include <vector>
 #include <thread>
-#include <map>
 #include <memory>
-#include <iostream>
 #include <functional>
 #include <spdlog/spdlog.h>
+#include <tiny-process-library/process.hpp>
 
 class ProcessRunner
 {
@@ -18,7 +15,7 @@ public:
     {
         std::vector<std::string> commandLine;
         std::string working_directory = "";
-        std::map<std::string, std::string> environment = {};
+        TinyProcessLib::Process::environment_type environment = {};
         bool kill_parent_on_child_exit = false;
         bool auto_restart = false;
     };
@@ -43,7 +40,6 @@ public:
 private:
     Config config;
     std::shared_ptr<spdlog::logger> logger;
-    reproc::options options;
-    reproc::process process;
+    TinyProcessLib::Process::environment_type env;
     std::jthread worker_thread;
 };

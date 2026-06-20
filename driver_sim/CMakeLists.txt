@@ -110,7 +110,7 @@ target_link_libraries(${PROJECT_NAME}
     picosha2
     cpr::cpr
     miniz
-    reproc++
+    tiny-process-library
 )
 
 target_include_directories(${PROJECT_NAME}
