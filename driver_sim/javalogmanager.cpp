@@ -22,6 +22,7 @@ void java_log_manager::enforceFolderLimits()
     }
 
     std::vector<std::filesystem::directory_entry> logFiles;
+    std::vector<std::filesystem::directory_entry> overflowedFiles;
     for (const auto &entry : std::filesystem::directory_iterator(javaLogPath))
     {
         if (entry.is_regular_file())
@@ -42,7 +43,14 @@ void java_log_manager::enforceFolderLimits()
                 stats.oldestFileAgeSeconds = ageSeconds;
             }
 
-            logFiles.push_back(entry);
+            if (fileSize > stats.maxAllowedBytes)
+            {
+                overflowedFiles.push_back(entry);
+            }
+            else
+            {
+                logFiles.push_back(entry);
+            }
         }
     }
 
@@ -54,15 +62,9 @@ void java_log_manager::enforceFolderLimits()
         logger->warn("Java log folder size {} bytes exceeds the maximum allowed {} bytes. Deleting oldest files until under limit.",
                      stats.totalBytes, stats.maxAllowedBytes);
 
-        // sort by last write time, oldest first
-        std::sort(logFiles.begin(), logFiles.end(),
-                  [](const std::filesystem::directory_entry &a, const std::filesystem::directory_entry &b)
-                  {
-                      return std::filesystem::last_write_time(a) < std::filesystem::last_write_time(b);
-                  });
-
         uint64_t bytesDeleted = 0;
-        for (const auto &file : logFiles)
+
+        for (const auto &file : overflowedFiles)
         {
             uint64_t fileSize = file.file_size();
             std::error_code ec;
@@ -70,16 +72,47 @@ void java_log_manager::enforceFolderLimits()
             if (!ec)
             {
                 bytesDeleted += fileSize;
-                logger->info("Deleted Java log file {} of size {} bytes", file.path().string(), fileSize);
+                logger->info("Deleted overflowed Java log file {} of size {} bytes", file.path().string(), fileSize);
             }
             else
             {
-                logger->error("Failed to delete Java log file {}: {}", file.path().string(), ec.message());
+                logger->error("Failed to delete overflowed Java log file {}: {}", file.path().string(), ec.message());
             }
 
             if (stats.totalBytes - bytesDeleted <= stats.maxAllowedBytes)
             {
                 break;
+            }
+        }
+
+        if (stats.totalBytes - bytesDeleted > stats.maxAllowedBytes)
+        {
+            // sort by last write time, oldest first
+            std::sort(logFiles.begin(), logFiles.end(),
+                      [](const std::filesystem::directory_entry &a, const std::filesystem::directory_entry &b)
+                      {
+                          return std::filesystem::last_write_time(a) < std::filesystem::last_write_time(b);
+                      });
+
+            for (const auto &file : logFiles)
+            {
+                uint64_t fileSize = file.file_size();
+                std::error_code ec;
+                std::filesystem::remove(file.path(), ec);
+                if (!ec)
+                {
+                    bytesDeleted += fileSize;
+                    logger->info("Deleted Java log file {} of size {} bytes", file.path().string(), fileSize);
+                }
+                else
+                {
+                    logger->error("Failed to delete Java log file {}: {}", file.path().string(), ec.message());
+                }
+
+                if (stats.totalBytes - bytesDeleted <= stats.maxAllowedBytes)
+                {
+                    break;
+                }
             }
         }
     }
