@@ -471,6 +471,28 @@ typedef struct Transform
         bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
         bx::mtxMul(matrix, modelMatrix, relativeMatrix);
     }
+
+    Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position, bx::Vec3 rotation)
+    {
+        float rotationMatrix[16];
+        bx::mtxRotateXYZ(rotationMatrix, rotation.x, rotation.y, rotation.z);
+        float translationMatrix[16];
+        bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
+        float relativeMatrix[16];
+        bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
+        float finalMatrix[16];
+        bx::mtxMul(finalMatrix, modelMatrix, relativeMatrix);
+        bx::mtxMul(matrix, finalMatrix, parentMatrix);
+    }
+
+    Transform(bx::Vec3 position, bx::Vec3 rotation)
+    {
+        float rotationMatrix[16];
+        bx::mtxRotateXYZ(rotationMatrix, rotation.x, rotation.y, rotation.z);
+        float translationMatrix[16];
+        bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
+        bx::mtxMul(matrix, rotationMatrix, translationMatrix);
+    }
 } Transform;
 
 typedef struct InstanceData
@@ -515,13 +537,32 @@ typedef struct DynamicObjectData
             position,
             rotation};
     }
+
+    void update(float *modelMatrix, float *parentMatrix, float deltaTime)
+    {
+        instanceData.previousTransform = instanceData.transform;
+        instanceData.transform = {
+            modelMatrix,
+            parentMatrix,
+            position,
+            rotation};
+    }
 } DynamicObjectData;
+
+typedef struct RobotComponentData
+{
+    DynamicObjectData dynamicData;
+    std::array<float, 16> modelMatrix;
+    std::vector<Mesh> meshes;
+} RobotComponentData;
 
 typedef struct RobotData
 {
     DynamicObjectData dynamicData;
     std::array<float, 16> modelMatrix;
     std::vector<Mesh> meshes;
+
+    std::vector<RobotComponentData> components;
 
     nt::StructTopic<frc::Pose3d> poseTopic;
     nt::StructSubscriber<frc::Pose3d> poseSub;
@@ -550,7 +591,7 @@ struct OrbitCamera
     float distance = 15.811388f;
     float yaw = bx::toRad(90.0f);
     float pitch = bx::toRad(18.0f);
-    float minDistance = 2.0f;
+    float minDistance = 0.1f;
     float maxDistance = 120.0f;
     float orbitSpeed = 0.008f;
 };
@@ -668,7 +709,7 @@ static void performRotationStack(float out[16], const std::vector<ModelRotationC
             bx::mtxRotateY(rotationMtx, -bx::toRad(rotation.angleDegrees));
             break;
         case ModelRotationAxis::Z:
-            bx::mtxRotateZ(rotationMtx, bx::toRad(rotation.angleDegrees));
+            bx::mtxRotateZ(rotationMtx, -bx::toRad(rotation.angleDegrees));
             break;
         }
 
@@ -831,11 +872,30 @@ void loadRobotModel()
         float robotModelMatrix[16];
         bx::mtxMul(robotModelMatrix, rotationMtx, translationMtx);
 
-        robots.push_back({
-            .modelMatrix = std::to_array(robotModelMatrix),
-        });
+        std::vector<RobotComponentData> components;
+        for (const auto &component : j["components"])
+        {
+            float componentRotationMtx[16];
+            performRotationStack(componentRotationMtx, component["zeroedRotations"].get<std::vector<ModelRotationConfig>>());
+            const auto &componentPosition = component["zeroedPosition"].get<std::vector<float>>();
+            float componentTranslationMtx[16];
+            bx::mtxTranslate(componentTranslationMtx, componentPosition[0], componentPosition[1], componentPosition[2]);
+            float componentModelMatrix[16];
+            bx::mtxMul(componentModelMatrix, componentRotationMtx, componentTranslationMtx);
+
+            components.push_back({
+                .modelMatrix = std::to_array(componentModelMatrix),
+            });
+        }
+
+        robots.push_back({.modelMatrix = std::to_array(robotModelMatrix),
+                          .components = components});
 
         loadAndCacheMeshes(robots.back().meshes, robotDirectory, "model", {});
+        for (size_t i = 0; i < components.size(); i++)
+        {
+            loadAndCacheMeshes(robots.back().components[i].meshes, robotDirectory, "model_" + std::to_string(i), {});
+        }
 
         logger->info("Robot initialized successfully.");
     }
@@ -1479,9 +1539,15 @@ void field::render(const blackboard::app::Window &window)
         {
             robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/Robot");
             robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = 0.02});
+            robot.componentPosesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/MechanismPoses");
+            robot.componentPosesSub = robot.componentPosesTopic.Subscribe({}, {.periodic = 0.02});
         }
 
         Mesh::createBuffersForMeshes(robots.back().meshes);
+        for (size_t i = 0; i < robots.back().components.size(); i++)
+        {
+            Mesh::createBuffersForMeshes(robots.back().components[i].meshes);
+        }
         createdRobotMeshBuffers = true;
     }
 
@@ -1543,9 +1609,9 @@ void field::render(const blackboard::app::Window &window)
 
     // Light uniforms
     float lightPos[3][4] = {
-        {-7.0f, 0.0f, 6.0f, 0.0f},
+        {-fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f},
         {0.0f, 0.0f, 6.0f, 0.0f},
-        {7.0f, 0.0f, 6.0f, 0.0f}};
+        {fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f}};
     float lightColor[3][4] = {
         {1.0f, 0.25f, 0.25f, 432.0f},
         {1.0f, 1.0f, 1.0f, 432.0f},
@@ -1624,10 +1690,36 @@ void field::render(const blackboard::app::Window &window)
                 robot.dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
                 robot.dynamicData.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
                 robot.dynamicData.update(robot.modelMatrix.data(), deltaTime);
+
+                // Update component poses
+                auto componentPoses = robot.componentPosesSub.GetAtomic();
+                Transform robotOrigin{robot.dynamicData.position, robot.dynamicData.rotation};
+                for (size_t i = 0; i < robot.components.size(); ++i)
+                {
+                    robot.components[i].dynamicData.hasData = true;
+
+                    if (robot.componentPosesSub.Exists() && i < componentPoses.value.size())
+                    {
+                        // invert rotation to match advscope
+                        robot.components[i].dynamicData.position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
+                        robot.components[i].dynamicData.rotation = {-static_cast<float>(componentPoses.value[i].Rotation().X().value()), -static_cast<float>(componentPoses.value[i].Rotation().Y().value()), -static_cast<float>(componentPoses.value[i].Rotation().Z().value())};
+                        robot.components[i].dynamicData.update(robot.components[i].modelMatrix.data(), robotOrigin.matrix, deltaTime);
+                    }
+                    else
+                    {
+                        robot.components[i].dynamicData.position = {0.0f, 0.0f, 0.0f};
+                        robot.components[i].dynamicData.rotation = {0.0f, 0.0f, 0.0f};
+                        robot.components[i].dynamicData.update(robot.modelMatrix.data(), robotOrigin.matrix, deltaTime);
+                    }
+                }
             }
             else
             {
                 robot.dynamicData.hasData = false;
+                for (auto &component : robot.components)
+                {
+                    component.dynamicData.hasData = false;
+                }
             }
         }
 
@@ -1678,6 +1770,18 @@ void field::render(const blackboard::app::Window &window)
         if (!instanceData.empty())
         {
             drawMeshesInstanced(encoder, robots.back().meshes, instanceData);
+        }
+
+        for (auto &component : robots.back().components)
+        {
+            if (!component.dynamicData.hasData)
+            {
+                continue;
+            }
+
+            std::vector<InstanceData> componentInstanceData = {
+                component.dynamicData.instanceData};
+            drawMeshesInstanced(encoder, component.meshes, componentInstanceData);
         }
     }
 
