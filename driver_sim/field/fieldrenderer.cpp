@@ -93,6 +93,19 @@ static WPILibCoordinateSystem coordinateSystemFromString(const std::string &s)
     throw std::runtime_error("Invalid coordinate system in config: " + s);
 }
 
+enum class CameraView
+{
+    Field,
+    Robot,
+    RobotRelative
+};
+#define CAMERA_VIEW_COUNT 3
+
+static const std::array<std::string, CAMERA_VIEW_COUNT> CAMERA_VIEW_NAMES = {
+    "Field",
+    "Robot",
+    "Robot Relative"};
+
 static constexpr float INCHES_TO_METERS = 0.0254f;
 
 static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 16;
@@ -220,6 +233,8 @@ std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
 
 nt::NetworkTableInstance ntInst;
+
+CameraView cameraView = CameraView::Field;
 
 void initOIT(uint16_t width, uint16_t height)
 {
@@ -594,6 +609,13 @@ struct OrbitCamera
     float minDistance = 0.1f;
     float maxDistance = 120.0f;
     float orbitSpeed = 0.008f;
+
+    float originTransform[16];
+
+    OrbitCamera()
+    {
+        bx::mtxIdentity(originTransform);
+    }
 };
 
 OrbitCamera orbitCamera;
@@ -1515,6 +1537,24 @@ void field::render(const blackboard::app::Window &window)
     ImGui::Checkbox("Write Object Motion Vectors", &settings::writeObjectMotionVectors);
     ImGui::Checkbox("Enable Motion Blur", &settings::enableMotionBlur);
     ImGui::Checkbox("Enable TAA", &settings::enableTAA);
+
+    ImGui::Separator();
+
+    if (ImGui::BeginCombo("Camera View", CAMERA_VIEW_NAMES[static_cast<int>(cameraView)].c_str()))
+    {
+        for (int i = 0; i < CAMERA_VIEW_NAMES.size(); i++)
+        {
+            if (ImGui::Selectable(CAMERA_VIEW_NAMES[i].c_str(), cameraView == static_cast<CameraView>(i)))
+            {
+                cameraView = static_cast<CameraView>(i);
+                orbitCamera.target = {0.0f, 0.0f, 0.25f};
+                bx::mtxIdentity(orbitCamera.originTransform);
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
     ImGui::End();
 
     if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
@@ -1551,130 +1591,8 @@ void field::render(const blackboard::app::Window &window)
         createdRobotMeshBuffers = true;
     }
 
-    updateOrbitCameraFromInput();
-    const bx::Vec3 at = orbitCamera.target;
-    const bx::Vec3 eye = getOrbitEye();
-
-    uint16_t m_width = window.width;
-    uint16_t m_height = window.height;
-
-    ensureTextures(m_width, m_height);
-
-    float jitterX;
-    float jitterY;
-
-    if (settings::enableTAA)
-    {
-        float haltonX = 2.0f * Halton(jitterIndex + 1, 2) - 1.0f;
-        float haltonY = 2.0f * Halton(jitterIndex + 1, 3) - 1.0f;
-        jitterX = (haltonX / m_width);
-        jitterY = (haltonY / m_height);
-    }
-    else
-    {
-        jitterX = 0.0f;
-        jitterY = 0.0f;
-    }
-
-    float view[16];
-    bx::mtxLookAt(view, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
-
-    float proj[16];
-    bx::mtxProjInf(proj, 60.0f, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
-    proj[8] -= jitterX;
-    proj[9] -= jitterY;
-
-    float viewProj[16];
-    bx::mtxMul(viewProj, view, proj);
-
-    if (firstFrame)
-    {
-        std::memcpy(previousViewProj, viewProj, sizeof(viewProj));
-        std::memcpy(previousView, view, sizeof(view));
-        std::memcpy(previousProj, proj, sizeof(proj));
-        firstFrame = false;
-    }
-
-    bgfx::Encoder *encoder = bgfx::begin();
-
-    updateInfo(encoder, 0.1f, 100.0f);
-
-    if (!freezeTemporalEffects)
-    {
-        jitterIndex = (jitterIndex + 1) % HALTON_SAMPLES;
-    }
-
-    float jitter[4] = {jitterX, jitterY, previousJitterX, previousJitterY};
-    encoder->setUniform(u_jitter, jitter);
-
-    // Light uniforms
-    float lightPos[3][4] = {
-        {-fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f},
-        {0.0f, 0.0f, 6.0f, 0.0f},
-        {fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f}};
-    float lightColor[3][4] = {
-        {1.0f, 0.25f, 0.25f, 432.0f},
-        {1.0f, 1.0f, 1.0f, 432.0f},
-        {0.25f, 0.45f, 1.0f, 432.0f}};
-    encoder->setUniform(u_lightPos, lightPos, 3);
-    encoder->setUniform(u_lightColor, lightColor, 3);
-
-    // OPAQUE PASS
-    bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
-    bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
-    bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo.handle);
-    bgfx::setViewClear(VIEW_GBUFFER,
-                       BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
-                       0x00000000,
-                       bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
-
-    // TRANSPARENT PASS
-    bgfx::setViewName(VIEW_OIT, "Field - OIT");
-    bgfx::setViewTransform(VIEW_OIT, view, proj);
-    bgfx::setViewRect(VIEW_OIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_OIT, gOitFbo.handle);
-    bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear accum to 0
-    bgfx::setPaletteColor(1, 1, 1, 1, 1); // Clear reveal to 1
-    bgfx::setViewClear(VIEW_OIT,
-                       BGFX_CLEAR_COLOR,
-                       0.0f,
-                       0,
-                       0,
-                       1);
-
-    // Transparent depth post-pass
-    bgfx::setViewName(VIEW_OIT_DEPTH_POST_PASS, "Field - OIT Depth Post-Pass");
-    bgfx::setViewTransform(VIEW_OIT_DEPTH_POST_PASS, view, proj);
-    bgfx::setViewRect(VIEW_OIT_DEPTH_POST_PASS, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo.handle);
-
     const float deltaTime = ImGui::GetIO().DeltaTime;
     curTime += deltaTime;
-
-    if (createdFieldMeshBuffers)
-    {
-        std::vector<std::string> drawnGamePieces;
-        for (auto &gamePiece : gamePieces)
-        {
-            std::vector<InstanceData> instanceData;
-            auto filtered = gamePiece.instances | std::views::filter([](const DynamicObjectData &dynamicData)
-                                                                     { return dynamicData.hasData; });
-            instanceData.reserve(std::ranges::distance(filtered));
-            std::ranges::transform(filtered, std::back_inserter(instanceData),
-                                   [](const DynamicObjectData &dynamicData)
-                                   { return dynamicData.instanceData; });
-            if (!instanceData.empty())
-            {
-                drawMeshesInstanced(encoder, gamePiece.meshes, instanceData);
-                drawnGamePieces.push_back(gamePiece.name);
-            }
-        }
-
-        drawMeshes(encoder, fieldMeshes | std::views::filter([&drawnGamePieces](const Mesh &mesh)
-                                                             { return std::find(drawnGamePieces.begin(), drawnGamePieces.end(), mesh.tag) == drawnGamePieces.end(); /* only draw meshes that haven't been drawn by game pieces */ }),
-                   fieldModelMatrix, fieldNormalMatrix);
-    }
 
     // Dynamic objects
     if (!freezeTemporalEffects)
@@ -1756,6 +1674,152 @@ void field::render(const blackboard::app::Window &window)
                 }
             }
         }
+    }
+
+    if (cameraView == CameraView::Robot || cameraView == CameraView::RobotRelative)
+    {
+        if (robots.size() > 0 && robots.back().dynamicData.hasData)
+        {
+            float translationMtx[16];
+            bx::mtxTranslate(translationMtx, robots.back().dynamicData.position.x, robots.back().dynamicData.position.y, robots.back().dynamicData.position.z);
+            if (cameraView == CameraView::RobotRelative)
+            {
+                // also apply rotation
+                float rotationMtx[16];
+                bx::mtxRotateXYZ(rotationMtx, robots.back().dynamicData.rotation.x, robots.back().dynamicData.rotation.y, robots.back().dynamicData.rotation.z);
+                float transformMtx[16];
+                bx::mtxMul(transformMtx, rotationMtx, translationMtx);
+                bx::mtxInverse(orbitCamera.originTransform, transformMtx);
+            }
+            else
+            {
+                bx::mtxInverse(orbitCamera.originTransform, translationMtx);
+            }
+        }
+    }
+
+    updateOrbitCameraFromInput();
+    const bx::Vec3 at = orbitCamera.target;
+    const bx::Vec3 eye = getOrbitEye();
+
+    uint16_t m_width = window.width;
+    uint16_t m_height = window.height;
+
+    ensureTextures(m_width, m_height);
+
+    float jitterX;
+    float jitterY;
+
+    if (settings::enableTAA)
+    {
+        float haltonX = 2.0f * Halton(jitterIndex + 1, 2) - 1.0f;
+        float haltonY = 2.0f * Halton(jitterIndex + 1, 3) - 1.0f;
+        jitterX = (haltonX / m_width);
+        jitterY = (haltonY / m_height);
+    }
+    else
+    {
+        jitterX = 0.0f;
+        jitterY = 0.0f;
+    }
+
+    float lookAt[16];
+    bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+    float view[16];
+    bx::mtxMul(view, orbitCamera.originTransform, lookAt);
+
+    float proj[16];
+    bx::mtxProjInf(proj, 60.0f, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
+    proj[8] -= jitterX;
+    proj[9] -= jitterY;
+
+    float viewProj[16];
+    bx::mtxMul(viewProj, view, proj);
+
+    if (firstFrame)
+    {
+        std::memcpy(previousViewProj, viewProj, sizeof(viewProj));
+        std::memcpy(previousView, view, sizeof(view));
+        std::memcpy(previousProj, proj, sizeof(proj));
+        firstFrame = false;
+    }
+
+    bgfx::Encoder *encoder = bgfx::begin();
+
+    updateInfo(encoder, 0.1f, 100.0f);
+
+    if (!freezeTemporalEffects)
+    {
+        jitterIndex = (jitterIndex + 1) % HALTON_SAMPLES;
+    }
+
+    float jitter[4] = {jitterX, jitterY, previousJitterX, previousJitterY};
+    encoder->setUniform(u_jitter, jitter);
+
+    // Light uniforms
+    float lightPos[3][4] = {
+        {-fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f},
+        {0.0f, 0.0f, 6.0f, 0.0f},
+        {fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f}};
+    float lightColor[3][4] = {
+        {1.0f, 0.25f, 0.25f, 432.0f},
+        {1.0f, 1.0f, 1.0f, 432.0f},
+        {0.25f, 0.45f, 1.0f, 432.0f}};
+    encoder->setUniform(u_lightPos, lightPos, 3);
+    encoder->setUniform(u_lightColor, lightColor, 3);
+
+    // OPAQUE PASS
+    bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
+    bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
+    bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo.handle);
+    bgfx::setViewClear(VIEW_GBUFFER,
+                       BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
+                       0x00000000,
+                       bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
+
+    // TRANSPARENT PASS
+    bgfx::setViewName(VIEW_OIT, "Field - OIT");
+    bgfx::setViewTransform(VIEW_OIT, view, proj);
+    bgfx::setViewRect(VIEW_OIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_OIT, gOitFbo.handle);
+    bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear accum to 0
+    bgfx::setPaletteColor(1, 1, 1, 1, 1); // Clear reveal to 1
+    bgfx::setViewClear(VIEW_OIT,
+                       BGFX_CLEAR_COLOR,
+                       0.0f,
+                       0,
+                       0,
+                       1);
+
+    // Transparent depth post-pass
+    bgfx::setViewName(VIEW_OIT_DEPTH_POST_PASS, "Field - OIT Depth Post-Pass");
+    bgfx::setViewTransform(VIEW_OIT_DEPTH_POST_PASS, view, proj);
+    bgfx::setViewRect(VIEW_OIT_DEPTH_POST_PASS, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo.handle);
+
+    if (createdFieldMeshBuffers)
+    {
+        std::vector<std::string> drawnGamePieces;
+        for (auto &gamePiece : gamePieces)
+        {
+            std::vector<InstanceData> instanceData;
+            auto filtered = gamePiece.instances | std::views::filter([](const DynamicObjectData &dynamicData)
+                                                                     { return dynamicData.hasData; });
+            instanceData.reserve(std::ranges::distance(filtered));
+            std::ranges::transform(filtered, std::back_inserter(instanceData),
+                                   [](const DynamicObjectData &dynamicData)
+                                   { return dynamicData.instanceData; });
+            if (!instanceData.empty())
+            {
+                drawMeshesInstanced(encoder, gamePiece.meshes, instanceData);
+                drawnGamePieces.push_back(gamePiece.name);
+            }
+        }
+
+        drawMeshes(encoder, fieldMeshes | std::views::filter([&drawnGamePieces](const Mesh &mesh)
+                                                             { return std::find(drawnGamePieces.begin(), drawnGamePieces.end(), mesh.tag) == drawnGamePieces.end(); /* only draw meshes that haven't been drawn by game pieces */ }),
+                   fieldModelMatrix, fieldNormalMatrix);
     }
 
     if (createdRobotMeshBuffers)
