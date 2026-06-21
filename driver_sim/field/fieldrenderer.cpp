@@ -1616,7 +1616,7 @@ void field::render(const blackboard::app::Window &window)
         for (auto &robot : robots)
         {
             auto robotPose = robot.poseSub.GetAtomic();
-            if (nt::Now() - robotPose.time < 100000000 /* 0.1s */)
+            if (robot.poseSub.Exists())
             {
                 robot.dynamicData.hasData = true;
 
@@ -1634,7 +1634,7 @@ void field::render(const blackboard::app::Window &window)
         for (auto &gamePiece : gamePieces)
         {
             auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
-            if (nt::Now() - gamePiecePoses.time < 100000000 /* 0.1s */)
+            if (gamePiece.posesSub.Exists())
             {
                 for (size_t i = 0; i < std::max(gamePiecePoses.value.size(), gamePiece.instances.size()); ++i)
                 {
