@@ -34,7 +34,7 @@ public:
     ProcessRunner &operator=(ProcessRunner &&) noexcept = default;
 
     bool start();
-
+    void restart();
     void stop();
 
 private:
@@ -42,4 +42,5 @@ private:
     std::shared_ptr<spdlog::logger> logger;
     TinyProcessLib::Process::environment_type env;
     std::jthread worker_thread;
+    std::atomic<bool> restart_requested{false};
 };

@@ -10,4 +10,6 @@ namespace field
     void startNTClient();
     void render(const blackboard::app::Window &window);
     void cleanup();
+
+    void setRestartSimulationCallback(std::function<void()> callback);
 }

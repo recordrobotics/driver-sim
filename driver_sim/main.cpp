@@ -171,6 +171,13 @@ void initFieldView()
   }
 
   field::startNTClient();
+
+  field::setRestartSimulationCallback([]()
+                                      {
+                                        if (settings::launchRobotCode)
+                                        {
+                                          javaProcess->restart();
+                                        } });
 }
 
 void drawBackground()

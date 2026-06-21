@@ -600,6 +600,13 @@ typedef struct GamePieceData
 std::vector<RobotData> robots;
 std::vector<GamePieceData> gamePieces;
 
+static std::function<void()> restartSimulationCallback;
+
+void field::setRestartSimulationCallback(std::function<void()> callback)
+{
+    restartSimulationCallback = callback;
+}
+
 struct OrbitCamera
 {
     bx::Vec3 target{0.0f, 0.0f, 0.25f};
@@ -1532,7 +1539,7 @@ bool createdRobotMeshBuffers = false;
 
 void field::render(const blackboard::app::Window &window)
 {
-    ImGui::Begin("Rendering Debug");
+    ImGui::Begin("Options");
     ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
     ImGui::Checkbox("Write Object Motion Vectors", &settings::writeObjectMotionVectors);
     ImGui::Checkbox("Enable Motion Blur", &settings::enableMotionBlur);
@@ -1553,6 +1560,14 @@ void field::render(const blackboard::app::Window &window)
         }
 
         ImGui::EndCombo();
+    }
+
+    if (ImGui::Button("Restart Simulation"))
+    {
+        if (restartSimulationCallback)
+        {
+            restartSimulationCallback();
+        }
     }
 
     ImGui::End();

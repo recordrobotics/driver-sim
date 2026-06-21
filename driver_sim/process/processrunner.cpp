@@ -59,6 +59,7 @@ bool ProcessRunner::start()
             }
 
             is_restart = true;
+            restart_requested = false;
 
             std::mutex process_mutex;
             std::string stdout_buffer;
@@ -131,7 +132,7 @@ bool ProcessRunner::start()
 
             int exit_status = -1;
 
-            while (!stop_token.stop_requested())
+            while (!stop_token.stop_requested() && !restart_requested)
             {
                 if (process.try_get_exit_status(exit_status))
                     break;
@@ -139,7 +140,7 @@ bool ProcessRunner::start()
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
 
-            if (stop_token.stop_requested())
+            if (stop_token.stop_requested() || restart_requested)
             {
                 logger->info("Stop requested. Worker thread is terminating child process: {}", config.commandLine[0]);
                 process.kill(true);
@@ -157,7 +158,7 @@ bool ProcessRunner::start()
                 break;
             }
 
-            if (!config.auto_restart)
+            if (!config.auto_restart && !restart_requested)
             {
                 if (config.kill_parent_on_child_exit)
                 {
@@ -192,4 +193,10 @@ void ProcessRunner::stop()
     }
 
     logger->info("Process stopped successfully. {}", config.commandLine[0]);
+}
+
+void ProcessRunner::restart()
+{
+    logger->info("Restarting process... {}", config.commandLine[0]);
+    restart_requested = true;
 }
