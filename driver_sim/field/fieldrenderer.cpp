@@ -27,6 +27,7 @@
 #include <networktables/NetworkTable.h>
 #include <networktables/NetworkTableInstance.h>
 #include <networktables/StructTopic.h>
+#include <networktables/StructArrayTopic.h>
 
 #include <frc/geometry/Pose3d.h>
 #include <frc/geometry/struct/Pose3dStruct.h>
@@ -215,14 +216,10 @@ WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
 float fieldWidthMeters = 1.0f;
 float fieldHeightMeters = 1.0f;
 
-float robotModelMatrix[16];
-
 std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
 
 nt::NetworkTableInstance ntInst;
-nt::StructTopic<frc::Pose3d> robotPoseTopic;
-nt::StructSubscriber<frc::Pose3d> robotPoseSub;
 
 void initOIT(uint16_t width, uint16_t height)
 {
@@ -501,9 +498,8 @@ struct UVVertex
 bgfx::VertexLayout UVVertex::layout;
 
 std::vector<Mesh> fieldMeshes;
-std::vector<Mesh> robotMeshes;
 
-typedef struct RobotData
+typedef struct DynamicObjectData
 {
     bool hasData = false;
     bx::Vec3 position = {0.0f, 0.0f, 0.0f};
@@ -511,17 +507,42 @@ typedef struct RobotData
 
     InstanceData instanceData = {};
 
-    void update(float deltaTime)
+    void update(float *modelMatrix, float deltaTime)
     {
         instanceData.previousTransform = instanceData.transform;
         instanceData.transform = {
-            robotModelMatrix,
+            modelMatrix,
             position,
             rotation};
     }
+} DynamicObjectData;
+
+typedef struct RobotData
+{
+    DynamicObjectData dynamicData;
+    std::array<float, 16> modelMatrix;
+    std::vector<Mesh> meshes;
+
+    nt::StructTopic<frc::Pose3d> poseTopic;
+    nt::StructSubscriber<frc::Pose3d> poseSub;
+
+    nt::StructArrayTopic<frc::Pose3d> componentPosesTopic;
+    nt::StructArraySubscriber<frc::Pose3d> componentPosesSub;
 } RobotData;
 
-std::array<RobotData, 1> robots = {};
+typedef struct GamePieceData
+{
+    std::string name;
+    std::vector<DynamicObjectData> instances;
+    std::array<float, 16> modelMatrix;
+    std::vector<Mesh> meshes;
+
+    nt::StructArrayTopic<frc::Pose3d> posesTopic;
+    nt::StructArraySubscriber<frc::Pose3d> posesSub;
+} GamePieceData;
+
+std::vector<RobotData> robots;
+std::vector<GamePieceData> gamePieces;
 
 struct OrbitCamera
 {
@@ -678,7 +699,13 @@ static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
     }
 }
 
-void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name)
+/**
+ * tags is a map of mesh-name:tag
+ * meshes of the same material but different tags will stay separated and won't be merged.
+ * this is useful for dynamically removing meshes based on tags.
+ * additionally, meshes with same tag but different materials will also stay separated, since they can't be merged anyway.
+ */
+void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name, const std::unordered_map<std::string, std::string> &tags)
 {
     std::filesystem::path glbPath = directory + name + ".glb";
     std::filesystem::path cachePath = directory + name + ".cache";
@@ -692,12 +719,7 @@ void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::s
     {
         logger->info("Loading {0} meshes from GLTF model.", directory + name);
         fastgltf::Parser parser;
-        Mesh::fromGltfModel(meshes, parser.loadGltfBinary(
-                                              fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(),
-                                              directory,
-                                              fastgltf::Options::LoadGLBBuffers |
-                                                  fastgltf::Options::DontRequireValidAssetMember)
-                                        .get());
+        Mesh::fromGltfModel(meshes, parser.loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory, fastgltf::Options::LoadGLBBuffers | fastgltf::Options::DontRequireValidAssetMember).get(), tags);
 
         if (settings::cacheModels)
         {
@@ -738,7 +760,36 @@ void loadFieldModel()
         fieldWidthMeters = j["widthInches"].get<float>() * INCHES_TO_METERS;
         fieldHeightMeters = j["heightInches"].get<float>() * INCHES_TO_METERS;
 
-        loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model");
+        std::unordered_map<std::string, std::string> tags;
+
+        for (const auto &gamePiece : j["gamePieces"])
+        {
+            std::string name = gamePiece["name"];
+            auto position = gamePiece["position"];
+            float rotationMatrix[16];
+            performRotationStack(rotationMatrix, gamePiece["rotations"].get<std::vector<ModelRotationConfig>>());
+            float translationMatrix[16];
+            bx::mtxTranslate(translationMatrix, position[0].get<float>(), position[1].get<float>(), position[2].get<float>());
+            float modelMatrix[16];
+            bx::mtxMul(modelMatrix, rotationMatrix, translationMatrix);
+
+            gamePieces.push_back({
+                .name = name,
+                .modelMatrix = std::to_array(modelMatrix),
+            });
+
+            for (const auto &stagedObject : gamePiece["stagedObjects"].get<std::vector<std::string>>())
+            {
+                tags[stagedObject] = name;
+            }
+        }
+
+        loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model", tags);
+
+        for (size_t i = 0; i < gamePieces.size(); i++)
+        {
+            loadAndCacheMeshes(gamePieces[i].meshes, fieldDirectory, "model_" + std::to_string(i), {});
+        }
 
         logger->info("Field initialized successfully.");
     }
@@ -777,9 +828,14 @@ void loadRobotModel()
         const auto &position = j["position"].get<std::vector<float>>();
         float translationMtx[16];
         bx::mtxTranslate(translationMtx, position[0], position[1], position[2]);
+        float robotModelMatrix[16];
         bx::mtxMul(robotModelMatrix, rotationMtx, translationMtx);
 
-        loadAndCacheMeshes(robotMeshes, robotDirectory, "model");
+        robots.push_back({
+            .modelMatrix = std::to_array(robotModelMatrix),
+        });
+
+        loadAndCacheMeshes(robots.back().meshes, robotDirectory, "model", {});
 
         logger->info("Robot initialized successfully.");
     }
@@ -1143,9 +1199,6 @@ void field::startNTClient()
                                         logger->warn("Disconnected from NetworkTables server at {}:{}", connInfo.remote_ip, connInfo.remote_port);
                                     } });
 
-    robotPoseTopic = ntInst.GetStructTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/Robot");
-    robotPoseSub = robotPoseTopic.Subscribe(frc::Pose3d{}, {.periodic = 0.02});
-
     ntInst.SetServer("127.0.0.1");
     ntInst.StartClient4("driver-sim");
 }
@@ -1335,7 +1388,8 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
     encoder->setUniform(u_pbrData, pbrData);
 }
 
-void drawMeshes(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes, float modelMatrix[16], float normalMatrix[9])
+template <std::ranges::input_range R>
+void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16], float normalMatrix[9])
 {
     for (const auto &mesh : meshes)
     {
@@ -1406,14 +1460,28 @@ void field::render(const blackboard::app::Window &window)
     if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
         fieldModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
+        for (auto &gamePiece : gamePieces)
+        {
+            gamePiece.posesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Positions");
+            gamePiece.posesSub = gamePiece.posesTopic.Subscribe({}, {.periodic = 0.02});
+            Mesh::createBuffersForMeshes(gamePiece.meshes);
+        }
+
         Mesh::createBuffersForMeshes(fieldMeshes);
+
         createdFieldMeshBuffers = true;
     }
 
     if (!createdRobotMeshBuffers && robotModelLoadingFuture.valid() &&
         robotModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
-        Mesh::createBuffersForMeshes(robotMeshes);
+        for (auto &robot : robots)
+        {
+            robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/Robot");
+            robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = 0.02});
+        }
+
+        Mesh::createBuffersForMeshes(robots.back().meshes);
         createdRobotMeshBuffers = true;
     }
 
@@ -1520,29 +1588,97 @@ void field::render(const blackboard::app::Window &window)
 
     if (createdFieldMeshBuffers)
     {
-        drawMeshes(encoder, fieldMeshes, fieldModelMatrix, fieldNormalMatrix);
+        std::vector<std::string> drawnGamePieces;
+        for (auto &gamePiece : gamePieces)
+        {
+            std::vector<InstanceData> instanceData;
+            auto filtered = gamePiece.instances | std::views::filter([](const DynamicObjectData &dynamicData)
+                                                                     { return dynamicData.hasData; });
+            instanceData.reserve(std::ranges::distance(filtered));
+            std::ranges::transform(filtered, std::back_inserter(instanceData),
+                                   [](const DynamicObjectData &dynamicData)
+                                   { return dynamicData.instanceData; });
+            if (!instanceData.empty())
+            {
+                drawMeshesInstanced(encoder, gamePiece.meshes, instanceData);
+                drawnGamePieces.push_back(gamePiece.name);
+            }
+        }
+
+        drawMeshes(encoder, fieldMeshes | std::views::filter([&drawnGamePieces](const Mesh &mesh)
+                                                             { return std::find(drawnGamePieces.begin(), drawnGamePieces.end(), mesh.tag) == drawnGamePieces.end(); /* only draw meshes that haven't been drawn by game pieces */ }),
+                   fieldModelMatrix, fieldNormalMatrix);
     }
 
-    // Test model
+    // Dynamic objects
     if (!freezeTemporalEffects)
     {
         for (auto &robot : robots)
         {
-            frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPoseSub.Get());
-            robot.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-            robot.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
-            robot.hasData = true;
-            robot.update(deltaTime);
+            auto robotPose = robot.poseSub.GetAtomic();
+            if (nt::Now() - robotPose.time < 100000000 /* 0.1s */)
+            {
+                robot.dynamicData.hasData = true;
+
+                frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
+                robot.dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+                robot.dynamicData.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+                robot.dynamicData.update(robot.modelMatrix.data(), deltaTime);
+            }
+            else
+            {
+                robot.dynamicData.hasData = false;
+            }
+        }
+
+        for (auto &gamePiece : gamePieces)
+        {
+            auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
+            if (nt::Now() - gamePiecePoses.time < 100000000 /* 0.1s */)
+            {
+                for (size_t i = 0; i < std::max(gamePiecePoses.value.size(), gamePiece.instances.size()); ++i)
+                {
+                    if (i >= gamePiece.instances.size())
+                    {
+                        gamePiece.instances.emplace_back();
+                    }
+                    else if (i >= gamePiecePoses.value.size())
+                    {
+                        gamePiece.instances[i].hasData = false;
+                        continue;
+                    }
+
+                    gamePiece.instances[i].hasData = true;
+
+                    auto localPose = transformPose3dToLocalCoordinates(gamePiecePoses.value[i]);
+                    gamePiece.instances[i].position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+                    gamePiece.instances[i].rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+                    gamePiece.instances[i].update(gamePiece.modelMatrix.data(), deltaTime);
+                }
+            }
+            else
+            {
+                for (auto &instance : gamePiece.instances)
+                {
+                    instance.hasData = false;
+                }
+            }
         }
     }
 
     if (createdRobotMeshBuffers)
     {
         std::vector<InstanceData> instanceData;
-        instanceData.reserve(robots.size());
-        std::ranges::transform(robots, std::back_inserter(instanceData),
-                               &RobotData::instanceData);
-        drawMeshesInstanced(encoder, robotMeshes, instanceData);
+        auto filtered = robots | std::views::filter([](const RobotData &robot)
+                                                    { return robot.dynamicData.hasData; });
+        instanceData.reserve(std::ranges::distance(filtered));
+        std::ranges::transform(filtered, std::back_inserter(instanceData),
+                               [](const RobotData &robot)
+                               { return robot.dynamicData.instanceData; });
+        if (!instanceData.empty())
+        {
+            drawMeshesInstanced(encoder, robots.back().meshes, instanceData);
+        }
     }
 
 #if 0 // IF NO TRANSPARENT OBJECTS IN FIELD MODEL (RARE)
@@ -1800,9 +1936,20 @@ void field::cleanup()
         mesh.destroy();
     }
 
-    for (auto &mesh : robotMeshes)
+    for (auto &gamePiece : gamePieces)
     {
-        mesh.destroy();
+        for (auto &mesh : gamePiece.meshes)
+        {
+            mesh.destroy();
+        }
+    }
+
+    for (auto &robot : robots)
+    {
+        for (auto &mesh : robot.meshes)
+        {
+            mesh.destroy();
+        }
     }
 
     if (bgfx::isValid(u_baseColor))

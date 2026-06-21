@@ -93,6 +93,18 @@ typedef struct MaterialHash
     }
 } MaterialHash;
 
+namespace std
+{
+    template <>
+    struct hash<Material>
+    {
+        size_t operator()(Material m) const noexcept
+        {
+            return MaterialHash{}(m);
+        }
+    };
+}
+
 typedef struct MeshVertex
 {
     float x, y, z;
@@ -111,6 +123,7 @@ typedef struct MeshVertex
 
 typedef struct Mesh
 {
+    std::string tag;
     Material material;
 
     std::vector<MeshVertex> vertices;
@@ -158,7 +171,13 @@ typedef struct Mesh
         indices.clear();
     }
 
-    static void fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset);
+    /**
+     * tags is a map of mesh-name:tag
+     * meshes of the same material but different tags will stay separated and won't be merged.
+     * this is useful for dynamically removing meshes based on tags.
+     * additionally, meshes with same tag but different materials will also stay separated, since they can't be merged anyway.
+     */
+    static void fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset, const std::unordered_map<std::string, std::string> &tags);
     static void fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path);
     static void toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path);
     static void createBuffersForMeshes(std::vector<Mesh> &meshes);

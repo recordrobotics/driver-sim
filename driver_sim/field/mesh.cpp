@@ -31,11 +31,37 @@ inline uint32_t encodeNormalRgba8(fastgltf::math::fvec3 normal, float w)
     return dst;
 }
 
-void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset)
+struct MeshGroupKey
+{
+    Material material;
+    std::string tag;
+
+    bool operator==(const MeshGroupKey &other) const
+    {
+        return material == other.material &&
+               tag == other.tag;
+    }
+};
+
+struct MeshGroupKeyHash
+{
+    std::size_t operator()(const MeshGroupKey &key) const
+    {
+        std::size_t h = 2166136261u;
+
+        hash_combine(h, key.material);
+        hash_combine(h, key.tag);
+
+        return h;
+    }
+};
+
+void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset, const std::unordered_map<std::string, std::string> &tags)
 {
     const std::size_t sceneIndex = asset.defaultScene.value_or(0);
 
-    std::unordered_map<Material, size_t, MaterialHash> materialMap;
+    std::unordered_map<MeshGroupKey, size_t, MeshGroupKeyHash> meshMap;
+    std::unordered_map<std::string, int> duplicateNodeResolver;
 
     fastgltf::iterateSceneNodes(asset, sceneIndex, fastgltf::math::fmat4x4(), [&](const fastgltf::Node &node, const fastgltf::math::fmat4x4 &worldMatrix)
                                 {
@@ -47,6 +73,25 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
             fastgltf::math::fmat3x3 normalMatrix = fastgltf::math::transpose(fastgltf::math::inverse(fastgltf::math::fmat3x3(worldMatrix)));
 
             auto &gltfMesh = asset.meshes[node.meshIndex.value()];
+
+            std::string nodeName = std::string(node.name);
+            nodeName.erase(std::remove(nodeName.begin(), nodeName.end(), ':'), nodeName.end());
+            std::replace(nodeName.begin(), nodeName.end(), ' ', '_');
+            
+            if(duplicateNodeResolver.find(nodeName) != duplicateNodeResolver.end())
+            {
+                int count = duplicateNodeResolver[nodeName]++;
+                nodeName += "_" + std::to_string(count);
+            }
+            else
+            {
+                duplicateNodeResolver[nodeName] = 1;
+            }
+
+            auto tagIt = tags.find(nodeName);
+            const std::string meshTag =
+                (tagIt != tags.end()) ? tagIt->second : "";
+
             for (auto &primitive : gltfMesh.primitives)
             {
                 auto positionIt = primitive.findAttribute("POSITION");
@@ -76,13 +121,24 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                     mat = Material(asset.materials[primitive.materialIndex.value()]);
                 }
 
-                auto it = materialMap.find(mat);
+                MeshGroupKey key{
+                    .material = mat,
+                    .tag = meshTag
+                };
+
+                auto it = meshMap.find(key);
                 Mesh* meshPtr = nullptr;
-                if (it == materialMap.end())
+
+                if (it == meshMap.end())
                 {
-                    materialMap[mat] = meshesOut.size();
-                    meshPtr = &meshesOut.emplace_back(mat);
-                } else
+                    meshMap[key] = meshesOut.size();
+
+                    auto& mesh = meshesOut.emplace_back(mat);
+                    mesh.tag = meshTag;
+
+                    meshPtr = &mesh;
+                }
+                else
                 {
                     meshPtr = &meshesOut[it->second];
                 }
@@ -162,6 +218,11 @@ void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::
 
     for (const auto &mesh : meshes)
     {
+        // write tag
+        uint32_t tagLength = static_cast<uint32_t>(mesh.tag.length());
+        outFile.write(reinterpret_cast<const char *>(&tagLength), sizeof(tagLength));
+        outFile.write(reinterpret_cast<const char *>(mesh.tag.data()), tagLength);
+
         outFile.write(reinterpret_cast<const char *>(&mesh.material), sizeof(mesh.material));
 
         uint32_t vertexCount = static_cast<uint32_t>(mesh.vertices.size());
@@ -189,6 +250,16 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
     for (uint32_t i = 0; i < meshCount; ++i)
     {
         Mesh mesh;
+
+        // read tag
+        uint32_t tagLength;
+        inFile.read(reinterpret_cast<char *>(&tagLength), sizeof(tagLength));
+        if (tagLength > 0)
+        {
+            std::string tag(tagLength, '\0');
+            inFile.read(reinterpret_cast<char *>(tag.data()), tagLength);
+            mesh.tag = tag;
+        }
 
         inFile.read(reinterpret_cast<char *>(&mesh.material), sizeof(mesh.material));
 
