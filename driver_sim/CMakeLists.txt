@@ -124,7 +124,6 @@ target_link_libraries(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME}
     PRIVATE
     ${blackboard_app_SOURCE_DIR}
-    ${CMAKE_BINARY_DIR}/include/generated
     ${CMAKE_BINARY_DIR}/include/generated/fonts
     ${CMAKE_BINARY_DIR}/include/generated/images
     ${CMAKE_BINARY_DIR}/include/generated/shaders

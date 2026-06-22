@@ -15,7 +15,7 @@
 #include <Windows.h>
 #endif // _WIN32
 
-#include <logo.png.h>
+#include <app.png.h>
 
 namespace blackboard::app
 {
@@ -40,8 +40,8 @@ namespace blackboard::app
 
     bimg::ImageContainer *image = bimg::imageParse(
         &s_allocator,
-        (void *)logo_png_bytes,
-        static_cast<uint32_t>(sizeof(logo_png_bytes)),
+        (void *)app_png_bytes,
+        static_cast<uint32_t>(sizeof(app_png_bytes)),
         bimg::TextureFormat::BGRA8);
 
     if (image == nullptr)
@@ -53,7 +53,7 @@ namespace blackboard::app
       SDL_Surface *surface = SDL_CreateSurfaceFrom(
           image->m_width,
           image->m_height,
-          SDL_PIXELFORMAT_ABGR8888,
+          SDL_PIXELFORMAT_ARGB8888,
           image->m_data,
           image->m_width * 4);
 
