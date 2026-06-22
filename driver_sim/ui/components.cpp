@@ -4,6 +4,7 @@
 #include "components.h"
 
 using blackboard::gui::string_hex_to_rgba_float;
+using blackboard::gui::string_hex_to_rgba_u32;
 
 void ui::DrawCenteredText(const char *text, float yOffset)
 {
@@ -61,17 +62,14 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
     const float frameRounding = 6.0f * globalScale;
     const float borderThickness = 1.0f * globalScale;
 
-    ImVec4 off_normal = string_hex_to_rgba_float("#ffffff00");
-    ImVec4 off_hovered = string_hex_to_rgba_float("#ffffff0a");
-    ImVec4 off_active = string_hex_to_rgba_float("#ffffff28");
-    ImVec4 on_normal = string_hex_to_rgba_float("#38903Eff");
-    ImVec4 on_hovered = string_hex_to_rgba_float("#449c4aff");
-    ImVec4 on_active = string_hex_to_rgba_float("#44b24bff");
-    ImVec4 textColor = string_hex_to_rgba_float("#FFFFFFff");
-    ImVec4 borderColor = string_hex_to_rgba_float("#3E3E3Eff");
-
-    const ImU32 borderColorU32 = ImGui::ColorConvertFloat4ToU32(borderColor);
-    const ImU32 textColorU32 = ImGui::ColorConvertFloat4ToU32(textColor);
+    ImU32 off_normal = string_hex_to_rgba_u32("#ffffff00");
+    ImU32 off_hovered = string_hex_to_rgba_u32("#ffffff0a");
+    ImU32 off_active = string_hex_to_rgba_u32("#ffffff28");
+    ImU32 on_normal = string_hex_to_rgba_u32("#38903Eff");
+    ImU32 on_hovered = string_hex_to_rgba_u32("#449c4aff");
+    ImU32 on_active = string_hex_to_rgba_u32("#44b24bff");
+    ImU32 textColor = string_hex_to_rgba_u32("#FFFFFFff");
+    ImU32 borderColor = string_hex_to_rgba_u32("#3E3E3Eff");
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
@@ -114,9 +112,9 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         }
 
-        const ImVec4 fillColor = *button.state
-                                     ? (active ? on_active : (hovered ? on_hovered : on_normal))
-                                     : (active ? off_active : (hovered ? off_hovered : off_normal));
+        const ImU32 fillColor = *button.state
+                                    ? (active ? on_active : (hovered ? on_hovered : on_normal))
+                                    : (active ? off_active : (hovered ? off_hovered : off_normal));
 
         ImDrawFlags cornerFlags = ImDrawFlags_RoundCornersNone;
         if (buttonCount == 1)
@@ -135,7 +133,7 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
         drawList->AddRectFilled(
             segmentPos,
             ImVec2(segmentPos.x + segmentSize.x, segmentPos.y + segmentSize.y),
-            ImGui::ColorConvertFloat4ToU32(fillColor),
+            fillColor,
             frameRounding,
             cornerFlags);
 
@@ -144,7 +142,7 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
             segmentPos.x + (segmentSize.x - textSize.x) * 0.5f,
             segmentPos.y + (segmentSize.y - textSize.y) * 0.5f);
 
-        drawList->AddText(ImGui::GetFont(), ImGui::GetFontSize(), textPos, textColorU32, button.label);
+        drawList->AddText(ImGui::GetFont(), ImGui::GetFontSize(), textPos, textColor, button.label);
 
         ImGui::PopID();
 
@@ -159,7 +157,7 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
     drawList->AddRect(
         groupMin,
         groupMax,
-        borderColorU32,
+        borderColor,
         frameRounding,
         ImDrawFlags_RoundCornersAll,
         borderThickness);
@@ -175,7 +173,7 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
             drawList->AddLine(
                 ImVec2(dividerX, groupMin.y),
                 ImVec2(dividerX, groupMax.y),
-                borderColorU32,
+                borderColor,
                 borderThickness);
         }
     }
@@ -207,14 +205,13 @@ bool ui::UnderlineTextButton(const char *text)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
 
-    ImVec4 textColor = active ? string_hex_to_rgba_float("#5cbd62ff") : hovered ? string_hex_to_rgba_float("#47a54dff")
-                                                                                : string_hex_to_rgba_float("#38903Eff");
+    ImU32 textColor = active ? string_hex_to_rgba_u32("#5cbd62ff") : hovered ? string_hex_to_rgba_u32("#47a54dff")
+                                                                             : string_hex_to_rgba_u32("#38903Eff");
 
     ImVec2 min = ImGui::GetItemRectMin();
     ImVec2 max = ImGui::GetItemRectMax();
-    const ImU32 textColorU32 = ImGui::ColorConvertFloat4ToU32(textColor);
 
-    ImGui::GetWindowDrawList()->AddText(min, textColorU32, text);
+    ImGui::GetWindowDrawList()->AddText(min, textColor, text);
 
     float thickness = 1.5f * globalScale;
     float offset = 2.0f * globalScale;
@@ -222,7 +219,7 @@ bool ui::UnderlineTextButton(const char *text)
     ImGui::GetWindowDrawList()->AddLine(
         ImVec2(min.x, max.y + offset),
         ImVec2(max.x, max.y + offset),
-        textColorU32,
+        textColor,
         thickness);
 
     ImGui::PopFont();
@@ -245,12 +242,10 @@ bool ui::CircularButton(const char *id, float radius)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
 
-    ImVec4 color = active ? string_hex_to_rgba_float("#71d478ff") : hovered ? string_hex_to_rgba_float("#5dbb64ff")
-                                                                            : string_hex_to_rgba_float("#42A749ff");
+    ImU32 color = active ? string_hex_to_rgba_u32("#71d478ff") : hovered ? string_hex_to_rgba_u32("#5dbb64ff")
+                                                                         : string_hex_to_rgba_u32("#42A749ff");
 
-    ImU32 colorU32 = ImGui::ColorConvertFloat4ToU32(color);
-
-    draw->AddCircleFilled(ImVec2(pos.x + radius, pos.y + radius), radius, colorU32);
+    draw->AddCircleFilled(ImVec2(pos.x + radius, pos.y + radius), radius, color);
 
     // Arrow rendered as 3 stroked segments with round endcaps.
     const ImVec2 center(pos.x + radius, pos.y + radius);

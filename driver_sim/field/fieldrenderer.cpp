@@ -34,6 +34,10 @@
 
 #include "../settings/settingsstore.h"
 
+#if GAME_YEAR == 2026
+#include "seasonspecific/rebuilt2026/fmsui.h"
+#endif
+
 enum class ModelRotationAxis
 {
     X,
@@ -233,8 +237,11 @@ std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
 
 nt::NetworkTableInstance ntInst;
+std::unique_ptr<Rebuilt2026FMSUI> fmsUI;
 
 CameraView cameraView = CameraView::Field;
+
+bool freezeTemporalEffects = false;
 
 void initOIT(uint16_t width, uint16_t height)
 {
@@ -546,7 +553,11 @@ typedef struct DynamicObjectData
 
     void update(float *modelMatrix, float deltaTime)
     {
-        instanceData.previousTransform = instanceData.transform;
+        if (!freezeTemporalEffects)
+        {
+            instanceData.previousTransform = instanceData.transform;
+        }
+
         instanceData.transform = {
             modelMatrix,
             position,
@@ -555,7 +566,11 @@ typedef struct DynamicObjectData
 
     void update(float *modelMatrix, float *parentMatrix, float deltaTime)
     {
-        instanceData.previousTransform = instanceData.transform;
+        if (!freezeTemporalEffects)
+        {
+            instanceData.previousTransform = instanceData.transform;
+        }
+
         instanceData.transform = {
             modelMatrix,
             parentMatrix,
@@ -1288,6 +1303,8 @@ void field::startNTClient()
                                         logger->warn("Disconnected from NetworkTables server at {}:{}", connInfo.remote_ip, connInfo.remote_port);
                                     } });
 
+    fmsUI = std::make_unique<Rebuilt2026FMSUI>(ntInst);
+
     ntInst.SetServer("127.0.0.1");
     ntInst.StartClient4("driver-sim");
 }
@@ -1358,8 +1375,6 @@ float curTime = 0.0f;
 float previousJitterX = 0.0f;
 float previousJitterY = 0.0f;
 bool firstFrame = true;
-
-bool freezeTemporalEffects = false;
 
 bool firstTAAFrame = true;
 bool taaUseBuffer1 = false;
@@ -1572,6 +1587,11 @@ void field::render(const blackboard::app::Window &window)
 
     ImGui::End();
 
+    if (fmsUI)
+    {
+        fmsUI->render(ImGui::GetMainViewport()->Size);
+    }
+
     if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
         fieldModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
@@ -1610,83 +1630,80 @@ void field::render(const blackboard::app::Window &window)
     curTime += deltaTime;
 
     // Dynamic objects
-    if (!freezeTemporalEffects)
+    for (auto &robot : robots)
     {
-        for (auto &robot : robots)
+        auto robotPose = robot.poseSub.GetAtomic();
+        if (robot.poseSub.Exists())
         {
-            auto robotPose = robot.poseSub.GetAtomic();
-            if (robot.poseSub.Exists())
+            robot.dynamicData.hasData = true;
+
+            frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
+            robot.dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+            robot.dynamicData.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+            robot.dynamicData.update(robot.modelMatrix.data(), deltaTime);
+
+            // Update component poses
+            auto componentPoses = robot.componentPosesSub.GetAtomic();
+            Transform robotOrigin{robot.dynamicData.position, robot.dynamicData.rotation};
+            for (size_t i = 0; i < robot.components.size(); ++i)
             {
-                robot.dynamicData.hasData = true;
+                robot.components[i].dynamicData.hasData = true;
 
-                frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
-                robot.dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-                robot.dynamicData.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
-                robot.dynamicData.update(robot.modelMatrix.data(), deltaTime);
-
-                // Update component poses
-                auto componentPoses = robot.componentPosesSub.GetAtomic();
-                Transform robotOrigin{robot.dynamicData.position, robot.dynamicData.rotation};
-                for (size_t i = 0; i < robot.components.size(); ++i)
+                if (robot.componentPosesSub.Exists() && i < componentPoses.value.size())
                 {
-                    robot.components[i].dynamicData.hasData = true;
-
-                    if (robot.componentPosesSub.Exists() && i < componentPoses.value.size())
-                    {
-                        // invert rotation to match advscope
-                        robot.components[i].dynamicData.position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
-                        robot.components[i].dynamicData.rotation = {-static_cast<float>(componentPoses.value[i].Rotation().X().value()), -static_cast<float>(componentPoses.value[i].Rotation().Y().value()), -static_cast<float>(componentPoses.value[i].Rotation().Z().value())};
-                        robot.components[i].dynamicData.update(robot.components[i].modelMatrix.data(), robotOrigin.matrix, deltaTime);
-                    }
-                    else
-                    {
-                        robot.components[i].dynamicData.position = {0.0f, 0.0f, 0.0f};
-                        robot.components[i].dynamicData.rotation = {0.0f, 0.0f, 0.0f};
-                        robot.components[i].dynamicData.update(robot.modelMatrix.data(), robotOrigin.matrix, deltaTime);
-                    }
+                    // invert rotation to match advscope
+                    robot.components[i].dynamicData.position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
+                    robot.components[i].dynamicData.rotation = {-static_cast<float>(componentPoses.value[i].Rotation().X().value()), -static_cast<float>(componentPoses.value[i].Rotation().Y().value()), -static_cast<float>(componentPoses.value[i].Rotation().Z().value())};
+                    robot.components[i].dynamicData.update(robot.components[i].modelMatrix.data(), robotOrigin.matrix, deltaTime);
                 }
-            }
-            else
-            {
-                robot.dynamicData.hasData = false;
-                for (auto &component : robot.components)
+                else
                 {
-                    component.dynamicData.hasData = false;
+                    robot.components[i].dynamicData.position = {0.0f, 0.0f, 0.0f};
+                    robot.components[i].dynamicData.rotation = {0.0f, 0.0f, 0.0f};
+                    robot.components[i].dynamicData.update(robot.modelMatrix.data(), robotOrigin.matrix, deltaTime);
                 }
             }
         }
-
-        for (auto &gamePiece : gamePieces)
+        else
         {
-            auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
-            if (gamePiece.posesSub.Exists())
+            robot.dynamicData.hasData = false;
+            for (auto &component : robot.components)
             {
-                for (size_t i = 0; i < std::max(gamePiecePoses.value.size(), gamePiece.instances.size()); ++i)
-                {
-                    if (i >= gamePiece.instances.size())
-                    {
-                        gamePiece.instances.emplace_back();
-                    }
-                    else if (i >= gamePiecePoses.value.size())
-                    {
-                        gamePiece.instances[i].hasData = false;
-                        continue;
-                    }
-
-                    gamePiece.instances[i].hasData = true;
-
-                    auto localPose = transformPose3dToLocalCoordinates(gamePiecePoses.value[i]);
-                    gamePiece.instances[i].position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-                    gamePiece.instances[i].rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
-                    gamePiece.instances[i].update(gamePiece.modelMatrix.data(), deltaTime);
-                }
+                component.dynamicData.hasData = false;
             }
-            else
+        }
+    }
+
+    for (auto &gamePiece : gamePieces)
+    {
+        auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
+        if (gamePiece.posesSub.Exists())
+        {
+            for (size_t i = 0; i < std::max(gamePiecePoses.value.size(), gamePiece.instances.size()); ++i)
             {
-                for (auto &instance : gamePiece.instances)
+                if (i >= gamePiece.instances.size())
                 {
-                    instance.hasData = false;
+                    gamePiece.instances.emplace_back();
                 }
+                else if (i >= gamePiecePoses.value.size())
+                {
+                    gamePiece.instances[i].hasData = false;
+                    continue;
+                }
+
+                gamePiece.instances[i].hasData = true;
+
+                auto localPose = transformPose3dToLocalCoordinates(gamePiecePoses.value[i]);
+                gamePiece.instances[i].position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+                gamePiece.instances[i].rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+                gamePiece.instances[i].update(gamePiece.modelMatrix.data(), deltaTime);
+            }
+        }
+        else
+        {
+            for (auto &instance : gamePiece.instances)
+            {
+                instance.hasData = false;
             }
         }
     }
@@ -2112,6 +2129,7 @@ void field::render(const blackboard::app::Window &window)
 
 void field::cleanup()
 {
+    fmsUI.reset();
     nt::NetworkTableInstance::Destroy(ntInst);
 
     for (auto &mesh : fieldMeshes)

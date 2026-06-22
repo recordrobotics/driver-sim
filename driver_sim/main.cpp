@@ -99,6 +99,8 @@ void initApp()
   LOAD_FONT(Inter_Black_otf, false);
   LOAD_FONT(Inter_BlackItalic_otf, false);
 
+  LOAD_FONT(Roboto_Bold_ttf, false);
+
   load_image((void *)logo_png_bytes, sizeof(logo_png_bytes), logo);
 
   field::init(*app_ptr->main_window);

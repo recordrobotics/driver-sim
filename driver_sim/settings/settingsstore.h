@@ -24,4 +24,18 @@ namespace settings
     extern double ntPeriodic;
 
     extern uint64_t javaLogMaxBytes;
+
+    extern uint32_t gameTeam;
+    extern std::vector<uint32_t> gameTeamPool;
+    extern uint32_t gameMatchType;
+    extern uint32_t gameMatchNumber;
+    extern uint32_t gameMatchTotal;
+
+    typedef struct Rebuilt2026
+    {
+        int energizedRPThreshold;
+        int superchargedRPThreshold;
+    } Rebuilt2026;
+
+    extern Rebuilt2026 rebuilt2026;
 }

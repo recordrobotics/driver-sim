@@ -61,6 +61,6 @@ public:
     AssetState getState() const { return state.load(); }
     std::string getError();
     bool isQuickLoaded() const { return quickLoaded; }
-    
+
     std::vector<std::string> cleanReplaceFolders; // folders to completely rewrite from zip instead of keeping unrelated files
 };

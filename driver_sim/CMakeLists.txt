@@ -6,11 +6,21 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ./**.cpp ./**.c)
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ./**.hpp ./**.h)
 file(GLOB_RECURSE ASSETS CONFIGURE_DEPENDS ./assets/*)
 
-file(GLOB_RECURSE FONTS CONFIGURE_DEPENDS ./assets/fonts/*.otf)
+file(GLOB_RECURSE FONTS CONFIGURE_DEPENDS ./assets/fonts/*.otf ./assets/fonts/*.ttf)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/fonts")
 
-file(GLOB_RECURSE IMAGES CONFIGURE_DEPENDS ./assets/images/*)
+file(GLOB IMAGES_ALL CONFIGURE_DEPENDS ./assets/images/*)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/images")
+
+set(IMAGES)
+foreach(entry IN LISTS IMAGES_ALL)
+    if(NOT IS_DIRECTORY "${entry}")
+        list(APPEND IMAGES "${entry}")
+    endif()
+endforeach()
+
+file(GLOB_RECURSE GAME_IMAGES CONFIGURE_DEPENDS ./assets/images/rebuilt2026/*)
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/images/rebuilt2026")
 
 file(GLOB_RECURSE PACKAGED_ASSETS CONFIGURE_DEPENDS ./packaged/*)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/packaged")
@@ -34,6 +44,17 @@ foreach(IMAGES_FILE IN LISTS IMAGES)
         INPUT_FILE ${IMAGES_FILE}
         OUTPUT_FILE ${CMAKE_BINARY_DIR}/include/generated/images/${IMAGES_FILENAME}.h
         ARRAY_NAME ${IMAGES_FILENAME_REP}_bytes
+    )
+endforeach()
+
+foreach(GAME_IMAGES_FILE IN LISTS GAME_IMAGES)
+    get_filename_component(GAME_IMAGES_FILENAME ${GAME_IMAGES_FILE} NAME)
+    string(REGEX REPLACE "[^A-Za-z0-9_]" "_" GAME_IMAGES_FILENAME_REP ${GAME_IMAGES_FILENAME})
+
+    bgfx_compile_binary_to_header(
+        INPUT_FILE ${GAME_IMAGES_FILE}
+        OUTPUT_FILE ${CMAKE_BINARY_DIR}/include/generated/images/rebuilt2026/${GAME_IMAGES_FILENAME}.h
+        ARRAY_NAME ${GAME_IMAGES_FILENAME_REP}_bytes
     )
 endforeach()
 
@@ -87,12 +108,12 @@ bgfx_compile_shaders(
 if(WINDOWS)
     add_executable(${PROJECT_NAME} WIN32 
             ${SOURCES} ${HEADERS}
-            ${FONTS} ${IMAGES}
+            ${FONTS} ${IMAGES} ${GAME_IMAGES}
             ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS}
             ${PACKAGED_ASSETS}
             ${CMAKE_CURRENT_LIST_DIR}/assets/app.rc)
 elseif(MACOS)
-    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUNDLE True
         RESOURCE True
@@ -102,7 +123,7 @@ elseif(MACOS)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
 )
 elseif(LINUX)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
+    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC cxx_std_20)
@@ -142,6 +163,12 @@ target_compile_definitions(${PROJECT_NAME}
     "-D_CRT_SECURE_NO_WARNINGS"
     "-D__STDC_FORMAT_MACROS"
     "-DSDL_MAIN_HANDLED"
+)
+
+target_compile_definitions(${PROJECT_NAME}
+    PRIVATE
+    NOMINMAX
+    GAME_YEAR=2026
 )
 
 # Create tree group to tidy the files inside IDEs

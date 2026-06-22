@@ -21,6 +21,8 @@
 #include <Inter-Black.otf.h>
 #include <Inter-BlackItalic.otf.h>
 
+#include <Roboto-Bold.ttf.h>
+
 // Images
 
 #include <logo.png.h>

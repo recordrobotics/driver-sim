@@ -21,6 +21,8 @@ namespace blackboard::gui
 {
   std::string imgui_ini_path;
 
+  std::unordered_map<std::string, ImFont *> fonts;
+
   void init()
   {
     // Setup Dear ImGui context
@@ -224,6 +226,20 @@ namespace blackboard::gui
     style.FrameRounding = 2.0f;
   }
 
+  ImFont *get_font(const std::string &font_name)
+  {
+    auto it = fonts.find(font_name);
+    if (it != fonts.end())
+    {
+      return it->second;
+    }
+    else
+    {
+      logger::logger->error("Font {} not found", font_name);
+      return nullptr;
+    }
+  }
+
   bool load_font(const std::string &font_name, void *font_data, int font_data_size, const float size, const float ddpi, const bool set_as_default,
                  const int oversample_h, const int oversample_v, const float rasterizer_multiply)
   {
@@ -261,6 +277,8 @@ namespace blackboard::gui
       return false;
     }
 
+    fonts[font_name] = font;
+
     // setup default font
     if (set_as_default)
     {
@@ -272,7 +290,7 @@ namespace blackboard::gui
 
   static bx::DefaultAllocator s_allocator;
 
-  bool load_image(void *image_data, int image_data_size, ImTexture &out_texture)
+  bool load_image(void *image_data, int image_data_size, ImTexture &out_texture, uint64_t _flags)
   {
     if (!isInit())
     {
@@ -298,7 +316,7 @@ namespace blackboard::gui
         false,
         1,
         bgfx::TextureFormat::BGRA8,
-        0,
+        _flags,
         bgfx::copy(image->m_data, image->m_size));
 
     bimg::imageFree(image);
@@ -352,13 +370,6 @@ namespace blackboard::gui
       ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
     }
     ImGui::End();
-  }
-
-  ImVec4 string_hex_to_rgba_float(const std::string &color)
-  {
-    assert(color.size() == 9);
-    return {std::stoul(color.substr(1, 2), nullptr, 16) / 255.0f, std::stoul(color.substr(3, 2), nullptr, 16) / 255.0f,
-            std::stoul(color.substr(5, 2), nullptr, 16) / 255.0f, std::stoul(color.substr(7, 2), nullptr, 16) / 255.0f};
   }
 
 } // namespace blackboard::app::gui

@@ -9,6 +9,27 @@
 
 using namespace blackboard::logger;
 
+namespace nlohmann
+{
+    template <>
+    struct adl_serializer<settings::Rebuilt2026>
+    {
+        static void to_json(json &j, const settings::Rebuilt2026 &value)
+        {
+            j = {
+                {"energizedRPThreshold", value.energizedRPThreshold},
+                {"superchargedRPThreshold", value.superchargedRPThreshold}};
+        }
+
+        static settings::Rebuilt2026 from_json(const json &j)
+        {
+            return {
+                j.at("energizedRPThreshold").get<int>(),
+                j.at("superchargedRPThreshold").get<int>()};
+        }
+    };
+}
+
 namespace settings
 {
     bool enableTAA = true;
@@ -26,6 +47,21 @@ namespace settings
     double ntPeriodic = 0.02;
 
     uint64_t javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
+
+    uint32_t gameTeam = 6731;
+    std::vector<uint32_t> gameTeamPool = {
+        151,
+        69,
+        97,
+        4169,
+        246};
+    uint32_t gameMatchType = 2;
+    uint32_t gameMatchNumber = 42;
+    uint32_t gameMatchTotal = 76;
+
+    Rebuilt2026 rebuilt2026 = {
+        .energizedRPThreshold = 100,
+        .superchargedRPThreshold = 360};
 
     void loadDefaultSettings()
     {
@@ -52,6 +88,21 @@ namespace settings
         launchRobotCode = true;
         ntPeriodic = 0.02;
         javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
+
+        gameTeam = 6731;
+        gameTeamPool = {
+            151,
+            69,
+            97,
+            4169,
+            246};
+        gameMatchType = 2;
+        gameMatchNumber = 42;
+        gameMatchTotal = 76;
+
+        rebuilt2026 = {
+            .energizedRPThreshold = 100,
+            .superchargedRPThreshold = 360};
     }
 
     uint64_t parseHumanSizeToBytes(const std::string &sizeStr)
@@ -143,6 +194,15 @@ namespace settings
             launchRobotCode = j.value("launchRobotCode", launchRobotCode);
             ntPeriodic = j.value("ntPeriodic", ntPeriodic);
             javaLogMaxBytes = parseHumanSizeToBytes(j.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
+
+            gameTeam = j.value("gameTeam", gameTeam);
+            gameTeamPool = j.value("gameTeamPool", gameTeamPool);
+            gameMatchType = j.value("gameMatchType", gameMatchType);
+            gameMatchNumber = j.value("gameMatchNumber", gameMatchNumber);
+            gameMatchTotal = j.value("gameMatchTotal", gameMatchTotal);
+
+            rebuilt2026 = j.value("rebuilt2026", rebuilt2026);
+
             logger->info("Settings loaded successfully from {0}", settingsPath);
         }
         else
@@ -170,6 +230,15 @@ namespace settings
         j["launchRobotCode"] = launchRobotCode;
         j["ntPeriodic"] = ntPeriodic;
         j["javaLogMaxBytes"] = humanReadableSize(javaLogMaxBytes);
+
+        j["gameTeam"] = gameTeam;
+        j["gameTeamPool"] = gameTeamPool;
+        j["gameMatchType"] = gameMatchType;
+        j["gameMatchNumber"] = gameMatchNumber;
+        j["gameMatchTotal"] = gameMatchTotal;
+
+        j["rebuilt2026"] = rebuilt2026;
+
         std::string jsonString = j.dump(4);
         bx::Error error;
         bx::FileWriter writer;
