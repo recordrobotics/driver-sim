@@ -111,7 +111,7 @@ void initApp()
   fieldAsset = std::make_unique<RemoteStoredAsset>("field", "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31", prefPath, "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip");
   robotAsset = std::make_unique<RemoteStoredAsset>("robot", "1e5429e6bfadd417130a0cea55ccc06f39868caf8f04f3adfa20308543a1b937", prefPath, "https://hamster1.ddns.net/robot.zip");
   jniAsset = std::make_unique<RemoteStoredAsset>("jni", "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5", prefPath, "https://hamster1.ddns.net/jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip");
-  robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "01223d16fa7f7494f325c9fd869c705dcad07c5022b0101867cee2eae116d938", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
+  robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "d07ccbdac13c8cd130a5b1b0579741068363a00130ea52031d0f68ed4c8e3cf9", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
 
   // make sure we remove deleted deploy files or old robot code
   robotCodeAsset->cleanReplaceFolders = {"src", "libs"};

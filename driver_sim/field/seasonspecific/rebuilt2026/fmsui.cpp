@@ -206,7 +206,7 @@ void Rebuilt2026FMSUI::render(ImVec2 winSize)
     }
 
     // Match time
-    int matchTime = static_cast<int>(matchTimeSub.Get());
+    int matchTime = static_cast<int>(std::ceil(matchTimeSub.Get()));
     if (matchTime < 0)
         matchTime = 140;
     int minutes = matchTime / 60;
