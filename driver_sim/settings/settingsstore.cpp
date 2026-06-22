@@ -36,7 +36,15 @@ namespace settings
         cacheModels = true;
         extraArguments = "";
 
-        enabledExtensions = {"halsim_ds_socket"};
+        if (std::filesystem::exists("C:\\Program Files (x86)\\FRC Driver Station\\DriverStation.exe"))
+        {
+            enabledExtensions = {"halsim_ds_socket"};
+        }
+        else
+        {
+            enabledExtensions = {"halsim_gui"};
+        }
+
         launchElastic = true;
         launchRobotCode = true;
 
