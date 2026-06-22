@@ -22,6 +22,7 @@ namespace settings
     std::unordered_set<std::string> enabledExtensions;
     bool launchElastic = true;
     bool launchRobotCode = true;
+    double ntPeriodic = 0.02;
 
     uint64_t javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
 
@@ -47,7 +48,7 @@ namespace settings
 
         launchElastic = true;
         launchRobotCode = true;
-
+        ntPeriodic = 0.02;
         javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
     }
 
@@ -137,6 +138,7 @@ namespace settings
             enabledExtensions = j.value("enabledExtensions", enabledExtensions);
             launchElastic = j.value("launchElastic", launchElastic);
             launchRobotCode = j.value("launchRobotCode", launchRobotCode);
+            ntPeriodic = j.value("ntPeriodic", ntPeriodic);
             javaLogMaxBytes = parseHumanSizeToBytes(j.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
             logger->info("Settings loaded successfully from {0}", settingsPath);
         }
@@ -162,6 +164,7 @@ namespace settings
         j["enabledExtensions"] = enabledExtensions;
         j["launchElastic"] = launchElastic;
         j["launchRobotCode"] = launchRobotCode;
+        j["ntPeriodic"] = ntPeriodic;
         j["javaLogMaxBytes"] = humanReadableSize(javaLogMaxBytes);
         std::string jsonString = j.dump(4);
         bx::Error error;

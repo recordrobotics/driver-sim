@@ -1578,7 +1578,7 @@ void field::render(const blackboard::app::Window &window)
         for (auto &gamePiece : gamePieces)
         {
             gamePiece.posesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Positions");
-            gamePiece.posesSub = gamePiece.posesTopic.Subscribe({}, {.periodic = 0.02});
+            gamePiece.posesSub = gamePiece.posesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
             Mesh::createBuffersForMeshes(gamePiece.meshes);
         }
 
@@ -1593,9 +1593,9 @@ void field::render(const blackboard::app::Window &window)
         for (auto &robot : robots)
         {
             robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/Robot");
-            robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = 0.02});
+            robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::ntPeriodic});
             robot.componentPosesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/MechanismPoses");
-            robot.componentPosesSub = robot.componentPosesTopic.Subscribe({}, {.periodic = 0.02});
+            robot.componentPosesSub = robot.componentPosesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
         }
 
         Mesh::createBuffersForMeshes(robots.back().meshes);

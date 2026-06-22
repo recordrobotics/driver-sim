@@ -20,6 +20,7 @@ namespace settings
     extern std::unordered_set<std::string> enabledExtensions;
     extern bool launchElastic;
     extern bool launchRobotCode;
+    extern double ntPeriodic;
 
     extern uint64_t javaLogMaxBytes;
 }
