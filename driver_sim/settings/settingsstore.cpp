@@ -17,7 +17,8 @@ namespace settings
 
     bool showSelectPage = true;
     bool cacheModels = true;
-    std::string extraArguments;
+    std::vector<std::string> jvmArguments;
+    std::vector<std::string> codeArguments;
 
     std::unordered_set<std::string> enabledExtensions;
     bool launchElastic = true;
@@ -35,7 +36,8 @@ namespace settings
 
         showSelectPage = true;
         cacheModels = true;
-        extraArguments = "";
+        jvmArguments = {};
+        codeArguments = {};
 
         if (std::filesystem::exists("C:\\Program Files (x86)\\FRC Driver Station\\DriverStation.exe"))
         {
@@ -134,7 +136,8 @@ namespace settings
 
             showSelectPage = j.value("showSelectPage", showSelectPage);
             cacheModels = j.value("cacheModels", cacheModels);
-            extraArguments = j.value("extraArguments", extraArguments);
+            jvmArguments = j.value("jvmArguments", jvmArguments);
+            codeArguments = j.value("codeArguments", codeArguments);
             enabledExtensions = j.value("enabledExtensions", enabledExtensions);
             launchElastic = j.value("launchElastic", launchElastic);
             launchRobotCode = j.value("launchRobotCode", launchRobotCode);
@@ -160,7 +163,8 @@ namespace settings
 
         j["showSelectPage"] = showSelectPage;
         j["cacheModels"] = cacheModels;
-        j["extraArguments"] = extraArguments;
+        j["jvmArguments"] = jvmArguments;
+        j["codeArguments"] = codeArguments;
         j["enabledExtensions"] = enabledExtensions;
         j["launchElastic"] = launchElastic;
         j["launchRobotCode"] = launchRobotCode;

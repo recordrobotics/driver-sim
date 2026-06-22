@@ -15,7 +15,8 @@ namespace settings
 
     extern bool showSelectPage;
     extern bool cacheModels;
-    extern std::string extraArguments;
+    extern std::vector<std::string> jvmArguments;
+    extern std::vector<std::string> codeArguments;
 
     extern std::unordered_set<std::string> enabledExtensions;
     extern bool launchElastic;

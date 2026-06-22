@@ -19,6 +19,8 @@
 #include <random>
 #include <list>
 #include <future>
+#include <vector>
+#include <string>
 
 #include "ui/components.h"
 #include "ui/theme.h"
@@ -148,11 +150,14 @@ void initFieldView()
                                                        .auto_restart = false},
                                                    logger);
 
-  javaProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{.commandLine = {
-                                                                          prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
-                                                                          "-Djava.library.path=" + prefPath + "jni/release",
-                                                                          "-jar", prefPath + "code/libs/2026-robot.jar",
-                                                                          settings::extraArguments},
+  std::vector<std::string> javaCommandLine = {
+      prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
+      "-Djava.library.path=" + prefPath + "jni/release",
+      "-jar", prefPath + "code/libs/2026-robot.jar"};
+  javaCommandLine.insert(javaCommandLine.end() - 2, settings::jvmArguments.begin(), settings::jvmArguments.end()); // insert JVM arguments before the -jar argument
+  javaCommandLine.insert(javaCommandLine.end(), settings::codeArguments.begin(), settings::codeArguments.end());   // insert code arguments at the end
+
+  javaProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{.commandLine = javaCommandLine,
                                                                       .working_directory = prefPath + "code",
                                                                       .environment = {{"HALSIM_EXTENSIONS", std::accumulate(settings::enabledExtensions.begin(), settings::enabledExtensions.end(), std::string(), [prefPath](const std::string &acc, const std::string &ext)
                                                                                                                             { return acc + prefPath + "jni/release/" + ext + ".dll;"; })}},
