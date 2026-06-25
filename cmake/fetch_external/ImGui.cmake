@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 include(FetchContent)
 
 FetchContent_Declare(imgui
-    GIT_REPOSITORY "git@github.com:ocornut/imgui.git"
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG v1.92.8-docking
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/imgui
@@ -47,7 +47,7 @@ target_link_libraries(imgui
 )
 
 FetchContent_Declare(imguizmo
-    GIT_REPOSITORY "git@github.com:CedricGuillemet/ImGuizmo.git"
+    GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
     GIT_TAG master
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/imguizmo

@@ -11,6 +11,9 @@
 #include "../teamassigner.h"
 #include "../teamlogocache.h"
 
+#include <vector>
+#include "../../mesh.h"
+
 using blackboard::gui::string_hex_to_rgba_float;
 
 class Rebuilt2026FMSUI
@@ -25,8 +28,12 @@ public:
     Rebuilt2026FMSUI &operator=(Rebuilt2026FMSUI &&) noexcept = default;
 
     void render(ImVec2 winSize);
+    void postProcessField(std::vector<Mesh> &fieldMeshes);
 
 private:
+    void drawFMSUI(ImVec2 winSize);
+    void updateHubMaterials();
+
     nt::DoubleTopic matchTimeTopic;
     nt::DoubleSubscriber matchTimeSub;
 
@@ -57,4 +64,7 @@ private:
     blackboard::gui::ImTexture arrowIcon;
     blackboard::gui::ImTexture fuelBlueIcon;
     blackboard::gui::ImTexture fuelRedIcon;
+
+    Material *hubRedLightMaterial = nullptr;
+    Material *hubBlueLightMaterial = nullptr;
 };

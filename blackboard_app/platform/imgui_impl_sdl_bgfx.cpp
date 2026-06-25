@@ -1,6 +1,5 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 
-#include <bx/platform.h>
 #define BGFX_PLATFORM_SUPPORTS_DXBC (0 || BX_PLATFORM_WINDOWS || BX_PLATFORM_WINRT || BX_PLATFORM_XBOXONE)
 
 #include "imgui_impl_sdl_bgfx.h"

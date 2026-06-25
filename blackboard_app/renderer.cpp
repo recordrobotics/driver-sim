@@ -4,7 +4,6 @@
 #include "window.h"
 
 #include <bgfx/bgfx.h>
-#include <bgfx/platform.h>
 #include <blackboard_app/logger.h>
 #include <SDL3/SDL.h>
 

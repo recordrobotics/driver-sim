@@ -45,9 +45,6 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Rewrite SSH Git URLs to HTTPS for FetchContent
-              run: git config --global url."https://github.com/".insteadOf "git@github.com:"
-
             - name: Enable MSVC Developer Command Prompt
               if: runner.os == 'Windows'
               uses: ilammy/msvc-dev-cmd@v1

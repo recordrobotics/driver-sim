@@ -1,3 +1,5 @@
+#include <blackboard_app/logger.h>
+
 #include "fmsui.h"
 
 #include "../../../settings/settingsstore.h"
@@ -7,6 +9,10 @@
 #include <rebuilt2026/arrow.png.h>
 #include <rebuilt2026/fuelblue.png.h>
 #include <rebuilt2026/fuelred.png.h>
+
+#include "hublights.h"
+
+using namespace blackboard::logger;
 
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
@@ -67,6 +73,24 @@ Rebuilt2026FMSUI::~Rebuilt2026FMSUI()
 }
 
 void Rebuilt2026FMSUI::render(ImVec2 winSize)
+{
+    drawFMSUI(winSize);
+    updateHubMaterials();
+}
+
+void Rebuilt2026FMSUI::updateHubMaterials()
+{
+    if (hubRedLightMaterial)
+    {
+        hubRedLightMaterial->emissionColor = redHubActiveSub.Get() ? Rebuilt2026::redHubLedColor : Rebuilt2026::hubLedOffColor;
+    }
+    if (hubBlueLightMaterial)
+    {
+        hubBlueLightMaterial->emissionColor = blueHubActiveSub.Get() ? Rebuilt2026::blueHubLedColor : Rebuilt2026::hubLedOffColor;
+    }
+}
+
+void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 {
     teamAssigner.update(allianceStationSub.Get());
     logoCache.update();
@@ -327,4 +351,11 @@ void Rebuilt2026FMSUI::render(ImVec2 winSize)
             Rect({1573, 67}, {45, 45}, YELLOW);
         }
     }
+}
+
+void Rebuilt2026FMSUI::postProcessField(std::vector<Mesh> &fieldMeshes)
+{
+    hubRedLightMaterial = Rebuilt2026::getTaggedMaterial(fieldMeshes, Rebuilt2026::redHubLedTag);
+    hubBlueLightMaterial = Rebuilt2026::getTaggedMaterial(fieldMeshes, Rebuilt2026::blueHubLedTag);
+    logger->info("Post-processed field meshes for hub light materials: red={}, blue={}", (hubRedLightMaterial != nullptr), (hubBlueLightMaterial != nullptr));
 }

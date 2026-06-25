@@ -11,6 +11,9 @@
 #include <fastgltf/tools.hpp>
 #include <fastgltf/types.hpp>
 
+constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 1; // increment to force reload cache
+
 enum class MaterialType
 {
     Opaque,
@@ -44,11 +47,12 @@ typedef struct Material
 {
     MaterialType type;
     std::array<float, 4> baseColor;
+    std::array<float, 4> emissionColor;
     bool writesObjectMotionVectors;
     float metallic;
     float roughness;
 
-    Material() : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f}, writesObjectMotionVectors(false), metallic(0.0f), roughness(0.5f)
+    Material() : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f}, emissionColor{0.0f, 0.0f, 0.0f, 1.0f}, writesObjectMotionVectors(false), metallic(0.0f), roughness(0.5f)
     {
     }
 
@@ -60,6 +64,12 @@ typedef struct Material
         baseColor[1] = base[1];
         baseColor[2] = base[2];
         baseColor[3] = base[3];
+
+        auto &emission = m.emissiveFactor;
+        emissionColor[0] = emission[0] * m.emissiveStrength;
+        emissionColor[1] = emission[1] * m.emissiveStrength;
+        emissionColor[2] = emission[2] * m.emissiveStrength;
+        emissionColor[3] = 1.0f; // literally just for padding (bgfx doesn't support vec3)
 
         type = m.alphaMode == fastgltf::AlphaMode::Blend ? MaterialType::Transparent : MaterialType::Opaque;
         writesObjectMotionVectors = false;
@@ -73,6 +83,9 @@ typedef struct Material
                bit_equal(baseColor[1], other.baseColor[1]) &&
                bit_equal(baseColor[2], other.baseColor[2]) &&
                bit_equal(baseColor[3], other.baseColor[3]) &&
+               bit_equal(emissionColor[0], other.emissionColor[0]) &&
+               bit_equal(emissionColor[1], other.emissionColor[1]) &&
+               bit_equal(emissionColor[2], other.emissionColor[2]) &&
                type == other.type;
     }
 } Material;

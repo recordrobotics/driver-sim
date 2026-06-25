@@ -213,6 +213,12 @@ void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::
         throw std::runtime_error("Failed to open file for writing.");
     }
 
+    // write magic
+    outFile.write(reinterpret_cast<const char *>(MESH_SERIALIZATION_MAGIC), sizeof(MESH_SERIALIZATION_MAGIC));
+
+    // write version
+    outFile.write(reinterpret_cast<const char *>(&MESH_SERIALIZATION_VERSION), sizeof(MESH_SERIALIZATION_VERSION));
+
     uint32_t meshCount = static_cast<uint32_t>(meshes.size());
     outFile.write(reinterpret_cast<const char *>(&meshCount), sizeof(meshCount));
 
@@ -242,6 +248,22 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
     {
         logger->error("Failed to open file for reading: {}", path.string());
         throw std::runtime_error("Failed to open file for reading.");
+    }
+
+    uint8_t magic[sizeof(MESH_SERIALIZATION_MAGIC)];
+    inFile.read(reinterpret_cast<char *>(magic), sizeof(magic));
+    if (memcmp(magic, MESH_SERIALIZATION_MAGIC, sizeof(MESH_SERIALIZATION_MAGIC)) != 0)
+    {
+        logger->error("Invalid mesh magic.");
+        throw std::runtime_error("Invalid mesh magic.");
+    }
+
+    uint8_t serializationVersion;
+    inFile.read(reinterpret_cast<char *>(&serializationVersion), sizeof(serializationVersion));
+    if (serializationVersion != MESH_SERIALIZATION_VERSION)
+    {
+        logger->error("Invalid mesh serialization version.");
+        throw std::runtime_error("Invalid mesh serialization version.");
     }
 
     uint32_t meshCount;

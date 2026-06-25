@@ -9,7 +9,6 @@
 
 #include <SDL3/SDL.h>
 #include <bgfx/bgfx.h>
-#include <bgfx/platform.h>
 #include <imgui/backends/imgui_impl_sdl3.h>
 #include <imgui/imgui_internal.h>
 #include <ImGuizmo.h>
