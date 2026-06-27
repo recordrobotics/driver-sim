@@ -102,14 +102,11 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(cs_oit_comp),
         BGFX_EMBEDDED_SHADER(cs_taa_resolve),
         BGFX_EMBEDDED_SHADER(cs_mb_velocity),
-        BGFX_EMBEDDED_SHADER(cs_mb_tilemax_x),
-        BGFX_EMBEDDED_SHADER(cs_mb_tilemax_y),
-        BGFX_EMBEDDED_SHADER(cs_mb_jfa),
-        BGFX_EMBEDDED_SHADER(cs_mb_jfa_backtracking),
-        BGFX_EMBEDDED_SHADER(cs_mb_neighbormax),
-        BGFX_EMBEDDED_SHADER(cs_mb_blur),
-        BGFX_EMBEDDED_SHADER(cs_mb_blur_simple),
-        BGFX_EMBEDDED_SHADER(cs_mb_cache),
+        BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_max_x),
+        BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_max_y),
+        BGFX_EMBEDDED_SHADER(cs_mb_guertin_neighbor_max),
+        BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_variance),
+        BGFX_EMBEDDED_SHADER(cs_mb_guertin_experimental_blur),
 
         BGFX_EMBEDDED_SHADER(cs_bloom_downscale),
         BGFX_EMBEDDED_SHADER(cs_bloom_upscale),
@@ -190,20 +187,12 @@ static const std::array<std::string, CAMERA_VIEW_COUNT> CAMERA_VIEW_NAMES = {
 
 static constexpr float INCHES_TO_METERS = 0.0254f;
 
-static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 8;
-static constexpr float MB_PERPEN_ERROR_THRESHOLD = 0.3f;
-static constexpr float MB_STEP_EXPONENT_MODIFIER = 1.8f;
-static constexpr uint16_t MB_BACKTRACKING_SAMPLE_COUNT = 16;
-static constexpr float MB_BACKTRACKING_VELOCITY_MATCH_THRESHOLD = 0.9f;
-static constexpr float MB_BACKTRACKING_VELOCITY_PARALLEL_S = 1.0f;
-static constexpr float MB_BACKTRACKING_VELOCITY_PERPENDICULAR_S = 0.05f;
-static constexpr float MB_BACKTRACKING_DEPTH_MATCH_THRESHOLD = 0.001f;
-static constexpr uint16_t MB_JFA_PASS_COUNT = 6;
-static constexpr bool MB_FRAMERATE_INDEPENDENT = true;
-static constexpr bool MB_UNCAPPED_INDEPENDENCE = false;
-static constexpr float MB_TARGET_CONSTANT_FRAMERATE = 30;
-
-static constexpr bool SCALE_MB_BUFFERS = true;
+uint8_t MB_TILE_SIZE = 40;
+uint8_t MB_SAMPLE_COUNT = 32;
+float MB_MAXIMUM_JITTER_VALUE = 0.95f;
+bool MB_FRAMERATE_INDEPENDENT = true;
+bool MB_UNCAPPED_INDEPENDENCE = true;
+float MB_TARGET_CONSTANT_FRAMERATE = 30;
 
 static constexpr uint8_t BLOOM_DOWNSCALE_LIMIT = 10;
 static constexpr uint8_t BLOOM_MAX_ITERATIONS = 16;
@@ -259,9 +248,7 @@ bgfx::UniformHandle u_pbrData;
 bgfx::UniformHandle u_lightPos;
 bgfx::UniformHandle u_lightColor;
 
-bgfx::UniformHandle u_mbSampleStepMultiplier;
 bgfx::UniformHandle u_mbVelocityData;
-bgfx::UniformHandle u_mbJFAData;
 bgfx::UniformHandle u_mbBlurData;
 
 bgfx::UniformHandle u_bloomThreshold;
@@ -281,14 +268,11 @@ bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle taaResolveProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle mbVelocityProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbTileMaxXProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbTileMaxYProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbJFAProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbJFABacktrackingProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbNeighborMaxProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbBlurProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbBlurSimpleProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbCacheProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle mbGuertinTileMaxXProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle mbGuertinTileMaxYProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle mbGuertinNeighborMaxProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle mbGuertinTileVarianceProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle mbGuertinExperimentalBlurProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle bloomDownscaleProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle bloomUpscaleProgram = BGFX_INVALID_HANDLE;
@@ -301,11 +285,9 @@ Texture gbufEmission;
 Texture gbufNormal;
 Texture gbufVelocity;
 Texture gFullVelocity;
-Texture gMBPreviousVelocity;
 Texture gbufDepth;
 
 Texture gOutputColor;
-Texture gMBPreviousOutputColor;
 
 Texture gTAABuffer0;
 Texture gTAABuffer1;
@@ -313,8 +295,7 @@ Texture gTAABuffer1;
 Texture gMBTileMaxX;
 Texture gMBTileMax;
 Texture gMBNeighborMax;
-Texture gMBBufferA;
-Texture gMBBufferB;
+Texture gMBTileVariance;
 Texture gMBVelocity;
 Texture gMBOutputColor;
 
@@ -330,12 +311,11 @@ bgfx::UniformHandle s_taaHistory;
 bgfx::UniformHandle s_color;
 bgfx::UniformHandle s_velocity;
 bgfx::UniformHandle s_depth;
-bgfx::UniformHandle s_prevColor;
-bgfx::UniformHandle s_prevVelocity;
 bgfx::UniformHandle s_mbTileMaxX;
 bgfx::UniformHandle s_mbTileMax;
 bgfx::UniformHandle s_mbNeighborMax;
-bgfx::UniformHandle s_mbBuffer;
+bgfx::UniformHandle s_mbTileVariance;
+
 bgfx::UniformHandle s_bloomDirt;
 
 float bloomThreshold = 5.2f;
@@ -656,12 +636,10 @@ void initMotionBlur(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
-    s_prevColor = bgfx::createUniform("s_prevColor", bgfx::UniformType::Sampler);
-    s_prevVelocity = bgfx::createUniform("s_prevVelocity", bgfx::UniformType::Sampler);
     s_mbTileMaxX = bgfx::createUniform("s_tilemax_x", bgfx::UniformType::Sampler);
     s_mbTileMax = bgfx::createUniform("s_tilemax", bgfx::UniformType::Sampler);
     s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
-    s_mbBuffer = bgfx::createUniform("s_buffer", bgfx::UniformType::Sampler);
+    s_mbTileVariance = bgfx::createUniform("s_tilevariance", bgfx::UniformType::Sampler);
 
     mbVelocityProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
@@ -671,68 +649,44 @@ void initMotionBlur(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create motion blur velocity program.");
     }
 
-    mbTileMaxXProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_x"), true);
-    if (!bgfx::isValid(mbTileMaxXProgram))
+    mbGuertinTileMaxXProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_max_x"), true);
+    if (!bgfx::isValid(mbGuertinTileMaxXProgram))
     {
         logger->error("Failed to create motion blur tile max X program.");
         throw std::runtime_error("Failed to create motion blur tile max X program.");
     }
 
-    mbTileMaxYProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_y"), true);
-    if (!bgfx::isValid(mbTileMaxYProgram))
+    mbGuertinTileMaxYProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_max_y"), true);
+    if (!bgfx::isValid(mbGuertinTileMaxYProgram))
     {
         logger->error("Failed to create motion blur tile max Y program.");
         throw std::runtime_error("Failed to create motion blur tile max Y program.");
     }
 
-    mbJFAProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa"), true);
-    if (!bgfx::isValid(mbJFAProgram))
-    {
-        logger->error("Failed to create motion blur JFA program.");
-        throw std::runtime_error("Failed to create motion blur JFA program.");
-    }
-
-    mbJFABacktrackingProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa_backtracking"), true);
-    if (!bgfx::isValid(mbJFABacktrackingProgram))
-    {
-        logger->error("Failed to create motion blur JFA backtracking program.");
-        throw std::runtime_error("Failed to create motion blur JFA backtracking program.");
-    }
-
-    mbNeighborMaxProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_neighbormax"), true);
-    if (!bgfx::isValid(mbNeighborMaxProgram))
+    mbGuertinNeighborMaxProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_neighbor_max"), true);
+    if (!bgfx::isValid(mbGuertinNeighborMaxProgram))
     {
         logger->error("Failed to create motion blur neighbor max program.");
         throw std::runtime_error("Failed to create motion blur neighbor max program.");
     }
 
-    mbBlurProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur"), true);
-    if (!bgfx::isValid(mbBlurProgram))
+    mbGuertinTileVarianceProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_variance"), true);
+    if (!bgfx::isValid(mbGuertinTileVarianceProgram))
     {
-        logger->error("Failed to create motion blur blur program.");
-        throw std::runtime_error("Failed to create motion blur blur program.");
+        logger->error("Failed to create motion blur tile variance program.");
+        throw std::runtime_error("Failed to create motion blur tile variance program.");
     }
 
-    mbBlurSimpleProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur_simple"), true);
-    if (!bgfx::isValid(mbBlurSimpleProgram))
+    mbGuertinExperimentalBlurProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_experimental_blur"), true);
+    if (!bgfx::isValid(mbGuertinExperimentalBlurProgram))
     {
-        logger->error("Failed to create motion blur simple blur program.");
-        throw std::runtime_error("Failed to create motion blur simple blur program.");
-    }
-
-    mbCacheProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_cache"), true);
-    if (!bgfx::isValid(mbCacheProgram))
-    {
-        logger->error("Failed to create motion blur cache program.");
-        throw std::runtime_error("Failed to create motion blur cache program.");
+        logger->error("Failed to create motion blur experimental blur program.");
+        throw std::runtime_error("Failed to create motion blur experimental blur program.");
     }
 
     u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
@@ -756,25 +710,11 @@ void initMotionBlur(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_previousProj");
     }
 
-    u_mbSampleStepMultiplier = bgfx::createUniform("u_mbSampleStepMultiplier", bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(u_mbSampleStepMultiplier))
-    {
-        logger->error("Failed to create uniform: u_mbSampleStepMultiplier");
-        throw std::runtime_error("Failed to create uniform: u_mbSampleStepMultiplier");
-    }
-
     u_mbVelocityData = bgfx::createUniform("u_mbVelocityData", bgfx::UniformType::Vec4, 3);
     if (!bgfx::isValid(u_mbVelocityData))
     {
         logger->error("Failed to create uniform: u_mbVelocityData");
         throw std::runtime_error("Failed to create uniform: u_mbVelocityData");
-    }
-
-    u_mbJFAData = bgfx::createUniform("u_mbJFAData", bgfx::UniformType::Vec4, 2);
-    if (!bgfx::isValid(u_mbJFAData))
-    {
-        logger->error("Failed to create uniform: u_mbJFAData");
-        throw std::runtime_error("Failed to create uniform: u_mbJFAData");
     }
 
     u_mbBlurData = bgfx::createUniform("u_mbBlurData", bgfx::UniformType::Vec4, 2);
@@ -788,7 +728,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         gMBTileMaxX,
         width,
         height,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        1.0f / MB_TILE_SIZE,
         1.0f,
         false,
         1,
@@ -799,8 +739,8 @@ void initMotionBlur(uint16_t width, uint16_t height)
         gMBTileMax,
         width,
         height,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        1.0f / MB_TILE_SIZE,
+        1.0f / MB_TILE_SIZE,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
@@ -810,30 +750,19 @@ void initMotionBlur(uint16_t width, uint16_t height)
         gMBNeighborMax,
         width,
         height,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        1.0f / MB_TILE_SIZE,
+        1.0f / MB_TILE_SIZE,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
-        gMBBufferA,
+        gMBTileVariance,
         width,
         height,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
-
-    TEXTURE(
-        gMBBufferB,
-        width,
-        height,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
-        SCALE_MB_BUFFERS ? float(1.0f / MB_SAMPLE_STEP_MULTIPLIER) : 1.0f,
+        1.0f / MB_TILE_SIZE,
+        1.0f / MB_TILE_SIZE,
         false,
         1,
         bgfx::TextureFormat::RGBA16F,
@@ -850,24 +779,6 @@ void initMotionBlur(uint16_t width, uint16_t height)
 
     TEXTURE(
         gMBVelocity,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
-
-    TEXTURE(
-        gMBPreviousVelocity,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
-
-    TEXTURE(
-        gMBPreviousOutputColor,
         width, height,
         1.0f, 1.0f,
         false,
@@ -1613,11 +1524,9 @@ void ensureTextures(uint16_t width, uint16_t height)
     gbufNormal.beginFrame();
     gbufVelocity.beginFrame();
     gFullVelocity.beginFrame();
-    gMBPreviousVelocity.beginFrame();
     gbufDepth.beginFrame();
 
     gOutputColor.beginFrame();
-    gMBPreviousOutputColor.beginFrame();
 
     gTAABuffer0.beginFrame();
     gTAABuffer1.beginFrame();
@@ -1625,8 +1534,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gMBTileMaxX.beginFrame();
     gMBTileMax.beginFrame();
     gMBNeighborMax.beginFrame();
-    gMBBufferA.beginFrame();
-    gMBBufferB.beginFrame();
+    gMBTileVariance.beginFrame();
     gMBOutputColor.beginFrame();
     gMBVelocity.beginFrame();
 
@@ -1641,23 +1549,28 @@ void ensureTextures(uint16_t width, uint16_t height)
     gbufNormal.ensure(width, height);
     gbufVelocity.ensure(width, height);
     gFullVelocity.ensure(width, height);
-    gMBPreviousVelocity.ensure(width, height);
     gbufDepth.ensure(width, height);
 
     gBufFbo.ensure(width, height);
 
     gOutputColor.ensure(width, height);
     gOutputColor.mipCount = calculateBloomMipmapLevels(gOutputColor.width, gOutputColor.height);
-    gMBPreviousOutputColor.ensure(width, height);
 
     gTAABuffer0.ensure(width, height);
     gTAABuffer1.ensure(width, height);
 
+    gMBTileMaxX.widthFraction = 1.0f / MB_TILE_SIZE;
+    gMBTileMax.widthFraction = 1.0f / MB_TILE_SIZE;
+    gMBTileMax.heightFraction = 1.0f / MB_TILE_SIZE;
+    gMBNeighborMax.widthFraction = 1.0f / MB_TILE_SIZE;
+    gMBNeighborMax.heightFraction = 1.0f / MB_TILE_SIZE;
+    gMBTileVariance.widthFraction = 1.0f / MB_TILE_SIZE;
+    gMBTileVariance.heightFraction = 1.0f / MB_TILE_SIZE;
+
     gMBTileMaxX.ensure(width, height);
     gMBTileMax.ensure(width, height);
     gMBNeighborMax.ensure(width, height);
-    gMBBufferA.ensure(width, height);
-    gMBBufferB.ensure(width, height);
+    gMBTileVariance.ensure(width, height);
     gMBOutputColor.ensure(width, height);
     gMBVelocity.ensure(width, height);
 }
@@ -1770,6 +1683,16 @@ void field::render(const blackboard::app::Window &window)
     ImGui::Checkbox("Enable Motion Blur", &settings::enableMotionBlur);
     ImGui::Checkbox("Enable TAA", &settings::enableTAA);
     ImGui::Checkbox("Enable Bloom", &settings::enableBloom);
+
+    ImGui::Separator();
+
+    ImGui::Text("Motion Blur Settings");
+    int tileSize = MB_TILE_SIZE;
+    ImGui::SliderInt("Tile Size", &tileSize, 8, 128);
+    MB_TILE_SIZE = static_cast<uint8_t>(tileSize);
+    int sampleCount = MB_SAMPLE_COUNT;
+    ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
+    MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
 
     ImGui::Separator();
 
@@ -2130,10 +2053,6 @@ void field::render(const blackboard::app::Window &window)
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity
-
-    float samples = 16.0f;
-    float centerFade = 0.0f;
-
     float intensity = 1.0f;
     float temp_intensity = intensity;
 
@@ -2148,10 +2067,6 @@ void field::render(const blackboard::app::Window &window)
 
         temp_intensity = intensity * cappedFrameTime / deltaTime;
     }
-
-    uint16_t lastIterationIndex = MB_JFA_PASS_COUNT - 1;
-    float maxDilationRadius = powf(2 + MB_STEP_EXPONENT_MODIFIER, lastIterationIndex) * MB_SAMPLE_STEP_MULTIPLIER / intensity;
-    float sampleStepMultiplier = MB_SAMPLE_STEP_MULTIPLIER;
 
     // Velocity generation
     float mbVelocityData[12] = {
@@ -2178,116 +2093,60 @@ void field::render(const blackboard::app::Window &window)
     // SSAO
 
     // Motion blur
-
     if (settings::enableMotionBlur)
     {
-        if (SCALE_MB_BUFFERS)
-        {
-            // Compute tile max
-            xGroups = (int)floorf(((float)m_width / (float)MB_SAMPLE_STEP_MULTIPLIER - 1) / 16 + 1);
-            yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
-            encoder->setUniform(u_mbSampleStepMultiplier, &sampleStepMultiplier);
-            encoder->setTexture(0, s_velocity, gMBVelocity.handle);
-            encoder->setImage(1, gMBTileMaxX.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, mbTileMaxXProgram, xGroups, yGroups);
-
-            yGroups = (int)floorf(((float)m_height / (float)MB_SAMPLE_STEP_MULTIPLIER - 1) / 16 + 1);
-            encoder->setUniform(u_mbSampleStepMultiplier, &sampleStepMultiplier);
-            encoder->setTexture(0, s_mbTileMaxX, gMBTileMaxX.handle);
-            encoder->setImage(1, gMBTileMax.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, mbTileMaxYProgram, xGroups, yGroups);
-        }
-
-        // JFA iterations
-        for (int i = 0; i < MB_JFA_PASS_COUNT; i++)
-        {
-            float mbJFAData[8] = {
-                float(i),
-                float(lastIterationIndex),
-                MB_PERPEN_ERROR_THRESHOLD,
-                sampleStepMultiplier,
-                temp_intensity,
-                MB_STEP_EXPONENT_MODIFIER,
-                maxDilationRadius,
-                float(MB_BACKTRACKING_SAMPLE_COUNT)};
-            encoder->setUniform(u_mbJFAData, &mbJFAData, 2);
-            if (SCALE_MB_BUFFERS)
-            {
-                encoder->setTexture(0, s_mbTileMax, gMBTileMax.handle);
-                encoder->setTexture(1, s_mbBuffer, i % 2 == 0 ? gMBBufferB.handle : gMBBufferA.handle);
-                encoder->setImage(2, i % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle, 0, bgfx::Access::Write);
-                encoder->dispatch(VIEW_POSTPROCESS, mbJFAProgram, xGroups, yGroups);
-            }
-            else
-            {
-                encoder->setTexture(0, s_depth, gbufDepth.handle);
-                encoder->setTexture(1, s_velocity, gMBVelocity.handle);
-                encoder->setTexture(2, s_mbBuffer, i % 2 == 0 ? gMBBufferB.handle : gMBBufferA.handle);
-                encoder->setImage(3, i % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle, 0, bgfx::Access::Write);
-                encoder->dispatch(VIEW_POSTPROCESS, mbJFABacktrackingProgram, xGroups, yGroups);
-            }
-        }
-
-        if (SCALE_MB_BUFFERS)
-        {
-            // Compute neighbor max
-            encoder->setTexture(0, s_mbTileMax, gMBTileMax.handle);
-            encoder->setTexture(1, s_mbBuffer, lastIterationIndex % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle);
-            encoder->setImage(2, gMBNeighborMax.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, mbNeighborMaxProgram, xGroups, yGroups);
-        }
-
-        // Compute blur
-        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
-        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
-
         float mbBlurData[8] = {
-            samples,
+            0.0f,
+            0.0f,
+            MB_MAXIMUM_JITTER_VALUE,
             temp_intensity,
-            centerFade,
+            float(MB_TILE_SIZE),
+            float(MB_SAMPLE_COUNT),
             float(mbIndex),
-            float(lastIterationIndex),
-            sampleStepMultiplier,
-            MB_STEP_EXPONENT_MODIFIER,
-            maxDilationRadius};
+            0.0f};
 
         if (!freezeTemporalEffects)
         {
             mbIndex = (mbIndex + 1) % 8;
         }
 
+        // Compute tile max
+        xGroups = (int)floorf(((float)m_width / MB_TILE_SIZE - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+        encoder->setUniform(u_mbBlurData, &mbBlurData, 2);
+        encoder->setTexture(0, s_velocity, gMBVelocity.handle);
+        encoder->setTexture(1, s_depth, gbufDepth.handle);
+        encoder->setImage(2, gMBTileMaxX.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, mbGuertinTileMaxXProgram, xGroups, yGroups);
+
+        yGroups = (int)floorf(((float)m_height / MB_TILE_SIZE - 1) / 16 + 1);
+        encoder->setUniform(u_mbBlurData, &mbBlurData, 2);
+        encoder->setTexture(0, s_mbTileMaxX, gMBTileMaxX.handle);
+        encoder->setImage(1, gMBTileMax.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, mbGuertinTileMaxYProgram, xGroups, yGroups);
+
+        // Compute neighbor max
+        encoder->setTexture(0, s_mbTileMax, gMBTileMax.handle);
+        encoder->setImage(1, gMBNeighborMax.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, mbGuertinNeighborMaxProgram, xGroups, yGroups);
+
+        // Compute tile variance
+        encoder->setTexture(0, s_mbTileMax, gMBTileMax.handle);
+        encoder->setImage(1, gMBTileVariance.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, mbGuertinTileVarianceProgram, xGroups, yGroups);
+
+        // Compute blur
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
         encoder->setUniform(u_mbBlurData, &mbBlurData, 2);
 
-        if (SCALE_MB_BUFFERS)
-        {
-            encoder->setTexture(0, s_color, gOutputColor.handle);
-            encoder->setTexture(1, s_velocity, gMBVelocity.handle);
-            encoder->setTexture(2, s_mbNeighborMax, gMBNeighborMax.handle);
-            encoder->setImage(3, gMBOutputColor.handle, 0, bgfx::Access::Write);
-            encoder->setTexture(4, s_mbTileMax, gMBTileMax.handle);
-            encoder->setTexture(5, s_prevColor, gMBPreviousOutputColor.handle);
-            encoder->setTexture(6, s_prevVelocity, gMBPreviousVelocity.handle);
-            encoder->dispatch(VIEW_POSTPROCESS, mbBlurProgram, xGroups, yGroups);
-        }
-        else
-        {
-            encoder->setTexture(0, s_color, gOutputColor.handle);
-            encoder->setTexture(1, s_depth, gbufDepth.handle);
-            encoder->setTexture(2, s_velocity, gMBVelocity.handle);
-            encoder->setTexture(3, s_mbBuffer, lastIterationIndex % 2 == 0 ? gMBBufferA.handle : gMBBufferB.handle);
-            encoder->setImage(4, gMBOutputColor.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, mbBlurSimpleProgram, xGroups, yGroups);
-        }
-
-        if (SCALE_MB_BUFFERS && !freezeTemporalEffects)
-        {
-            // Cache
-            encoder->setTexture(0, s_velocity, gMBVelocity.handle);
-            encoder->setTexture(1, s_color, gOutputColor.handle);
-            encoder->setImage(2, gMBPreviousVelocity.handle, 0, bgfx::Access::Write);
-            encoder->setImage(3, gMBPreviousOutputColor.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, mbCacheProgram, xGroups, yGroups);
-        }
+        encoder->setTexture(0, s_color, gOutputColor.handle);
+        encoder->setTexture(1, s_velocity, gMBVelocity.handle);
+        encoder->setTexture(2, s_mbNeighborMax, gMBNeighborMax.handle);
+        encoder->setTexture(3, s_mbTileVariance, gMBTileVariance.handle);
+        encoder->setImage(4, gMBOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, mbGuertinExperimentalBlurProgram, xGroups, yGroups);
 
         // Copy to output
         encoder->setImage(0, gMBOutputColor.handle, 0, bgfx::Access::Read);
@@ -2446,12 +2305,8 @@ void field::cleanup()
     if (bgfx::isValid(u_lightColor))
         bgfx::destroy(u_lightColor);
 
-    if (bgfx::isValid(u_mbSampleStepMultiplier))
-        bgfx::destroy(u_mbSampleStepMultiplier);
     if (bgfx::isValid(u_mbVelocityData))
         bgfx::destroy(u_mbVelocityData);
-    if (bgfx::isValid(u_mbJFAData))
-        bgfx::destroy(u_mbJFAData);
     if (bgfx::isValid(u_mbBlurData))
         bgfx::destroy(u_mbBlurData);
 
@@ -2484,22 +2339,16 @@ void field::cleanup()
         bgfx::destroy(taaResolveProgram);
     if (bgfx::isValid(mbVelocityProgram))
         bgfx::destroy(mbVelocityProgram);
-    if (bgfx::isValid(mbTileMaxXProgram))
-        bgfx::destroy(mbTileMaxXProgram);
-    if (bgfx::isValid(mbTileMaxYProgram))
-        bgfx::destroy(mbTileMaxYProgram);
-    if (bgfx::isValid(mbJFAProgram))
-        bgfx::destroy(mbJFAProgram);
-    if (bgfx::isValid(mbJFABacktrackingProgram))
-        bgfx::destroy(mbJFABacktrackingProgram);
-    if (bgfx::isValid(mbNeighborMaxProgram))
-        bgfx::destroy(mbNeighborMaxProgram);
-    if (bgfx::isValid(mbBlurProgram))
-        bgfx::destroy(mbBlurProgram);
-    if (bgfx::isValid(mbBlurSimpleProgram))
-        bgfx::destroy(mbBlurSimpleProgram);
-    if (bgfx::isValid(mbCacheProgram))
-        bgfx::destroy(mbCacheProgram);
+    if (bgfx::isValid(mbGuertinTileMaxXProgram))
+        bgfx::destroy(mbGuertinTileMaxXProgram);
+    if (bgfx::isValid(mbGuertinTileMaxYProgram))
+        bgfx::destroy(mbGuertinTileMaxYProgram);
+    if (bgfx::isValid(mbGuertinNeighborMaxProgram))
+        bgfx::destroy(mbGuertinNeighborMaxProgram);
+    if (bgfx::isValid(mbGuertinTileVarianceProgram))
+        bgfx::destroy(mbGuertinTileVarianceProgram);
+    if (bgfx::isValid(mbGuertinExperimentalBlurProgram))
+        bgfx::destroy(mbGuertinExperimentalBlurProgram);
     if(bgfx::isValid(bloomDownscaleProgram))
         bgfx::destroy(bloomDownscaleProgram);
     if(bgfx::isValid(bloomUpscaleProgram))
@@ -2516,13 +2365,11 @@ void field::cleanup()
     gbufNormal.destroy();
     gbufVelocity.destroy();
     gFullVelocity.destroy();
-    gMBPreviousVelocity.destroy();
     gbufDepth.destroy();
 
     gBufFbo.destroy();
 
     gOutputColor.destroy();
-    gMBPreviousOutputColor.destroy();
 
     gTAABuffer0.destroy();
     gTAABuffer1.destroy();
@@ -2530,8 +2377,7 @@ void field::cleanup()
     gMBTileMaxX.destroy();
     gMBTileMax.destroy();
     gMBNeighborMax.destroy();
-    gMBBufferA.destroy();
-    gMBBufferB.destroy();
+    gMBTileVariance.destroy();
     gMBOutputColor.destroy();
     gMBVelocity.destroy();
 
@@ -2548,18 +2394,15 @@ void field::cleanup()
         bgfx::destroy(s_depth);
     if (bgfx::isValid(s_color))
         bgfx::destroy(s_color);
-    if (bgfx::isValid(s_prevVelocity))
-        bgfx::destroy(s_prevVelocity);
-    if (bgfx::isValid(s_prevColor))
-        bgfx::destroy(s_prevColor);
     if (bgfx::isValid(s_mbTileMaxX))
         bgfx::destroy(s_mbTileMaxX);
     if (bgfx::isValid(s_mbTileMax))
         bgfx::destroy(s_mbTileMax);
     if (bgfx::isValid(s_mbNeighborMax))
         bgfx::destroy(s_mbNeighborMax);
-    if (bgfx::isValid(s_mbBuffer))
-        bgfx::destroy(s_mbBuffer);
+    if (bgfx::isValid(s_mbTileVariance))
+        bgfx::destroy(s_mbTileVariance);
+
     if (bgfx::isValid(s_bloomDirt))
         bgfx::destroy(s_bloomDirt);
 }

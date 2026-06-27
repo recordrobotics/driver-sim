@@ -45,37 +45,25 @@
 #include <essl/cs_mb_velocity.sc.bin.h>
 #include <spirv/cs_mb_velocity.sc.bin.h>
 
-#include <glsl/cs_mb_tilemax_x.sc.bin.h>
-#include <essl/cs_mb_tilemax_x.sc.bin.h>
-#include <spirv/cs_mb_tilemax_x.sc.bin.h>
+#include <glsl/cs_mb_guertin_tile_max_x.sc.bin.h>
+#include <essl/cs_mb_guertin_tile_max_x.sc.bin.h>
+#include <spirv/cs_mb_guertin_tile_max_x.sc.bin.h>
 
-#include <glsl/cs_mb_tilemax_y.sc.bin.h>
-#include <essl/cs_mb_tilemax_y.sc.bin.h>
-#include <spirv/cs_mb_tilemax_y.sc.bin.h>
+#include <glsl/cs_mb_guertin_tile_max_y.sc.bin.h>
+#include <essl/cs_mb_guertin_tile_max_y.sc.bin.h>
+#include <spirv/cs_mb_guertin_tile_max_y.sc.bin.h>
 
-#include <glsl/cs_mb_jfa.sc.bin.h>
-#include <essl/cs_mb_jfa.sc.bin.h>
-#include <spirv/cs_mb_jfa.sc.bin.h>
+#include <glsl/cs_mb_guertin_neighbor_max.sc.bin.h>
+#include <essl/cs_mb_guertin_neighbor_max.sc.bin.h>
+#include <spirv/cs_mb_guertin_neighbor_max.sc.bin.h>
 
-#include <glsl/cs_mb_jfa_backtracking.sc.bin.h>
-#include <essl/cs_mb_jfa_backtracking.sc.bin.h>
-#include <spirv/cs_mb_jfa_backtracking.sc.bin.h>
+#include <glsl/cs_mb_guertin_tile_variance.sc.bin.h>
+#include <essl/cs_mb_guertin_tile_variance.sc.bin.h>
+#include <spirv/cs_mb_guertin_tile_variance.sc.bin.h>
 
-#include <glsl/cs_mb_neighbormax.sc.bin.h>
-#include <essl/cs_mb_neighbormax.sc.bin.h>
-#include <spirv/cs_mb_neighbormax.sc.bin.h>
-
-#include <glsl/cs_mb_blur.sc.bin.h>
-#include <essl/cs_mb_blur.sc.bin.h>
-#include <spirv/cs_mb_blur.sc.bin.h>
-
-#include <glsl/cs_mb_blur_simple.sc.bin.h>
-#include <essl/cs_mb_blur_simple.sc.bin.h>
-#include <spirv/cs_mb_blur_simple.sc.bin.h>
-
-#include <glsl/cs_mb_cache.sc.bin.h>
-#include <essl/cs_mb_cache.sc.bin.h>
-#include <spirv/cs_mb_cache.sc.bin.h>
+#include <glsl/cs_mb_guertin_experimental_blur.sc.bin.h>
+#include <essl/cs_mb_guertin_experimental_blur.sc.bin.h>
+#include <spirv/cs_mb_guertin_experimental_blur.sc.bin.h>
 
 #include <glsl/cs_bloom_downscale.sc.bin.h>
 #include <essl/cs_bloom_downscale.sc.bin.h>
@@ -99,14 +87,11 @@
 #include <dxbc/cs_oit_comp.sc.bin.h>
 #include <dxbc/cs_taa_resolve.sc.bin.h>
 #include <dxbc/cs_mb_velocity.sc.bin.h>
-#include <dxbc/cs_mb_tilemax_x.sc.bin.h>
-#include <dxbc/cs_mb_tilemax_y.sc.bin.h>
-#include <dxbc/cs_mb_jfa.sc.bin.h>
-#include <dxbc/cs_mb_jfa_backtracking.sc.bin.h>
-#include <dxbc/cs_mb_neighbormax.sc.bin.h>
-#include <dxbc/cs_mb_blur.sc.bin.h>
-#include <dxbc/cs_mb_blur_simple.sc.bin.h>
-#include <dxbc/cs_mb_cache.sc.bin.h>
+#include <dxbc/cs_mb_guertin_tile_max_x.sc.bin.h>
+#include <dxbc/cs_mb_guertin_tile_max_y.sc.bin.h>
+#include <dxbc/cs_mb_guertin_neighbor_max.sc.bin.h>
+#include <dxbc/cs_mb_guertin_tile_variance.sc.bin.h>
+#include <dxbc/cs_mb_guertin_experimental_blur.sc.bin.h>
 
 #include <dxbc/cs_bloom_downscale.sc.bin.h>
 #include <dxbc/cs_bloom_upscale.sc.bin.h>
@@ -126,14 +111,11 @@
 #include <dxil/cs_oit_comp.sc.bin.h>
 #include <dxil/cs_taa_resolve.sc.bin.h>
 #include <dxil/cs_mb_velocity.sc.bin.h>
-#include <dxil/cs_mb_tilemax_x.sc.bin.h>
-#include <dxil/cs_mb_tilemax_y.sc.bin.h>
-#include <dxil/cs_mb_jfa.sc.bin.h>
-#include <dxil/cs_mb_jfa_backtracking.sc.bin.h>
-#include <dxil/cs_mb_neighbormax.sc.bin.h>
-#include <dxil/cs_mb_blur.sc.bin.h>
-#include <dxil/cs_mb_blur_simple.sc.bin.h>
-#include <dxil/cs_mb_cache.sc.bin.h>
+#include <dxil/cs_mb_guertin_tile_max_x.sc.bin.h>
+#include <dxil/cs_mb_guertin_tile_max_y.sc.bin.h>
+#include <dxil/cs_mb_guertin_neighbor_max.sc.bin.h>
+#include <dxil/cs_mb_guertin_tile_variance.sc.bin.h>
+#include <dxil/cs_mb_guertin_experimental_blur.sc.bin.h>
 
 #include <dxil/cs_bloom_downscale.sc.bin.h>
 #include <dxil/cs_bloom_upscale.sc.bin.h>
@@ -153,14 +135,11 @@
 #include <metal/cs_oit_comp.sc.bin.h>
 #include <metal/cs_taa_resolve.sc.bin.h>
 #include <metal/cs_mb_velocity.sc.bin.h>
-#include <metal/cs_mb_tilemax_x.sc.bin.h>
-#include <metal/cs_mb_tilemax_y.sc.bin.h>
-#include <metal/cs_mb_jfa.sc.bin.h>
-#include <metal/cs_mb_jfa_backtracking.sc.bin.h>
-#include <metal/cs_mb_neighbormax.sc.bin.h>
-#include <metal/cs_mb_blur.sc.bin.h>
-#include <metal/cs_mb_blur_simple.sc.bin.h>
-#include <metal/cs_mb_cache.sc.bin.h>
+#include <metal/cs_mb_guertin_tile_max_x.sc.bin.h>
+#include <metal/cs_mb_guertin_tile_max_y.sc.bin.h>
+#include <metal/cs_mb_guertin_neighbor_max.sc.bin.h>
+#include <metal/cs_mb_guertin_tile_variance.sc.bin.h>
+#include <metal/cs_mb_guertin_experimental_blur.sc.bin.h>
 
 #include <metal/cs_bloom_downscale.sc.bin.h>
 #include <metal/cs_bloom_upscale.sc.bin.h>
