@@ -19,20 +19,16 @@
 #include <glsl/vs_imgui_image.sc.bin.h>
 #include <essl/vs_imgui_image.sc.bin.h>
 #include <spirv/vs_imgui_image.sc.bin.h>
-#include <wgsl/vs_imgui_image.sc.bin.h>
 #include <glsl/fs_imgui_image.sc.bin.h>
 #include <essl/fs_imgui_image.sc.bin.h>
 #include <spirv/fs_imgui_image.sc.bin.h>
-#include <wgsl/fs_imgui_image.sc.bin.h>
 
 #include <glsl/vs_ocornut_imgui.sc.bin.h>
 #include <essl/vs_ocornut_imgui.sc.bin.h>
 #include <spirv/vs_ocornut_imgui.sc.bin.h>
-#include <wgsl/vs_ocornut_imgui.sc.bin.h>
 #include <glsl/fs_ocornut_imgui.sc.bin.h>
 #include <essl/fs_ocornut_imgui.sc.bin.h>
 #include <spirv/fs_ocornut_imgui.sc.bin.h>
-#include <wgsl/fs_ocornut_imgui.sc.bin.h>
 
 #if BGFX_PLATFORM_SUPPORTS_DXBC
 #include <dxbc/vs_imgui_image.sc.bin.h>

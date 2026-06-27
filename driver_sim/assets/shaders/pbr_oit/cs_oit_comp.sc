@@ -1,12 +1,13 @@
 #include <bgfx_compute.sh>
-#include "pbr.sh"
+#include "../common/pbr.sh"
 
 IMAGE2D_RO(s_accum, rgba16f, 0);
 IMAGE2D_RO(s_reveal, r16f, 1);
 IMAGE2D_RO(s_albedo, rgba8, 2);
-IMAGE2D_RO(s_normal, rgba16f, 3);
-IMAGE2D_RO(s_depth, r32f, 4);
-IMAGE2D_WO(s_output, rgba32f, 5);
+IMAGE2D_RO(s_emission, rgba16f, 3);
+IMAGE2D_RO(s_normal, rgba16f, 4);
+IMAGE2D_RO(s_depth, r32f, 5);
+IMAGE2D_WO(s_output, rgba16f, 6);
 
 uniform vec4 u_jitter;
 
@@ -29,6 +30,7 @@ void main()
 
     if(depth > 0) {
         vec4 albedo = imageLoad(s_albedo, uvi);
+        vec4 emission = imageLoad(s_emission, uvi);
         vec3 normal = imageLoad(s_normal, uvi).xyz;
 
         vec2 uvn = vec2(uvi + vec2_splat(0.5)) / render_size;
@@ -42,7 +44,7 @@ void main()
 
         vec4 world_local_position = mul(u_invView, vec4(view_position.xyz, 1.0));
 
-        pbr_col = pbr(albedo.rgb, world_local_position.xyz, mtxGetColumn(u_invView, 3).xyz, normal, albedo.a);
+        pbr_col = pbr(albedo.rgb, emission.rgb, world_local_position.xyz, mtxGetColumn(u_invView, 3).xyz, normal, albedo.a);
     } else {
         pbr_col = vec4_splat(0.0);
     }

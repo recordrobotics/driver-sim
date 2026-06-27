@@ -2,9 +2,9 @@
 
 IMAGE2D_RO(s_velocity, rg16f, 0);
 IMAGE2D_RO(s_depth, r32f, 1);
-IMAGE2D_RO(s_taaCurrent, rgba32f, 2);
+IMAGE2D_RO(s_taaCurrent, rgba16f, 2);
 SAMPLER2D(s_taaHistory, 3);
-IMAGE2D_WO(s_taaOutput, rgba32f, 4);
+IMAGE2D_WO(s_taaOutput, rgba16f, 4);
 
 float Mitchell(float x) {
     float ax = abs(x);
@@ -157,8 +157,8 @@ void main()
     vec2 motionVector = imageLoad(s_velocity, closestDepthPixelPosition).xy;
     vec2 uv = (vec2(pixel) + 0.5) / u_viewRect.zw;
     vec2 historyTexCoord = uv + motionVector;
-    vec3 sourceSample = sourceSampleTotal / sourceSampleWeight;
-    
+    vec3 sourceSample = max(vec3_splat(0.0), sourceSampleTotal / sourceSampleWeight);
+
     if(any(historyTexCoord != saturate(historyTexCoord)))
     {
         imageStore(s_taaOutput, pixel, vec4(sourceSample, 1.0));

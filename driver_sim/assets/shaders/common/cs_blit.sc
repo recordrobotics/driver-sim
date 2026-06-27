@@ -1,7 +1,7 @@
 #include <bgfx_compute.sh>
 
-IMAGE2D_RO(src, rgba32f, 0);
-IMAGE2D_WO(dest, rgba32f, 1);
+IMAGE2D_RO(src, rgba16f, 0);
+IMAGE2D_WO(dest, rgba16f, 1);
 
 NUM_THREADS(16, 16, 1)
 void main()

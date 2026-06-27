@@ -17,6 +17,17 @@
             "console": "internalConsole"
         },
         {
+            "name": "Debug",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/driver_sim/driver_sim.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "internalConsole"
+        },
+        {
             "name": "Launch (RenderDoc Capture)",
             "type": "cppvsdbg",
             "request": "launch",

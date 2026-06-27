@@ -34,9 +34,42 @@
 
 #include "../settings/settingsstore.h"
 
+#include <bloom_dirt_mask.png.h>
+
 #if GAME_YEAR == 2026
 #include "seasonspecific/rebuilt2026/fmsui.h"
+#include "seasonspecific/rebuilt2026/hublights.h"
 #endif
+
+
+static const bgfx::EmbeddedShader s_embeddedShaders[] =
+    {
+        BGFX_EMBEDDED_SHADER(vs_pbr),
+        BGFX_EMBEDDED_SHADER(vs_pbr_instanced),
+        BGFX_EMBEDDED_SHADER(fs_pbr),
+        BGFX_EMBEDDED_SHADER(fs_pbr_oit),
+        BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
+
+        BGFX_EMBEDDED_SHADER(vs_pass),
+        BGFX_EMBEDDED_SHADER(fs_tonemap),
+
+        BGFX_EMBEDDED_SHADER(cs_blit),
+        BGFX_EMBEDDED_SHADER(cs_oit_comp),
+        BGFX_EMBEDDED_SHADER(cs_taa_resolve),
+        BGFX_EMBEDDED_SHADER(cs_mb_velocity),
+        BGFX_EMBEDDED_SHADER(cs_mb_tilemax_x),
+        BGFX_EMBEDDED_SHADER(cs_mb_tilemax_y),
+        BGFX_EMBEDDED_SHADER(cs_mb_jfa),
+        BGFX_EMBEDDED_SHADER(cs_mb_jfa_backtracking),
+        BGFX_EMBEDDED_SHADER(cs_mb_neighbormax),
+        BGFX_EMBEDDED_SHADER(cs_mb_blur),
+        BGFX_EMBEDDED_SHADER(cs_mb_blur_simple),
+        BGFX_EMBEDDED_SHADER(cs_mb_cache),
+
+        BGFX_EMBEDDED_SHADER(cs_bloom_downscale),
+        BGFX_EMBEDDED_SHADER(cs_bloom_upscale),
+
+        BGFX_EMBEDDED_SHADER_END()};
 
 enum class ModelRotationAxis
 {
@@ -127,6 +160,28 @@ static constexpr float MB_TARGET_CONSTANT_FRAMERATE = 30;
 
 static constexpr bool SCALE_MB_BUFFERS = false;
 
+static constexpr uint8_t BLOOM_DOWNSCALE_LIMIT = 10;
+static constexpr uint8_t BLOOM_MAX_ITERATIONS = 16;
+
+static uint8_t calculateBloomMipmapLevels(uint16_t width, uint16_t height)
+{
+    width  /= 2;
+    height /= 2;
+    uint8_t  mip_levels = 1;
+
+    for (uint8_t i = 0; i < BLOOM_MAX_ITERATIONS; ++i)
+    {
+        width /= 2;
+        height /= 2;
+
+        if (width < BLOOM_DOWNSCALE_LIMIT || height < BLOOM_DOWNSCALE_LIMIT) break;
+
+        ++mip_levels;
+    }
+
+    return mip_levels + 1;
+}
+
 typedef struct MBVelocityComponent
 {
     float multiplier = 1.0f;
@@ -147,6 +202,7 @@ static constexpr uint16_t VIEW_POSTPROCESS = 3;
 static constexpr uint16_t VIEW_BLIT = 4;
 
 bgfx::UniformHandle u_baseColor;
+bgfx::UniformHandle u_emissionColor;
 bgfx::UniformHandle u_info;
 bgfx::UniformHandle u_normalMatrix;
 bgfx::UniformHandle u_previousModelViewProj;
@@ -163,8 +219,12 @@ bgfx::UniformHandle u_mbVelocityData;
 bgfx::UniformHandle u_mbJFAData;
 bgfx::UniformHandle u_mbBlurData;
 
-bgfx::ProgramHandle program = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programInstanced = BGFX_INVALID_HANDLE;
+bgfx::UniformHandle u_bloomThreshold;
+bgfx::UniformHandle u_bloomTexelSize;
+bgfx::UniformHandle u_bloomIntensity;
+
+bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programPBRInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitDepthPostPass = BGFX_INVALID_HANDLE;
@@ -185,10 +245,14 @@ bgfx::ProgramHandle mbBlurProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle mbBlurSimpleProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle mbCacheProgram = BGFX_INVALID_HANDLE;
 
+bgfx::ProgramHandle bloomDownscaleProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle bloomUpscaleProgram = BGFX_INVALID_HANDLE;
+
 Texture gAccumTex;
 Texture gRevealTex;
 
 Texture gbufAlbedo;
+Texture gbufEmission;
 Texture gbufNormal;
 Texture gbufVelocity;
 Texture gFullVelocity;
@@ -209,6 +273,8 @@ Texture gMBBufferB;
 Texture gMBVelocity;
 Texture gMBOutputColor;
 
+Texture bloomDirtMask;
+
 FrameBuffer gBufFbo;
 FrameBuffer gOitFbo;
 FrameBuffer gOitDepthPostPassFbo;
@@ -225,6 +291,12 @@ bgfx::UniformHandle s_mbTileMaxX;
 bgfx::UniformHandle s_mbTileMax;
 bgfx::UniformHandle s_mbNeighborMax;
 bgfx::UniformHandle s_mbBuffer;
+bgfx::UniformHandle s_bloomDirt;
+
+float bloomThreshold = 5.2f;
+float bloomKnee = 0.1f;
+float bloomIntensity = 1.0f;
+float bloomDirtIntensity = 1.1f;
 
 float fieldModelMatrix[16];
 float fieldNormalMatrix[9];
@@ -237,14 +309,140 @@ std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
 
 nt::NetworkTableInstance ntInst;
+
+#if GAME_YEAR == 2026
 std::unique_ptr<Rebuilt2026FMSUI> fmsUI;
+#endif
 
 CameraView cameraView = CameraView::Field;
 
 bool freezeTemporalEffects = false;
 
-void initOIT(uint16_t width, uint16_t height)
+void initPBROIT(uint16_t width, uint16_t height)
 {
+    const auto type = bgfx::getRendererType();
+
+    programPBR =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
+
+    if (!bgfx::isValid(programPBR))
+    {
+        logger->error("Failed to create PBR rendering program.");
+        throw std::runtime_error("Failed to create PBR rendering program.");
+    }
+
+    programPBRInstanced =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
+
+    if (!bgfx::isValid(programPBRInstanced))
+    {
+        logger->error("Failed to create PBR instanced rendering program.");
+        throw std::runtime_error("Failed to create PBR instanced rendering program.");
+    }
+
+    programOit =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
+
+    if (!bgfx::isValid(programOit))
+    {
+        logger->error("Failed to create OIT rendering program.");
+        throw std::runtime_error("Failed to create OIT rendering program.");
+    }
+
+    programOitInstanced =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
+
+    if (!bgfx::isValid(programOitInstanced))
+    {
+        logger->error("Failed to create OIT instanced rendering program.");
+        throw std::runtime_error("Failed to create OIT instanced rendering program.");
+    }
+
+    programOitDepthPostPass =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
+
+    if (!bgfx::isValid(programOitDepthPostPass))
+    {
+        logger->error("Failed to create OIT depth post-pass program.");
+        throw std::runtime_error("Failed to create OIT depth post-pass program.");
+    }
+
+    programOitDepthPostPassInstanced =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
+
+    if (!bgfx::isValid(programOitDepthPostPassInstanced))
+    {
+        logger->error("Failed to create OIT instanced depth post-pass program.");
+        throw std::runtime_error("Failed to create OIT instanced depth post-pass program.");
+    }
+
+    oitCompProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_oit_comp"), true);
+
+    if (!bgfx::isValid(oitCompProgram))
+    {
+        logger->error("Failed to create OIT composition program.");
+        throw std::runtime_error("Failed to create OIT composition program.");
+    }
+
+    u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_baseColor))
+    {
+        logger->error("Failed to create uniform: u_baseColor");
+        throw std::runtime_error("Failed to create uniform: u_baseColor");
+    }
+
+    u_emissionColor = bgfx::createUniform("u_emissionColor", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_emissionColor))
+    {
+        logger->error("Failed to create uniform: u_emissionColor");
+        throw std::runtime_error("Failed to create uniform: u_emissionColor");
+    }
+
+    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_info))
+    {
+        logger->error("Failed to create uniform: u_info");
+        throw std::runtime_error("Failed to create uniform: u_info");
+    }
+
+    u_normalMatrix = bgfx::createUniform("u_normalMatrix", bgfx::UniformType::Mat3);
+    if (!bgfx::isValid(u_normalMatrix))
+    {
+        logger->error("Failed to create uniform: u_normalMatrix");
+        throw std::runtime_error("Failed to create uniform: u_normalMatrix");
+    }
+
+    u_pbrData = bgfx::createUniform("u_pbrData", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_pbrData))
+    {
+        logger->error("Failed to create uniform: u_pbrData");
+        throw std::runtime_error("Failed to create uniform: u_pbrData");
+    }
+
+    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_lightPos))
+    {
+        logger->error("Failed to create uniform: u_lightPos");
+        throw std::runtime_error("Failed to create uniform: u_lightPos");
+    }
+
+    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_lightColor))
+    {
+        logger->error("Failed to create uniform: u_lightColor");
+        throw std::runtime_error("Failed to create uniform: u_lightColor");
+    }
+
     TEXTURE(
         gAccumTex,
         width, height,
@@ -275,21 +473,63 @@ void initOIT(uint16_t width, uint16_t height)
         gOutputColor,
         width, height,
         1.0f, 1.0f,
-        false,
+        true,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+
+    gOutputColor.mipCount = calculateBloomMipmapLevels(gOutputColor.width, gOutputColor.height);
+}
+
+void initTonemap()
+{
+    const auto type = bgfx::getRendererType();
+
+    tonemapProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tonemap"), true);
+
+    if (!bgfx::isValid(tonemapProgram))
+    {
+        logger->error("Failed to create tonemap program.");
+        throw std::runtime_error("Failed to create tonemap program.");
+    }
 }
 
 void initTAA(uint16_t width, uint16_t height)
 {
+    const auto type = bgfx::getRendererType();
+
+    s_taaHistory = bgfx::createUniform("s_taaHistory", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_taaHistory))
+    {
+        logger->error("Failed to create uniform for TAA history texture.");
+        throw std::runtime_error("Failed to create uniform for TAA history texture.");
+    }
+
+    taaResolveProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
+
+    if (!bgfx::isValid(taaResolveProgram))
+    {
+        logger->error("Failed to create TAA resolve program.");
+        throw std::runtime_error("Failed to create TAA resolve program.");
+    }
+
+    u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_jitter))
+    {
+        logger->error("Failed to create uniform: u_jitter");
+        throw std::runtime_error("Failed to create uniform: u_jitter");
+    }
+
     TEXTURE(
         gTAABuffer0,
         width, height,
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -298,12 +538,16 @@ void initTAA(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
 void initGBuffer(uint16_t width, uint16_t height)
 {
+    s_color = bgfx::createUniform("s_color", bgfx::UniformType::Sampler);
+    s_velocity = bgfx::createUniform("s_velocity", bgfx::UniformType::Sampler);
+    s_depth = bgfx::createUniform("s_depth", bgfx::UniformType::Sampler);
+
     TEXTURE(
         gbufAlbedo,
         width, height,
@@ -311,6 +555,15 @@ void initGBuffer(uint16_t width, uint16_t height)
         false,
         1,
         bgfx::TextureFormat::RGBA8,
+        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+
+    TEXTURE(
+        gbufEmission,
+        width, height,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     TEXTURE(
@@ -328,7 +581,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -337,7 +590,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -351,11 +604,141 @@ void initGBuffer(uint16_t width, uint16_t height)
 
     FRAMEBUFFER(
         gBufFbo,
-        &gbufAlbedo, &gbufNormal, &gbufVelocity, &gbufDepth);
+        &gbufAlbedo, &gbufEmission, &gbufNormal, &gbufVelocity, &gbufDepth);
 }
 
 void initMotionBlur(uint16_t width, uint16_t height)
 {
+    const auto type = bgfx::getRendererType();
+
+    s_prevColor = bgfx::createUniform("s_prevColor", bgfx::UniformType::Sampler);
+    s_prevVelocity = bgfx::createUniform("s_prevVelocity", bgfx::UniformType::Sampler);
+    s_mbTileMaxX = bgfx::createUniform("s_tilemax_x", bgfx::UniformType::Sampler);
+    s_mbTileMax = bgfx::createUniform("s_tilemax", bgfx::UniformType::Sampler);
+    s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
+    s_mbBuffer = bgfx::createUniform("s_buffer", bgfx::UniformType::Sampler);
+
+    mbVelocityProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
+    if (!bgfx::isValid(mbVelocityProgram))
+    {
+        logger->error("Failed to create motion blur velocity program.");
+        throw std::runtime_error("Failed to create motion blur velocity program.");
+    }
+
+    mbTileMaxXProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_x"), true);
+    if (!bgfx::isValid(mbTileMaxXProgram))
+    {
+        logger->error("Failed to create motion blur tile max X program.");
+        throw std::runtime_error("Failed to create motion blur tile max X program.");
+    }
+
+    mbTileMaxYProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_y"), true);
+    if (!bgfx::isValid(mbTileMaxYProgram))
+    {
+        logger->error("Failed to create motion blur tile max Y program.");
+        throw std::runtime_error("Failed to create motion blur tile max Y program.");
+    }
+
+    mbJFAProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa"), true);
+    if (!bgfx::isValid(mbJFAProgram))
+    {
+        logger->error("Failed to create motion blur JFA program.");
+        throw std::runtime_error("Failed to create motion blur JFA program.");
+    }
+
+    mbJFABacktrackingProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa_backtracking"), true);
+    if (!bgfx::isValid(mbJFABacktrackingProgram))
+    {
+        logger->error("Failed to create motion blur JFA backtracking program.");
+        throw std::runtime_error("Failed to create motion blur JFA backtracking program.");
+    }
+
+    mbNeighborMaxProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_neighbormax"), true);
+    if (!bgfx::isValid(mbNeighborMaxProgram))
+    {
+        logger->error("Failed to create motion blur neighbor max program.");
+        throw std::runtime_error("Failed to create motion blur neighbor max program.");
+    }
+
+    mbBlurProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur"), true);
+    if (!bgfx::isValid(mbBlurProgram))
+    {
+        logger->error("Failed to create motion blur blur program.");
+        throw std::runtime_error("Failed to create motion blur blur program.");
+    }
+
+    mbBlurSimpleProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur_simple"), true);
+    if (!bgfx::isValid(mbBlurSimpleProgram))
+    {
+        logger->error("Failed to create motion blur simple blur program.");
+        throw std::runtime_error("Failed to create motion blur simple blur program.");
+    }
+
+    mbCacheProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_cache"), true);
+    if (!bgfx::isValid(mbCacheProgram))
+    {
+        logger->error("Failed to create motion blur cache program.");
+        throw std::runtime_error("Failed to create motion blur cache program.");
+    }
+
+    u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousModelViewProj))
+    {
+        logger->error("Failed to create uniform: u_previousModelViewProj");
+        throw std::runtime_error("Failed to create uniform: u_previousModelViewProj");
+    }
+
+    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousView))
+    {
+        logger->error("Failed to create uniform: u_previousView");
+        throw std::runtime_error("Failed to create uniform: u_previousView");
+    }
+
+    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousProj))
+    {
+        logger->error("Failed to create uniform: u_previousProj");
+        throw std::runtime_error("Failed to create uniform: u_previousProj");
+    }
+
+    u_mbSampleStepMultiplier = bgfx::createUniform("u_mbSampleStepMultiplier", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_mbSampleStepMultiplier))
+    {
+        logger->error("Failed to create uniform: u_mbSampleStepMultiplier");
+        throw std::runtime_error("Failed to create uniform: u_mbSampleStepMultiplier");
+    }
+
+    u_mbVelocityData = bgfx::createUniform("u_mbVelocityData", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_mbVelocityData))
+    {
+        logger->error("Failed to create uniform: u_mbVelocityData");
+        throw std::runtime_error("Failed to create uniform: u_mbVelocityData");
+    }
+
+    u_mbJFAData = bgfx::createUniform("u_mbJFAData", bgfx::UniformType::Vec4, 2);
+    if (!bgfx::isValid(u_mbJFAData))
+    {
+        logger->error("Failed to create uniform: u_mbJFAData");
+        throw std::runtime_error("Failed to create uniform: u_mbJFAData");
+    }
+
+    u_mbBlurData = bgfx::createUniform("u_mbBlurData", bgfx::UniformType::Vec4, 2);
+    if (!bgfx::isValid(u_mbBlurData))
+    {
+        logger->error("Failed to create uniform: u_mbBlurData");
+        throw std::runtime_error("Failed to create uniform: u_mbBlurData");
+    }
+
     TEXTURE(
         gMBTileMaxX,
         width,
@@ -417,7 +800,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -426,7 +809,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -435,7 +818,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -444,35 +827,61 @@ void initMotionBlur(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
-static const bgfx::EmbeddedShader s_embeddedShaders[] =
+void initBloom(uint16_t width, uint16_t height)
+{
+    const auto type = bgfx::getRendererType();
+
+    bloomDownscaleProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_downscale"), true);
+    if (!bgfx::isValid(bloomDownscaleProgram))
     {
-        BGFX_EMBEDDED_SHADER(vs_pbr),
-        BGFX_EMBEDDED_SHADER(vs_pbr_instanced),
-        BGFX_EMBEDDED_SHADER(fs_pbr),
-        BGFX_EMBEDDED_SHADER(fs_pbr_oit),
-        BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
+        logger->error("Failed to create bloom downscale program.");
+        throw std::runtime_error("Failed to create bloom downscale program.");
+    }
 
-        BGFX_EMBEDDED_SHADER(vs_pass),
-        BGFX_EMBEDDED_SHADER(fs_tonemap),
+    bloomUpscaleProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_upscale"), true);
+    if (!bgfx::isValid(bloomUpscaleProgram))
+    {
+        logger->error("Failed to create bloom upscale program.");
+        throw std::runtime_error("Failed to create bloom upscale program.");
+    }
 
-        BGFX_EMBEDDED_SHADER(cs_blit),
-        BGFX_EMBEDDED_SHADER(cs_oit_comp),
-        BGFX_EMBEDDED_SHADER(cs_taa_resolve),
-        BGFX_EMBEDDED_SHADER(cs_mb_velocity),
-        BGFX_EMBEDDED_SHADER(cs_mb_tilemax_x),
-        BGFX_EMBEDDED_SHADER(cs_mb_tilemax_y),
-        BGFX_EMBEDDED_SHADER(cs_mb_jfa),
-        BGFX_EMBEDDED_SHADER(cs_mb_jfa_backtracking),
-        BGFX_EMBEDDED_SHADER(cs_mb_neighbormax),
-        BGFX_EMBEDDED_SHADER(cs_mb_blur),
-        BGFX_EMBEDDED_SHADER(cs_mb_blur_simple),
-        BGFX_EMBEDDED_SHADER(cs_mb_cache),
+    s_bloomDirt = bgfx::createUniform("s_bloomDirt", bgfx::UniformType::Sampler);
+    if(!bgfx::isValid(s_bloomDirt))
+    {
+        logger->error("Failed to create uniform: s_bloomDirt");
+        throw std::runtime_error("Failed to create uniform: s_bloomDirt");
+    }
 
-        BGFX_EMBEDDED_SHADER_END()};
+    u_bloomThreshold = bgfx::createUniform("u_threshold", bgfx::UniformType::Vec4);
+    if(!bgfx::isValid(u_bloomThreshold))
+    {
+        logger->error("Failed to create uniform: u_bloomThreshold");
+        throw std::runtime_error("Failed to create uniform: u_bloomThreshold");
+    }
+    u_bloomTexelSize = bgfx::createUniform("u_texel_size", bgfx::UniformType::Vec4);
+    if(!bgfx::isValid(u_bloomTexelSize))
+    {
+        logger->error("Failed to create uniform: u_bloomTexelSize");
+        throw std::runtime_error("Failed to create uniform: u_bloomTexelSize");
+    }
+    u_bloomIntensity = bgfx::createUniform("u_bloom_intensity", bgfx::UniformType::Vec4);
+    if(!bgfx::isValid(u_bloomIntensity))
+    {
+        logger->error("Failed to create uniform: u_bloomIntensity");
+        throw std::runtime_error("Failed to create uniform: u_bloomIntensity");
+    }
+
+    TEXTURE_EMBEDDED(
+        bloomDirtMask,
+        bloom_dirt_mask_png,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+}
 
 typedef struct Transform
 {
@@ -798,19 +1207,25 @@ void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::s
     if (settings::cacheModels && std::filesystem::exists(cachePath))
     {
         logger->info("Loading {0} meshes from cache.", directory + name);
-        Mesh::fromSerialized(meshes, cachePath);
-    }
-    else
-    {
-        logger->info("Loading {0} meshes from GLTF model.", directory + name);
-        fastgltf::Parser parser;
-        Mesh::fromGltfModel(meshes, parser.loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory, fastgltf::Options::LoadGLBBuffers | fastgltf::Options::DontRequireValidAssetMember).get(), tags);
-
-        if (settings::cacheModels)
+        try
         {
-            logger->info("Caching {0} meshes to disk.", directory + name);
-            Mesh::toSerialized(meshes, cachePath);
+            Mesh::fromSerialized(meshes, cachePath);
+            return;
         }
+        catch (const std::exception &e)
+        {
+            logger->warn("Failed to load meshes from cache: {}. Updating from GLTF model instead.", e.what());
+        }
+    }
+
+    logger->info("Loading {0} meshes from GLTF model.", directory + name);
+    fastgltf::Parser parser;
+    Mesh::fromGltfModel(meshes, parser.loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory, fastgltf::Options::LoadGLBBuffers | fastgltf::Options::DontRequireValidAssetMember).get(), tags);
+
+    if (settings::cacheModels)
+    {
+        logger->info("Caching {0} meshes to disk.", directory + name);
+        Mesh::toSerialized(meshes, cachePath);
     }
 }
 
@@ -868,6 +1283,10 @@ void loadFieldModel()
                 tags[stagedObject] = name;
             }
         }
+
+#if GAME_YEAR == 2026
+        Rebuilt2026::addHubLedTags(tags);
+#endif
 
         loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model", tags);
 
@@ -992,103 +1411,7 @@ void field::init(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create uniform for generic texture.");
     }
 
-    s_taaHistory = bgfx::createUniform("s_taaHistory", bgfx::UniformType::Sampler);
-    if (!bgfx::isValid(s_taaHistory))
-    {
-        logger->error("Failed to create uniform for TAA history texture.");
-        throw std::runtime_error("Failed to create uniform for TAA history texture.");
-    }
-
-    s_color = bgfx::createUniform("s_color", bgfx::UniformType::Sampler);
-    s_velocity = bgfx::createUniform("s_velocity", bgfx::UniformType::Sampler);
-    s_depth = bgfx::createUniform("s_depth", bgfx::UniformType::Sampler);
-    s_prevColor = bgfx::createUniform("s_prevColor", bgfx::UniformType::Sampler);
-    s_prevVelocity = bgfx::createUniform("s_prevVelocity", bgfx::UniformType::Sampler);
-    s_mbTileMaxX = bgfx::createUniform("s_tilemax_x", bgfx::UniformType::Sampler);
-    s_mbTileMax = bgfx::createUniform("s_tilemax", bgfx::UniformType::Sampler);
-    s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
-    s_mbBuffer = bgfx::createUniform("s_buffer", bgfx::UniformType::Sampler);
-
     const auto type = bgfx::getRendererType();
-
-    program =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
-
-    if (!bgfx::isValid(program))
-    {
-        logger->error("Failed to create main rendering program.");
-        throw std::runtime_error("Failed to create main rendering program.");
-    }
-
-    programInstanced =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr"), true);
-
-    if (!bgfx::isValid(programInstanced))
-    {
-        logger->error("Failed to create main instanced rendering program.");
-        throw std::runtime_error("Failed to create main instanced rendering program.");
-    }
-
-    programOit =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
-
-    if (!bgfx::isValid(programOit))
-    {
-        logger->error("Failed to create OIT rendering program.");
-        throw std::runtime_error("Failed to create OIT rendering program.");
-    }
-
-    programOitInstanced =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
-
-    if (!bgfx::isValid(programOitInstanced))
-    {
-        logger->error("Failed to create OIT instanced rendering program.");
-        throw std::runtime_error("Failed to create OIT instanced rendering program.");
-    }
-
-    programOitDepthPostPass =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
-
-    if (!bgfx::isValid(programOitDepthPostPass))
-    {
-        logger->error("Failed to create OIT depth post-pass program.");
-        throw std::runtime_error("Failed to create OIT depth post-pass program.");
-    }
-
-    programOitDepthPostPassInstanced =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
-
-    if (!bgfx::isValid(programOitDepthPostPassInstanced))
-    {
-        logger->error("Failed to create OIT instanced depth post-pass program.");
-        throw std::runtime_error("Failed to create OIT instanced depth post-pass program.");
-    }
-
-    oitCompProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_oit_comp"), true);
-
-    if (!bgfx::isValid(oitCompProgram))
-    {
-        logger->error("Failed to create OIT composition program.");
-        throw std::runtime_error("Failed to create OIT composition program.");
-    }
-
-    tonemapProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tonemap"), true);
-
-    if (!bgfx::isValid(tonemapProgram))
-    {
-        logger->error("Failed to create tonemap program.");
-        throw std::runtime_error("Failed to create tonemap program.");
-    }
 
     blitProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_blit"), true);
@@ -1099,191 +1422,12 @@ void field::init(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create blit program.");
     }
 
-    taaResolveProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
-
-    if (!bgfx::isValid(taaResolveProgram))
-    {
-        logger->error("Failed to create TAA resolve program.");
-        throw std::runtime_error("Failed to create TAA resolve program.");
-    }
-
-    mbVelocityProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
-    if (!bgfx::isValid(mbVelocityProgram))
-    {
-        logger->error("Failed to create motion blur velocity program.");
-        throw std::runtime_error("Failed to create motion blur velocity program.");
-    }
-
-    mbTileMaxXProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_x"), true);
-    if (!bgfx::isValid(mbTileMaxXProgram))
-    {
-        logger->error("Failed to create motion blur tile max X program.");
-        throw std::runtime_error("Failed to create motion blur tile max X program.");
-    }
-
-    mbTileMaxYProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_tilemax_y"), true);
-    if (!bgfx::isValid(mbTileMaxYProgram))
-    {
-        logger->error("Failed to create motion blur tile max Y program.");
-        throw std::runtime_error("Failed to create motion blur tile max Y program.");
-    }
-
-    mbJFAProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa"), true);
-    if (!bgfx::isValid(mbJFAProgram))
-    {
-        logger->error("Failed to create motion blur JFA program.");
-        throw std::runtime_error("Failed to create motion blur JFA program.");
-    }
-
-    mbJFABacktrackingProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_jfa_backtracking"), true);
-    if (!bgfx::isValid(mbJFABacktrackingProgram))
-    {
-        logger->error("Failed to create motion blur JFA backtracking program.");
-        throw std::runtime_error("Failed to create motion blur JFA backtracking program.");
-    }
-
-    mbNeighborMaxProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_neighbormax"), true);
-    if (!bgfx::isValid(mbNeighborMaxProgram))
-    {
-        logger->error("Failed to create motion blur neighbor max program.");
-        throw std::runtime_error("Failed to create motion blur neighbor max program.");
-    }
-
-    mbBlurProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur"), true);
-    if (!bgfx::isValid(mbBlurProgram))
-    {
-        logger->error("Failed to create motion blur blur program.");
-        throw std::runtime_error("Failed to create motion blur blur program.");
-    }
-
-    mbBlurSimpleProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_blur_simple"), true);
-    if (!bgfx::isValid(mbBlurSimpleProgram))
-    {
-        logger->error("Failed to create motion blur simple blur program.");
-        throw std::runtime_error("Failed to create motion blur simple blur program.");
-    }
-
-    mbCacheProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_cache"), true);
-    if (!bgfx::isValid(mbCacheProgram))
-    {
-        logger->error("Failed to create motion blur cache program.");
-        throw std::runtime_error("Failed to create motion blur cache program.");
-    }
-
-    u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
-
-    if (!bgfx::isValid(u_baseColor))
-    {
-        logger->error("Failed to create uniform: u_baseColor");
-        throw std::runtime_error("Failed to create uniform: u_baseColor");
-    }
-
-    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4);
-
-    if (!bgfx::isValid(u_info))
-    {
-        logger->error("Failed to create uniform: u_info");
-        throw std::runtime_error("Failed to create uniform: u_info");
-    }
-
-    u_normalMatrix = bgfx::createUniform("u_normalMatrix", bgfx::UniformType::Mat3);
-    if (!bgfx::isValid(u_normalMatrix))
-    {
-        logger->error("Failed to create uniform: u_normalMatrix");
-        throw std::runtime_error("Failed to create uniform: u_normalMatrix");
-    }
-
-    u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
-    if (!bgfx::isValid(u_previousModelViewProj))
-    {
-        logger->error("Failed to create uniform: u_previousModelViewProj");
-        throw std::runtime_error("Failed to create uniform: u_previousModelViewProj");
-    }
-
-    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
-    if (!bgfx::isValid(u_previousView))
-    {
-        logger->error("Failed to create uniform: u_previousView");
-        throw std::runtime_error("Failed to create uniform: u_previousView");
-    }
-
-    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformType::Mat4);
-    if (!bgfx::isValid(u_previousProj))
-    {
-        logger->error("Failed to create uniform: u_previousProj");
-        throw std::runtime_error("Failed to create uniform: u_previousProj");
-    }
-
-    u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(u_jitter))
-    {
-        logger->error("Failed to create uniform: u_jitter");
-        throw std::runtime_error("Failed to create uniform: u_jitter");
-    }
-
-    u_pbrData = bgfx::createUniform("u_pbrData", bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(u_pbrData))
-    {
-        logger->error("Failed to create uniform: u_pbrData");
-        throw std::runtime_error("Failed to create uniform: u_pbrData");
-    }
-
-    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, 3);
-    if (!bgfx::isValid(u_lightPos))
-    {
-        logger->error("Failed to create uniform: u_lightPos");
-        throw std::runtime_error("Failed to create uniform: u_lightPos");
-    }
-
-    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, 3);
-    if (!bgfx::isValid(u_lightColor))
-    {
-        logger->error("Failed to create uniform: u_lightColor");
-        throw std::runtime_error("Failed to create uniform: u_lightColor");
-    }
-
-    u_mbSampleStepMultiplier = bgfx::createUniform("u_mbSampleStepMultiplier", bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(u_mbSampleStepMultiplier))
-    {
-        logger->error("Failed to create uniform: u_mbSampleStepMultiplier");
-        throw std::runtime_error("Failed to create uniform: u_mbSampleStepMultiplier");
-    }
-
-    u_mbVelocityData = bgfx::createUniform("u_mbVelocityData", bgfx::UniformType::Vec4, 3);
-    if (!bgfx::isValid(u_mbVelocityData))
-    {
-        logger->error("Failed to create uniform: u_mbVelocityData");
-        throw std::runtime_error("Failed to create uniform: u_mbVelocityData");
-    }
-
-    u_mbJFAData = bgfx::createUniform("u_mbJFAData", bgfx::UniformType::Vec4, 2);
-    if (!bgfx::isValid(u_mbJFAData))
-    {
-        logger->error("Failed to create uniform: u_mbJFAData");
-        throw std::runtime_error("Failed to create uniform: u_mbJFAData");
-    }
-
-    u_mbBlurData = bgfx::createUniform("u_mbBlurData", bgfx::UniformType::Vec4, 2);
-    if (!bgfx::isValid(u_mbBlurData))
-    {
-        logger->error("Failed to create uniform: u_mbBlurData");
-        throw std::runtime_error("Failed to create uniform: u_mbBlurData");
-    }
-
     initGBuffer(window.width, window.height);
-    initOIT(window.width, window.height);
+    initPBROIT(window.width, window.height);
+    initTonemap();
     initTAA(window.width, window.height);
     initMotionBlur(window.width, window.height);
+    initBloom(window.width, window.height);
 }
 
 void field::startNTClient()
@@ -1405,6 +1549,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gRevealTex.beginFrame();
 
     gbufAlbedo.beginFrame();
+    gbufEmission.beginFrame();
     gbufNormal.beginFrame();
     gbufVelocity.beginFrame();
     gFullVelocity.beginFrame();
@@ -1432,6 +1577,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gOitDepthPostPassFbo.ensure(width, height);
 
     gbufAlbedo.ensure(width, height);
+    gbufEmission.ensure(width, height);
     gbufNormal.ensure(width, height);
     gbufVelocity.ensure(width, height);
     gFullVelocity.ensure(width, height);
@@ -1441,6 +1587,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gBufFbo.ensure(width, height);
 
     gOutputColor.ensure(width, height);
+    gOutputColor.mipCount = calculateBloomMipmapLevels(gOutputColor.width, gOutputColor.height);
     gMBPreviousOutputColor.ensure(width, height);
 
     gTAABuffer0.ensure(width, height);
@@ -1488,6 +1635,7 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
     encoder->setIndexBuffer(mesh.indexBuffer);
 
     encoder->setUniform(u_baseColor, mesh.material.baseColor.data());
+    encoder->setUniform(u_emissionColor, mesh.material.emissionColor.data());
     encoder->setUniform(u_previousModelViewProj, previousViewProj);
     encoder->setUniform(u_pbrData, pbrData);
 }
@@ -1513,7 +1661,7 @@ void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16], float
         }
         else
         {
-            encoder->submit(VIEW_GBUFFER, program);
+            encoder->submit(VIEW_GBUFFER, programPBR);
         }
     }
 }
@@ -1544,7 +1692,7 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes
         }
         else
         {
-            encoder->submit(VIEW_GBUFFER, programInstanced);
+            encoder->submit(VIEW_GBUFFER, programPBRInstanced);
         }
     }
 }
@@ -1559,6 +1707,7 @@ void field::render(const blackboard::app::Window &window)
     ImGui::Checkbox("Write Object Motion Vectors", &settings::writeObjectMotionVectors);
     ImGui::Checkbox("Enable Motion Blur", &settings::enableMotionBlur);
     ImGui::Checkbox("Enable TAA", &settings::enableTAA);
+    ImGui::Checkbox("Enable Bloom", &settings::enableBloom);
 
     ImGui::Separator();
 
@@ -1603,6 +1752,8 @@ void field::render(const blackboard::app::Window &window)
         }
 
         Mesh::createBuffersForMeshes(fieldMeshes);
+
+        fmsUI->postProcessField(fieldMeshes);
 
         createdFieldMeshBuffers = true;
     }
@@ -1901,9 +2052,10 @@ void field::render(const blackboard::app::Window &window)
     encoder->setImage(0, gAccumTex.handle, 0, bgfx::Access::Read);
     encoder->setImage(1, gRevealTex.handle, 0, bgfx::Access::Read);
     encoder->setImage(2, gbufAlbedo.handle, 0, bgfx::Access::Read);
-    encoder->setImage(3, gbufNormal.handle, 0, bgfx::Access::Read);
-    encoder->setImage(4, gbufDepth.handle, 0, bgfx::Access::Read);
-    encoder->setImage(5, gOutputColor.handle, 0, bgfx::Access::Write);
+    encoder->setImage(3, gbufEmission.handle, 0, bgfx::Access::Read);
+    encoder->setImage(4, gbufNormal.handle, 0, bgfx::Access::Read);
+    encoder->setImage(5, gbufDepth.handle, 0, bgfx::Access::Read);
+    encoder->setImage(6, gOutputColor.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity
@@ -2101,7 +2253,54 @@ void field::render(const blackboard::app::Window &window)
     }
 
     // Bloom
+    if(settings::enableBloom)
+    {
+        float bloomThresholdField[4] = {bloomThreshold, bloomThreshold - bloomKnee, 2 * bloomKnee, 0.25f * bloomKnee};
 
+        float mipSizeX = (float)m_width / 2;
+        float mipSizeY = (float)m_height / 2;
+
+        for(uint8_t i=0;i<gOutputColor.mipCount-1;++i) {
+            encoder->setUniform(u_bloomThreshold, bloomThresholdField);
+            encoder->setTexture(0, s_tex, gOutputColor.handle, 0, 1, i, 1);
+
+            xGroups = (int)floorf((mipSizeX - 1) / 8 + 1);
+            yGroups = (int)floorf((mipSizeY - 1) / 8 + 1);
+
+            float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i), 0.0f};
+            encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
+
+            encoder->setImage(1, gOutputColor.handle, i+1, bgfx::Access::Write);
+
+            encoder->dispatch(VIEW_POSTPROCESS, bloomDownscaleProgram, xGroups, yGroups);
+
+            mipSizeX /= 2;
+            mipSizeY /= 2;
+        }
+
+        float bloomIntensityField[4] = {bloomIntensity, bloomDirtIntensity, 0.0f, 0.0f};
+
+        for(uint8_t i=gOutputColor.mipCount-1;i>=1;--i) {
+            encoder->setUniform(u_bloomIntensity, bloomIntensityField);
+            encoder->setTexture(0, s_tex, gOutputColor.handle, 0, 1, i, 1);
+            encoder->setTexture(2, s_bloomDirt, bloomDirtMask.handle);
+
+            mipSizeX = std::max(1.0f, floorf(float(m_width) / (1 << (i-1))));
+            mipSizeY = std::max(1.0f, floorf(float(m_height) / (1 << (i-1))));
+            
+            xGroups = (int)floorf((mipSizeX - 1) / 8 + 1);
+            yGroups = (int)floorf((mipSizeY - 1) / 8 + 1);
+
+            float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i), 0.0f};
+            encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
+
+            encoder->setImage(1, gOutputColor.handle, i-1, bgfx::Access::ReadWrite);
+
+            encoder->dispatch(VIEW_POSTPROCESS, bloomUpscaleProgram, xGroups, yGroups);
+        }
+    }
+
+    // Blit and tonemap
     bgfx::setViewFrameBuffer(VIEW_BLIT, BGFX_INVALID_HANDLE);
     bgfx::setViewName(VIEW_BLIT, "Field - Blit");
     bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
@@ -2155,6 +2354,8 @@ void field::cleanup()
 
     if (bgfx::isValid(u_baseColor))
         bgfx::destroy(u_baseColor);
+    if (bgfx::isValid(u_emissionColor))
+        bgfx::destroy(u_emissionColor);
     if (bgfx::isValid(u_info))
         bgfx::destroy(u_info);
     if (bgfx::isValid(u_normalMatrix))
@@ -2183,10 +2384,17 @@ void field::cleanup()
     if (bgfx::isValid(u_mbBlurData))
         bgfx::destroy(u_mbBlurData);
 
-    if (bgfx::isValid(program))
-        bgfx::destroy(program);
-    if (bgfx::isValid(programInstanced))
-        bgfx::destroy(programInstanced);
+    if (bgfx::isValid(u_bloomThreshold))
+        bgfx::destroy(u_bloomThreshold);
+    if (bgfx::isValid(u_bloomTexelSize))
+        bgfx::destroy(u_bloomTexelSize);
+    if (bgfx::isValid(u_bloomIntensity))
+        bgfx::destroy(u_bloomIntensity);
+
+    if (bgfx::isValid(programPBR))
+        bgfx::destroy(programPBR);
+    if (bgfx::isValid(programPBRInstanced))
+        bgfx::destroy(programPBRInstanced);
     if (bgfx::isValid(programOit))
         bgfx::destroy(programOit);
     if (bgfx::isValid(programOitInstanced))
@@ -2221,6 +2429,10 @@ void field::cleanup()
         bgfx::destroy(mbBlurSimpleProgram);
     if (bgfx::isValid(mbCacheProgram))
         bgfx::destroy(mbCacheProgram);
+    if(bgfx::isValid(bloomDownscaleProgram))
+        bgfx::destroy(bloomDownscaleProgram);
+    if(bgfx::isValid(bloomUpscaleProgram))
+        bgfx::destroy(bloomUpscaleProgram);
 
     gAccumTex.destroy();
     gRevealTex.destroy();
@@ -2229,6 +2441,7 @@ void field::cleanup()
     gOitDepthPostPassFbo.destroy();
 
     gbufAlbedo.destroy();
+    gbufEmission.destroy();
     gbufNormal.destroy();
     gbufVelocity.destroy();
     gFullVelocity.destroy();
@@ -2250,6 +2463,8 @@ void field::cleanup()
     gMBBufferB.destroy();
     gMBOutputColor.destroy();
     gMBVelocity.destroy();
+
+    bloomDirtMask.destroy();
 
     if (bgfx::isValid(s_tex))
         bgfx::destroy(s_tex);
@@ -2274,4 +2489,6 @@ void field::cleanup()
         bgfx::destroy(s_mbNeighborMax);
     if (bgfx::isValid(s_mbBuffer))
         bgfx::destroy(s_mbBuffer);
+    if (bgfx::isValid(s_bloomDirt))
+        bgfx::destroy(s_bloomDirt);
 }

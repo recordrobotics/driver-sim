@@ -5,7 +5,6 @@ project(blackboard_app_lib)
 option(BIG_RENDERER_GL "Use GL" OFF)
 cmake_dependent_option(BIG_RENDERER_VULKAN "Use Vulkan" ON
                        "BIG_PLATFORM_LINUX; NOT BIG_RENDERER_GL" OFF)
-option(BIG_RENDERER_WEBGPU "Compile WGSL shaders" ON)
 
 option(BIG_WM_WAYLAND "Use Wayland" OFF)
 cmake_dependent_option(BIG_WM_X11 "Use X11" ON
@@ -25,9 +24,6 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ./**.cpp ./**.c)
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ./**.hpp ./**.h)
 file(GLOB_RECURSE VS_SHADERS CONFIGURE_DEPENDS vs_*.sc)
 file(GLOB_RECURSE FS_SHADERS CONFIGURE_DEPENDS fs_*.sc)
-
-# bgfx_compile_shaders appends the wgsl profile only when this variable is enabled.
-set(BGFX_CONFIG_RENDERER_WEBGPU ${BIG_RENDERER_WEBGPU})
 
 set(BIG_SHADER_INCLUDE_DIRS
     ${CMAKE_CURRENT_LIST_DIR}/platform/include

@@ -73,9 +73,6 @@ file(GLOB_RECURSE VS_SHADERS CONFIGURE_DEPENDS vs_*.sc)
 file(GLOB_RECURSE FS_SHADERS CONFIGURE_DEPENDS fs_*.sc)
 file(GLOB_RECURSE CS_SHADERS CONFIGURE_DEPENDS cs_*.sc)
 
-# bgfx_compile_shaders appends the wgsl profile only when this variable is enabled.
-set(BGFX_CONFIG_RENDERER_WEBGPU ${BIG_RENDERER_WEBGPU})
-
 set(BIG_SHADER_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/blackboard_app/platform/include
 )
@@ -83,7 +80,7 @@ set(BIG_SHADER_INCLUDE_DIRS
 bgfx_compile_shaders(
   TYPE VERTEX
   SHADERS ${VS_SHADERS}
-    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/varying.def.sc
+    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/common/varying.def.sc
     INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
   OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
   AS_HEADERS
@@ -91,7 +88,7 @@ bgfx_compile_shaders(
 bgfx_compile_shaders(
   TYPE FRAGMENT
   SHADERS ${FS_SHADERS}
-    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/varying.def.sc
+    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/common/varying.def.sc
     INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
   OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
   AS_HEADERS
@@ -99,7 +96,7 @@ bgfx_compile_shaders(
 bgfx_compile_shaders(
   TYPE COMPUTE
   SHADERS ${CS_SHADERS}
-    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/varying.def.sc
+    VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/common/varying.def.sc
     INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
   OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
   AS_HEADERS
@@ -111,7 +108,8 @@ if(WINDOWS)
             ${FONTS} ${IMAGES} ${GAME_IMAGES}
             ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS}
             ${PACKAGED_ASSETS}
-            ${CMAKE_CURRENT_LIST_DIR}/assets/app.rc)
+            ${CMAKE_CURRENT_LIST_DIR}/assets/app.rc
+            ${CMAKE_CURRENT_LIST_DIR}/assets/segmentheap.manifest)
 elseif(MACOS)
     add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
     set_target_properties(${PROJECT_NAME} PROPERTIES

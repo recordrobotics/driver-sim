@@ -71,7 +71,7 @@ vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, 
     return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
-vec4 pbr(vec3 albedo, vec3 world_position, vec3 camera_position, vec3 normal, float alpha) {
+vec4 pbr(vec3 albedo, vec3 emission, vec3 world_position, vec3 camera_position, vec3 normal, float alpha) {
     if(alpha == 0.0) {
         return vec4_splat(0.0);
     }
@@ -94,7 +94,7 @@ vec4 pbr(vec3 albedo, vec3 world_position, vec3 camera_position, vec3 normal, fl
 
     vec3 ambient = vec3_splat(0.03) * albedo * ao;
 
-    vec3 color = ambient + Lo;
+    vec3 color = ambient + Lo + emission;
 
     return vec4(color, alpha);
 }

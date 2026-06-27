@@ -34,6 +34,7 @@ namespace settings
 {
     bool enableTAA = true;
     bool enableMotionBlur = true;
+    bool enableBloom = true;
     bool writeObjectMotionVectors = false;
 
     bool showSelectPage = true;
@@ -68,6 +69,7 @@ namespace settings
         logger->info("Loading default settings.");
         enableTAA = true;
         enableMotionBlur = true;
+        enableBloom = true;
         writeObjectMotionVectors = false;
 
         showSelectPage = true;
@@ -183,6 +185,7 @@ namespace settings
 
             enableTAA = j.value("enableTAA", enableTAA);
             enableMotionBlur = j.value("enableMotionBlur", enableMotionBlur);
+            enableBloom = j.value("enableBloom", enableBloom);
             writeObjectMotionVectors = j.value("writeObjectMotionVectors", writeObjectMotionVectors);
 
             showSelectPage = j.value("showSelectPage", showSelectPage);
@@ -219,6 +222,7 @@ namespace settings
         nlohmann::json j;
         j["enableTAA"] = enableTAA;
         j["enableMotionBlur"] = enableMotionBlur;
+        j["enableBloom"] = enableBloom;
         j["writeObjectMotionVectors"] = writeObjectMotionVectors;
 
         j["showSelectPage"] = showSelectPage;

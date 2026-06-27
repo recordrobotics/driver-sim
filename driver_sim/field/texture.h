@@ -17,18 +17,21 @@ typedef struct Texture
     bgfx::TextureFormat::Enum format;
     uint64_t flags;
     bool hasResized;
+    uint8_t mipCount;
 
     Texture()
-        : handle(BGFX_INVALID_HANDLE), width(0), height(0), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1), format(bgfx::TextureFormat::Unknown), flags(0), hasResized(false)
+        : handle(BGFX_INVALID_HANDLE), width(0), height(0), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1), format(bgfx::TextureFormat::Unknown), flags(0), hasResized(false), mipCount(0)
     {
     }
 
     Texture(const Texture &other)
-        : name(other.name), handle(other.handle), width(other.width), height(other.height), widthFraction(other.widthFraction), heightFraction(other.heightFraction), hasMips(other.hasMips), numLayers(other.numLayers), format(other.format), flags(other.flags), hasResized(other.hasResized)
+        : name(other.name), handle(other.handle), width(other.width), height(other.height), widthFraction(other.widthFraction), heightFraction(other.heightFraction), hasMips(other.hasMips), numLayers(other.numLayers), format(other.format), flags(other.flags), hasResized(other.hasResized), mipCount(other.mipCount)
     {
     }
 
     Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags);
+
+    Texture(std::string name, void *image_data, int image_data_size, uint64_t _flags);
 
     /**
      * Ensures that the texture is the correct size for the given view dimensions.
@@ -64,5 +67,7 @@ typedef struct FrameBuffer
 
 #define TEXTURE(out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags) \
     out_var = Texture(#out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags);
+#define TEXTURE_EMBEDDED(out_var, image, flags) \
+    out_var = Texture(#out_var, (void *)image##_bytes, sizeof(image##_bytes), flags);
 #define FRAMEBUFFER(out_var, ...) \
     out_var = FrameBuffer(#out_var, {__VA_ARGS__});

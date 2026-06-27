@@ -11,6 +11,7 @@ namespace settings
 
     extern bool enableTAA;
     extern bool enableMotionBlur;
+    extern bool enableBloom;
     extern bool writeObjectMotionVectors;
 
     extern bool showSelectPage;

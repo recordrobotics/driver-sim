@@ -1,0 +1,7 @@
+{
+    "java.import.gradle.enabled": false,
+    "files.associations": {
+        "**/shaders/**/*.sc": "hlsl",
+        "**/shaders/**/*.sh": "hlsl"
+    }
+}

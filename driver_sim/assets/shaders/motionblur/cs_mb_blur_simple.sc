@@ -9,7 +9,7 @@ SAMPLER2D(s_color, 0);
 SAMPLER2D(s_depth, 1);
 SAMPLER2D(s_velocity, 2);
 SAMPLER2D(s_buffer, 3);
-IMAGE2D_WO(s_output, rgba32f, 4);
+IMAGE2D_WO(s_output, rgba16f, 4);
 
 uniform vec4 u_mbBlurData[2];
 // near plane distance

@@ -5,8 +5,8 @@
 
 SAMPLER2D(s_depth, 0);
 SAMPLER2D(s_velocity, 1);
-IMAGE2D_WO(s_output, rgba32f, 2);
-IMAGE2D_WO(s_full_velocity_output, rgba32f, 3);
+IMAGE2D_WO(s_output, rgba16f, 2);
+IMAGE2D_WO(s_full_velocity_output, rgba16f, 3);
 
 uniform vec4 u_mbVelocityData[3];
 
