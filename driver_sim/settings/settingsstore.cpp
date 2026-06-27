@@ -35,7 +35,7 @@ namespace settings
     bool enableTAA = true;
     bool enableMotionBlur = true;
     bool enableBloom = true;
-    bool writeObjectMotionVectors = false;
+    bool writeObjectMotionVectors = true;
 
     bool showSelectPage = true;
     bool cacheModels = true;
@@ -70,7 +70,7 @@ namespace settings
         enableTAA = true;
         enableMotionBlur = true;
         enableBloom = true;
-        writeObjectMotionVectors = false;
+        writeObjectMotionVectors = true;
 
         showSelectPage = true;
         cacheModels = true;

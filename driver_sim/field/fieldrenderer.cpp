@@ -29,6 +29,8 @@
 #include <networktables/StructTopic.h>
 #include <networktables/StructArrayTopic.h>
 
+#include <wpi/struct/Struct.h>
+
 #include <frc/geometry/Pose3d.h>
 #include <frc/geometry/struct/Pose3dStruct.h>
 
@@ -41,6 +43,49 @@
 #include "seasonspecific/rebuilt2026/hublights.h"
 #endif
 
+struct Pose3dObject {
+    frc::Pose3d pose;
+    int identity;
+
+    Pose3dObject(const frc::Pose3d& p, int id) : pose(p), identity(id) {}
+
+    Pose3dObject() : pose(frc::Pose3d()), identity(0) {}
+};
+
+namespace {
+    constexpr size_t kPoseOff = 0;
+    constexpr size_t kIdentityOff =
+        kPoseOff + wpi::GetStructSize<frc::Pose3d>();
+}  // namespace
+
+template <>
+struct wpi::Struct<Pose3dObject> {
+  static constexpr std::string_view GetTypeName() { return "Pose3dObject"; }
+  static constexpr size_t GetSize() {
+    return wpi::GetStructSize<frc::Pose3d>() + 4;
+  }
+  static constexpr std::string_view GetSchema() {
+    return "Pose3d pose;int identity";
+  }
+
+  static Pose3dObject Unpack(std::span<const uint8_t> data) {
+    return Pose3dObject{
+        wpi::UnpackStruct<frc::Pose3d, kPoseOff>(data),
+        wpi::UnpackStruct<int, kIdentityOff>(data)
+    };
+    }
+  static void Pack(std::span<uint8_t> data, const Pose3dObject& value) {
+  wpi::PackStruct<kPoseOff>(data, value.pose);
+  wpi::PackStruct<kIdentityOff>(data, value.identity);
+  }
+  static void ForEachNested(
+      std::invocable<std::string_view, std::string_view> auto fn) {
+    wpi::ForEachStructSchema<frc::Pose3d>(fn);
+  }
+};
+
+static_assert(wpi::StructSerializable<Pose3dObject>);
+static_assert(wpi::HasNestedStruct<Pose3dObject>);
 
 static const bgfx::EmbeddedShader s_embeddedShaders[] =
     {
@@ -145,20 +190,20 @@ static const std::array<std::string, CAMERA_VIEW_COUNT> CAMERA_VIEW_NAMES = {
 
 static constexpr float INCHES_TO_METERS = 0.0254f;
 
-static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 16;
+static constexpr uint16_t MB_SAMPLE_STEP_MULTIPLIER = 8;
 static constexpr float MB_PERPEN_ERROR_THRESHOLD = 0.3f;
-static constexpr float MB_STEP_EXPONENT_MODIFIER = 1.3f;
-static constexpr uint16_t MB_BACKTRACKING_SAMPLE_COUNT = 8;
+static constexpr float MB_STEP_EXPONENT_MODIFIER = 1.8f;
+static constexpr uint16_t MB_BACKTRACKING_SAMPLE_COUNT = 16;
 static constexpr float MB_BACKTRACKING_VELOCITY_MATCH_THRESHOLD = 0.9f;
 static constexpr float MB_BACKTRACKING_VELOCITY_PARALLEL_S = 1.0f;
 static constexpr float MB_BACKTRACKING_VELOCITY_PERPENDICULAR_S = 0.05f;
 static constexpr float MB_BACKTRACKING_DEPTH_MATCH_THRESHOLD = 0.001f;
-static constexpr uint16_t MB_JFA_PASS_COUNT = 3;
+static constexpr uint16_t MB_JFA_PASS_COUNT = 6;
 static constexpr bool MB_FRAMERATE_INDEPENDENT = true;
 static constexpr bool MB_UNCAPPED_INDEPENDENCE = false;
 static constexpr float MB_TARGET_CONSTANT_FRAMERATE = 30;
 
-static constexpr bool SCALE_MB_BUFFERS = false;
+static constexpr bool SCALE_MB_BUFFERS = true;
 
 static constexpr uint8_t BLOOM_DOWNSCALE_LIMIT = 10;
 static constexpr uint8_t BLOOM_MAX_ITERATIONS = 16;
@@ -191,7 +236,7 @@ typedef struct MBVelocityComponent
 
 static constexpr MBVelocityComponent MB_CAMERA_ROTATION_COMPONENT = {1.0f, 0.0f, 1.0f};
 static constexpr MBVelocityComponent MB_CAMERA_MOVEMENT_COMPONENT = {1.0f, 0.0f, 1.0f};
-static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {1.0f, 0.0f, 1.0f};
+static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {20.0f, 0.0f, 10.0f};
 
 using namespace blackboard::logger;
 
@@ -954,7 +999,7 @@ std::vector<Mesh> fieldMeshes;
 
 typedef struct DynamicObjectData
 {
-    bool hasData = false;
+    int lastDataUpdate = -1;
     bx::Vec3 position = {0.0f, 0.0f, 0.0f};
     bx::Vec3 rotation = {0.0f, 0.0f, 0.0f};
 
@@ -1013,12 +1058,15 @@ typedef struct RobotData
 typedef struct GamePieceData
 {
     std::string name;
-    std::vector<DynamicObjectData> instances;
+    std::unordered_map<int, DynamicObjectData> instances;
     std::array<float, 16> modelMatrix;
     std::vector<Mesh> meshes;
 
     nt::StructArrayTopic<frc::Pose3d> posesTopic;
     nt::StructArraySubscriber<frc::Pose3d> posesSub;
+
+    nt::StructArrayTopic<Pose3dObject> poseObjectsTopic;
+    nt::StructArraySubscriber<Pose3dObject> poseObjectsSub;
 } GamePieceData;
 
 std::vector<RobotData> robots;
@@ -1711,9 +1759,11 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes
 
 bool createdFieldMeshBuffers = false;
 bool createdRobotMeshBuffers = false;
+int currentDataUpdateIndex = 0;
 
 void field::render(const blackboard::app::Window &window)
 {
+    currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
     ImGui::Begin("Options");
     ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
     ImGui::Checkbox("Write Object Motion Vectors", &settings::writeObjectMotionVectors);
@@ -1760,6 +1810,8 @@ void field::render(const blackboard::app::Window &window)
         {
             gamePiece.posesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Positions");
             gamePiece.posesSub = gamePiece.posesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+            gamePiece.poseObjectsTopic = ntInst.GetStructArrayTopic<Pose3dObject>("/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Objects");
+            gamePiece.poseObjectsSub = gamePiece.poseObjectsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
             Mesh::createBuffersForMeshes(gamePiece.meshes);
         }
 
@@ -1798,7 +1850,7 @@ void field::render(const blackboard::app::Window &window)
         auto robotPose = robot.poseSub.GetAtomic();
         if (robot.poseSub.Exists())
         {
-            robot.dynamicData.hasData = true;
+            robot.dynamicData.lastDataUpdate = currentDataUpdateIndex;
 
             frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
             robot.dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
@@ -1810,7 +1862,7 @@ void field::render(const blackboard::app::Window &window)
             Transform robotOrigin{robot.dynamicData.position, robot.dynamicData.rotation};
             for (size_t i = 0; i < robot.components.size(); ++i)
             {
-                robot.components[i].dynamicData.hasData = true;
+                robot.components[i].dynamicData.lastDataUpdate = currentDataUpdateIndex;
 
                 if (robot.componentPosesSub.Exists() && i < componentPoses.value.size())
                 {
@@ -1829,51 +1881,58 @@ void field::render(const blackboard::app::Window &window)
         }
         else
         {
-            robot.dynamicData.hasData = false;
+            robot.dynamicData.lastDataUpdate = -1;
             for (auto &component : robot.components)
             {
-                component.dynamicData.hasData = false;
+                component.dynamicData.lastDataUpdate = -1;
             }
         }
     }
 
     for (auto &gamePiece : gamePieces)
     {
-        auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
-        if (gamePiece.posesSub.Exists())
+        bool hasObjects = gamePiece.poseObjectsSub.Exists();
+        if (hasObjects || gamePiece.posesSub.Exists())
         {
-            for (size_t i = 0; i < std::max(gamePiecePoses.value.size(), gamePiece.instances.size()); ++i)
+            auto updateInstance = [&](DynamicObjectData &instance, const frc::Pose3d &pose)
             {
-                if (i >= gamePiece.instances.size())
-                {
-                    gamePiece.instances.emplace_back();
-                }
-                else if (i >= gamePiecePoses.value.size())
-                {
-                    gamePiece.instances[i].hasData = false;
-                    continue;
-                }
+                auto localPose = transformPose3dToLocalCoordinates(pose);
+                instance.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+                instance.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+                instance.update(gamePiece.modelMatrix.data(), deltaTime);
 
-                gamePiece.instances[i].hasData = true;
+                if(instance.lastDataUpdate == -1) {
+                    instance.instanceData.previousTransform = instance.instanceData.transform;
+                }
+                instance.lastDataUpdate = currentDataUpdateIndex;
+            };
 
-                auto localPose = transformPose3dToLocalCoordinates(gamePiecePoses.value[i]);
-                gamePiece.instances[i].position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-                gamePiece.instances[i].rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
-                gamePiece.instances[i].update(gamePiece.modelMatrix.data(), deltaTime);
+            if(hasObjects) {
+                auto gamePiecePoseObjects = gamePiece.poseObjectsSub.GetAtomic();
+                for (size_t i = 0; i < gamePiecePoseObjects.value.size(); ++i)
+                {
+                    updateInstance(gamePiece.instances[gamePiecePoseObjects.value[i].identity], gamePiecePoseObjects.value[i].pose);
+                }
+            } else {
+                auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
+                for (size_t i = 0; i < gamePiecePoses.value.size(); ++i)
+                {
+                    updateInstance(gamePiece.instances[i], gamePiecePoses.value[i]);
+                }
             }
+            std::erase_if(gamePiece.instances, [](const std::pair<int, DynamicObjectData> &pair) {
+                return pair.second.lastDataUpdate != currentDataUpdateIndex;
+            });
         }
         else
         {
-            for (auto &instance : gamePiece.instances)
-            {
-                instance.hasData = false;
-            }
+            gamePiece.instances.clear();
         }
     }
 
     if (cameraView == CameraView::Robot || cameraView == CameraView::RobotRelative)
     {
-        if (robots.size() > 0 && robots.back().dynamicData.hasData)
+        if (robots.size() > 0 && robots.back().dynamicData.lastDataUpdate == currentDataUpdateIndex)
         {
             float translationMtx[16];
             bx::mtxTranslate(translationMtx, robots.back().dynamicData.position.x, robots.back().dynamicData.position.y, robots.back().dynamicData.position.z);
@@ -1999,12 +2058,12 @@ void field::render(const blackboard::app::Window &window)
         for (auto &gamePiece : gamePieces)
         {
             std::vector<InstanceData> instanceData;
-            auto filtered = gamePiece.instances | std::views::filter([](const DynamicObjectData &dynamicData)
-                                                                     { return dynamicData.hasData; });
+            auto filtered = gamePiece.instances | std::views::filter([](const std::pair<int, DynamicObjectData> &pair)
+                                                                     { return pair.second.lastDataUpdate == currentDataUpdateIndex; });
             instanceData.reserve(std::ranges::distance(filtered));
             std::ranges::transform(filtered, std::back_inserter(instanceData),
-                                   [](const DynamicObjectData &dynamicData)
-                                   { return dynamicData.instanceData; });
+                                   [](const std::pair<int, DynamicObjectData> &pair)
+                                   { return pair.second.instanceData; });
             if (!instanceData.empty())
             {
                 drawMeshesInstanced(encoder, gamePiece.meshes, instanceData);
@@ -2021,7 +2080,7 @@ void field::render(const blackboard::app::Window &window)
     {
         std::vector<InstanceData> instanceData;
         auto filtered = robots | std::views::filter([](const RobotData &robot)
-                                                    { return robot.dynamicData.hasData; });
+                                                    { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; });
         instanceData.reserve(std::ranges::distance(filtered));
         std::ranges::transform(filtered, std::back_inserter(instanceData),
                                [](const RobotData &robot)
@@ -2033,7 +2092,7 @@ void field::render(const blackboard::app::Window &window)
 
         for (auto &component : robots.back().components)
         {
-            if (!component.dynamicData.hasData)
+            if (component.dynamicData.lastDataUpdate != currentDataUpdateIndex)
             {
                 continue;
             }
