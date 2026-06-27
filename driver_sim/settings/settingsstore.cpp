@@ -45,7 +45,7 @@ namespace settings
     std::unordered_set<std::string> enabledExtensions;
     bool launchElastic = true;
     bool launchRobotCode = true;
-    double ntPeriodic = 0.02;
+    double ntPeriodic = 0.022;
 
     uint64_t javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
 
@@ -88,7 +88,7 @@ namespace settings
 
         launchElastic = true;
         launchRobotCode = true;
-        ntPeriodic = 0.02;
+        ntPeriodic = 0.022;
         javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
 
         gameTeam = 6731;
