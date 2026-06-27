@@ -839,6 +839,24 @@ void initBloom(uint16_t width, uint16_t height)
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
+inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
+{
+    const frc::Quaternion& frcQuat = rotation.GetQuaternion();
+    return {static_cast<float>(frcQuat.X()),
+            static_cast<float>(frcQuat.Y()),
+            static_cast<float>(frcQuat.Z()),
+            static_cast<float>(frcQuat.W())};
+}
+
+inline constexpr bx::Quaternion rotation3dToQuaternionInverse(const frc::Rotation3d &rotation)
+{
+    const frc::Quaternion frcQuat = rotation.GetQuaternion().Inverse();
+    return {static_cast<float>(frcQuat.X()),
+            static_cast<float>(frcQuat.Y()),
+            static_cast<float>(frcQuat.Z()),
+            static_cast<float>(frcQuat.W())};
+}
+
 typedef struct Transform
 {
     float matrix[16];
@@ -848,10 +866,10 @@ typedef struct Transform
         bx::mtxIdentity(matrix);
     }
 
-    Transform(float *modelMatrix, bx::Vec3 position, bx::Vec3 rotation)
+    Transform(float *modelMatrix, bx::Vec3 position, bx::Quaternion rotation)
     {
         float rotationMatrix[16];
-        bx::mtxRotateXYZ(rotationMatrix, rotation.x, rotation.y, rotation.z);
+        bx::mtxFromQuaternion(rotationMatrix, rotation);
         float translationMatrix[16];
         bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
         float relativeMatrix[16];
@@ -859,10 +877,10 @@ typedef struct Transform
         bx::mtxMul(matrix, modelMatrix, relativeMatrix);
     }
 
-    Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position, bx::Vec3 rotation)
+    Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position, bx::Quaternion rotation)
     {
         float rotationMatrix[16];
-        bx::mtxRotateXYZ(rotationMatrix, rotation.x, rotation.y, rotation.z);
+        bx::mtxFromQuaternion(rotationMatrix, rotation);
         float translationMatrix[16];
         bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
         float relativeMatrix[16];
@@ -872,10 +890,10 @@ typedef struct Transform
         bx::mtxMul(matrix, finalMatrix, parentMatrix);
     }
 
-    Transform(bx::Vec3 position, bx::Vec3 rotation)
+    Transform(bx::Vec3 position, bx::Quaternion rotation)
     {
         float rotationMatrix[16];
-        bx::mtxRotateXYZ(rotationMatrix, rotation.x, rotation.y, rotation.z);
+        bx::mtxFromQuaternion(rotationMatrix, rotation);
         float translationMatrix[16];
         bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
         bx::mtxMul(matrix, rotationMatrix, translationMatrix);
@@ -912,22 +930,12 @@ typedef struct DynamicObjectData
 {
     int lastDataUpdate = -1;
     bx::Vec3 position = {0.0f, 0.0f, 0.0f};
-    bx::Vec3 rotation = {0.0f, 0.0f, 0.0f};
+    bx::Quaternion rotation = rotation3dToQuaternion(frc::Rotation3d());
+
+    bx::Vec3 lastPosition = {0.0f, 0.0f, 0.0f};
+    bx::Quaternion lastRotation = rotation3dToQuaternion(frc::Rotation3d());
 
     InstanceData instanceData = {};
-
-    void update(float *modelMatrix, float deltaTime)
-    {
-        if (!freezeTemporalEffects)
-        {
-            instanceData.previousTransform = instanceData.transform;
-        }
-
-        instanceData.transform = {
-            modelMatrix,
-            position,
-            rotation};
-    }
 
     void update(float *modelMatrix, float *parentMatrix, float deltaTime)
     {
@@ -936,11 +944,36 @@ typedef struct DynamicObjectData
             instanceData.previousTransform = instanceData.transform;
         }
 
-        instanceData.transform = {
-            modelMatrix,
-            parentMatrix,
-            position,
-            rotation};
+        if(lastDataUpdate == -1) {
+            lastPosition = position;
+            lastRotation = rotation;
+        } else {
+            float interpolationFactor = deltaTime / settings::ntPeriodic;
+            lastPosition = bx::lerp(lastPosition, position, interpolationFactor);
+            lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
+        }
+
+        if(parentMatrix == nullptr) {
+            instanceData.transform = {
+                modelMatrix,
+                lastPosition,
+                lastRotation};
+        } else {
+            instanceData.transform = {
+                modelMatrix,
+                parentMatrix,
+                lastPosition,
+                lastRotation};
+        }
+
+        if(lastDataUpdate == -1) {
+            instanceData.previousTransform = instanceData.transform;
+        }
+    }
+
+    void update(float* modelMatrix, float deltaTime)
+    {
+        update(modelMatrix, nullptr, deltaTime);
     }
 } DynamicObjectData;
 
@@ -1141,10 +1174,7 @@ static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
             units::meter_t{fieldWidthMeters} / 2.0 - pose.X(),
             units::meter_t{fieldHeightMeters} / 2.0 - pose.Y(),
             pose.Z(),
-            frc::Rotation3d(
-                -pose.Rotation().X(),
-                -pose.Rotation().Y(),
-                units::degree_t{180} - pose.Rotation().Z()));
+            frc::Rotation3d(units::degree_t{0.0}, units::degree_t{0.0}, units::degree_t{180.0}).RotateBy(-pose.Rotation()));
     case WPILibCoordinateSystem::CenterRed:
         return pose;
     default:
@@ -1773,33 +1803,32 @@ void field::render(const blackboard::app::Window &window)
         auto robotPose = robot.poseSub.GetAtomic();
         if (robot.poseSub.Exists())
         {
-            robot.dynamicData.lastDataUpdate = currentDataUpdateIndex;
-
             frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
             robot.dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-            robot.dynamicData.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+            robot.dynamicData.rotation = rotation3dToQuaternion(localPose.Rotation());
             robot.dynamicData.update(robot.modelMatrix.data(), deltaTime);
+            robot.dynamicData.lastDataUpdate = currentDataUpdateIndex;
 
             // Update component poses
             auto componentPoses = robot.componentPosesSub.GetAtomic();
-            Transform robotOrigin{robot.dynamicData.position, robot.dynamicData.rotation};
+            Transform robotOrigin{robot.dynamicData.lastPosition, robot.dynamicData.lastRotation};
             for (size_t i = 0; i < robot.components.size(); ++i)
             {
-                robot.components[i].dynamicData.lastDataUpdate = currentDataUpdateIndex;
-
                 if (robot.componentPosesSub.Exists() && i < componentPoses.value.size())
                 {
                     // invert rotation to match advscope
                     robot.components[i].dynamicData.position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
-                    robot.components[i].dynamicData.rotation = {-static_cast<float>(componentPoses.value[i].Rotation().X().value()), -static_cast<float>(componentPoses.value[i].Rotation().Y().value()), -static_cast<float>(componentPoses.value[i].Rotation().Z().value())};
+                    robot.components[i].dynamicData.rotation = rotation3dToQuaternionInverse(componentPoses.value[i].Rotation());
                     robot.components[i].dynamicData.update(robot.components[i].modelMatrix.data(), robotOrigin.matrix, deltaTime);
                 }
                 else
                 {
                     robot.components[i].dynamicData.position = {0.0f, 0.0f, 0.0f};
-                    robot.components[i].dynamicData.rotation = {0.0f, 0.0f, 0.0f};
+                    robot.components[i].dynamicData.rotation = rotation3dToQuaternion(frc::Rotation3d{});
                     robot.components[i].dynamicData.update(robot.modelMatrix.data(), robotOrigin.matrix, deltaTime);
                 }
+                
+                robot.components[i].dynamicData.lastDataUpdate = currentDataUpdateIndex;
             }
         }
         else
@@ -1821,12 +1850,8 @@ void field::render(const blackboard::app::Window &window)
             {
                 auto localPose = transformPose3dToLocalCoordinates(pose);
                 instance.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-                instance.rotation = {static_cast<float>(localPose.Rotation().X().value()), static_cast<float>(localPose.Rotation().Y().value()), static_cast<float>(localPose.Rotation().Z().value())};
+                instance.rotation = rotation3dToQuaternion(localPose.Rotation());
                 instance.update(gamePiece.modelMatrix.data(), deltaTime);
-
-                if(instance.lastDataUpdate == -1) {
-                    instance.instanceData.previousTransform = instance.instanceData.transform;
-                }
                 instance.lastDataUpdate = currentDataUpdateIndex;
             };
 
@@ -1858,12 +1883,12 @@ void field::render(const blackboard::app::Window &window)
         if (robots.size() > 0 && robots.back().dynamicData.lastDataUpdate == currentDataUpdateIndex)
         {
             float translationMtx[16];
-            bx::mtxTranslate(translationMtx, robots.back().dynamicData.position.x, robots.back().dynamicData.position.y, robots.back().dynamicData.position.z);
+            bx::mtxTranslate(translationMtx, robots.back().dynamicData.lastPosition.x, robots.back().dynamicData.lastPosition.y, robots.back().dynamicData.lastPosition.z);
             if (cameraView == CameraView::RobotRelative)
             {
                 // also apply rotation
                 float rotationMtx[16];
-                bx::mtxRotateXYZ(rotationMtx, robots.back().dynamicData.rotation.x, robots.back().dynamicData.rotation.y, robots.back().dynamicData.rotation.z);
+                bx::mtxFromQuaternion(rotationMtx, robots.back().dynamicData.lastRotation);
                 float transformMtx[16];
                 bx::mtxMul(transformMtx, rotationMtx, translationMtx);
                 bx::mtxInverse(orbitCamera.originTransform, transformMtx);
