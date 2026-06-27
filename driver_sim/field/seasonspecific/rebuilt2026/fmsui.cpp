@@ -261,8 +261,6 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 
         // Horizontal separator
         Rect({shiftPanelX, shiftPanelY - 1}, {shiftPanelW, 2}, borderColor);
-        // Outer border
-        Rect({shiftPanelX - 1, shiftPanelY - 1}, {shiftPanelW + 2, shiftPanelH + 2}, borderColor);
 
         int shiftNum;
         int shiftTimeLeft;
