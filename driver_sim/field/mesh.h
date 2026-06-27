@@ -12,7 +12,7 @@
 #include <fastgltf/types.hpp>
 
 constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 1; // increment to force reload cache
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 2; // increment to force reload cache
 
 enum class MaterialType
 {

@@ -1293,6 +1293,10 @@ void loadFieldModel()
         for (size_t i = 0; i < gamePieces.size(); i++)
         {
             loadAndCacheMeshes(gamePieces[i].meshes, fieldDirectory, "model_" + std::to_string(i), {});
+            for(auto &mesh : gamePieces[i].meshes)
+            {
+                mesh.material.writesObjectMotionVectors = true;
+            }
         }
 
         logger->info("Field initialized successfully.");
@@ -1355,9 +1359,17 @@ void loadRobotModel()
                           .components = components});
 
         loadAndCacheMeshes(robots.back().meshes, robotDirectory, "model", {});
+        for(auto &mesh : robots.back().meshes)
+        {
+            mesh.material.writesObjectMotionVectors = true;
+        }
         for (size_t i = 0; i < components.size(); i++)
         {
             loadAndCacheMeshes(robots.back().components[i].meshes, robotDirectory, "model_" + std::to_string(i), {});
+            for(auto &mesh : robots.back().components[i].meshes)
+            {
+                mesh.material.writesObjectMotionVectors = true;
+            }
         }
 
         logger->info("Robot initialized successfully.");
@@ -1605,7 +1617,7 @@ void ensureTextures(uint16_t width, uint16_t height)
 void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
 {
     float pbrData[4] = {
-        mesh.material.writesObjectMotionVectors ? 1.0f : 0.0f,
+        (mesh.material.writesObjectMotionVectors && settings::writeObjectMotionVectors) ? 1.0f : 0.0f,
         mesh.material.metallic,
         mesh.material.roughness,
         0.0f};
