@@ -42,6 +42,12 @@ Rebuilt2026FMSUI::Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst)
     blueHubActiveTopic = ntInst.GetBooleanTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active");
     blueHubActiveSub = blueHubActiveTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
 
+    redHubLedTopic = ntInst.GetBooleanTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led");
+    redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+
+    blueHubLedTopic = ntInst.GetBooleanTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led");
+    blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+
     redScoreTopic = ntInst.GetDoubleTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score");
     redScoreSub = redScoreTopic.Subscribe(0.0, {.periodic = settings::ntPeriodic});
 
@@ -82,11 +88,11 @@ void Rebuilt2026FMSUI::updateHubMaterials()
 {
     if (hubRedLightMaterial)
     {
-        hubRedLightMaterial->emissionColor = redHubActiveSub.Get() ? Rebuilt2026::redHubLedColor : Rebuilt2026::hubLedOffColor;
+        hubRedLightMaterial->emissionColor = redHubLedSub.Get() ? Rebuilt2026::redHubLedColor : Rebuilt2026::hubLedOffColor;
     }
     if (hubBlueLightMaterial)
     {
-        hubBlueLightMaterial->emissionColor = blueHubActiveSub.Get() ? Rebuilt2026::blueHubLedColor : Rebuilt2026::hubLedOffColor;
+        hubBlueLightMaterial->emissionColor = blueHubLedSub.Get() ? Rebuilt2026::blueHubLedColor : Rebuilt2026::hubLedOffColor;
     }
 }
 

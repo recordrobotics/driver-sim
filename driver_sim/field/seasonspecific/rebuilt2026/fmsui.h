@@ -43,6 +43,12 @@ private:
     nt::BooleanTopic blueHubActiveTopic;
     nt::BooleanSubscriber blueHubActiveSub;
 
+    nt::BooleanTopic redHubLedTopic;
+    nt::BooleanSubscriber redHubLedSub;
+
+    nt::BooleanTopic blueHubLedTopic;
+    nt::BooleanSubscriber blueHubLedSub;
+
     nt::DoubleTopic redScoreTopic;
     nt::DoubleSubscriber redScoreSub;
 
