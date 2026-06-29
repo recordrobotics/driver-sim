@@ -17,7 +17,7 @@
 #endif
 
 constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 4; // increment to force reload cache
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 5; // increment to force reload cache
 
 enum class MaterialType
 {
@@ -58,7 +58,7 @@ typedef struct Material
     float roughness;
     std::string texture;
 
-    Material() : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f}, emissionColor{0.0f, 0.0f, 0.0f, 1.0f}, writesObjectMotionVectors(false), metallic(0.0f), roughness(0.5f), texture("")
+    Material() : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f}, emissionColor{0.0f, 0.0f, 0.0f, 0.0f}, writesObjectMotionVectors(false), metallic(0.0f), roughness(0.5f), texture("")
     {
     }
 
@@ -72,10 +72,10 @@ typedef struct Material
         baseColor[3] = base[3];
 
         auto &emission = m.emissiveFactor;
-        emissionColor[0] = emission[0] * m.emissiveStrength;
-        emissionColor[1] = emission[1] * m.emissiveStrength;
-        emissionColor[2] = emission[2] * m.emissiveStrength;
-        emissionColor[3] = 1.0f; // literally just for padding (bgfx doesn't support vec3)
+        emissionColor[0] = emission[0];
+        emissionColor[1] = emission[1];
+        emissionColor[2] = emission[2];
+        emissionColor[3] = m.emissiveStrength;
 
         type = m.alphaMode == fastgltf::AlphaMode::Blend ? MaterialType::Transparent : MaterialType::Opaque;
         writesObjectMotionVectors = false;

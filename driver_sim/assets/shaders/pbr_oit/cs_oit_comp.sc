@@ -46,7 +46,7 @@ void main()
 
         vec4 world_local_position = mul(u_invView, vec4(view_position.xyz, 1.0));
 
-        pbr_col = pbr(albedo.rgb, emission.rgb, world_local_position.xyz, mtxGetColumn(u_invView, 3).xyz, normal, albedo.a, pbrData.y, pbrData.z);
+        pbr_col = pbr(albedo.rgb, emission.rgb, world_local_position.xyz, mtxGetColumn(u_invView, 3).xyz, normal, albedo.a, emission.a, pbrData.y, pbrData.z);
     } else {
         pbr_col = vec4_splat(0.0);
     }

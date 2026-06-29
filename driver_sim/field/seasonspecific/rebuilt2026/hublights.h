@@ -4,15 +4,16 @@
 #include <array>
 #include <string>
 #include "../../mesh.h"
+#include "../../../utils.h"
 
 namespace Rebuilt2026
 {
     constexpr std::string_view redHubLedTag = "red_hub_led";
     constexpr std::string_view blueHubLedTag = "blue_hub_led";
 
-    constexpr std::array<float, 4> hubLedOffColor = {0.0f, 0.0f, 0.0f, 1.0f};
-    constexpr std::array<float, 4> redHubLedColor = {84.0f, 0.0f, 0.0f, 1.0f};
-    constexpr std::array<float, 4> blueHubLedColor = {0.0f, 0.0f, 84.0f, 1.0f};
+    constexpr std::array<float, 4> hubLedOffColor = {0.0f, 0.0f, 0.0f, 0.0f};
+    constexpr std::array<float, 4> redHubLedColor = {1.0f, 0.0f, 0.0f, pow2(6.39f)};
+    constexpr std::array<float, 4> blueHubLedColor = {0.0f, 0.0f, 1.0f, pow2(6.39f)};
 
     inline void addHubLedTags(std::unordered_map<std::string, std::string> &tags)
     {
