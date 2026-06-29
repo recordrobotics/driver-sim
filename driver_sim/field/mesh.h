@@ -11,8 +11,13 @@
 #include <fastgltf/tools.hpp>
 #include <fastgltf/types.hpp>
 
+#ifndef STR_HELPER
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+#endif
+
 constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 2; // increment to force reload cache
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 3; // increment to force reload cache
 
 enum class MaterialType
 {
@@ -56,7 +61,7 @@ typedef struct Material
     {
     }
 
-    Material(const fastgltf::Material &m)
+    Material(const fastgltf::Material &m, const std::string &nodeName = "")
     {
         auto &base = m.pbrData.baseColorFactor;
 
@@ -73,8 +78,17 @@ typedef struct Material
 
         type = m.alphaMode == fastgltf::AlphaMode::Blend ? MaterialType::Transparent : MaterialType::Opaque;
         writesObjectMotionVectors = false;
-        metallic = m.pbrData.metallicFactor;
-        roughness = m.pbrData.roughnessFactor;
+
+        // cad export pbrData is wrong, base it off the node name instead
+        if(nodeName.find("FE-" STR(GAME_YEAR) "-01") != std::string::npos)
+        {
+            // playing field carpet floor is rough
+            metallic = 0.0f;
+            roughness = 0.6f;
+        } else {
+            metallic = 0.0f;
+            roughness = 0.4f;
+        }
     }
 
     bool operator==(const Material &other) const

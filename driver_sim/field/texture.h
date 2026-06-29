@@ -3,6 +3,7 @@
 #include <bgfx/bgfx.h>
 #include <vector>
 #include <string>
+#include <bimg/decode.h>
 
 typedef struct Texture
 {
@@ -31,7 +32,7 @@ typedef struct Texture
 
     Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags);
 
-    Texture(std::string name, void *image_data, int image_data_size, uint64_t _flags);
+    Texture(std::string name, void *image_data, int image_data_size, bimg::TextureFormat::Enum imageFormat, bgfx::TextureFormat::Enum format, uint64_t _flags);
 
     /**
      * Ensures that the texture is the correct size for the given view dimensions.
@@ -67,7 +68,7 @@ typedef struct FrameBuffer
 
 #define TEXTURE(out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags) \
     out_var = Texture(#out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags);
-#define TEXTURE_EMBEDDED(out_var, image, flags) \
-    out_var = Texture(#out_var, (void *)image##_bytes, sizeof(image##_bytes), flags);
+#define TEXTURE_EMBEDDED(out_var, image, imageFormat, format, flags) \
+    out_var = Texture(#out_var, (void *)image##_bytes, sizeof(image##_bytes), imageFormat, format, flags);
 #define FRAMEBUFFER(out_var, ...) \
     out_var = FrameBuffer(#out_var, {__VA_ARGS__});

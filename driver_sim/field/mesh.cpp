@@ -118,7 +118,7 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                 Material mat;
                 if (primitive.materialIndex.has_value() && primitive.materialIndex.value() < asset.materials.size())
                 {
-                    mat = Material(asset.materials[primitive.materialIndex.value()]);
+                    mat = Material(asset.materials[primitive.materialIndex.value()], nodeName);
                 }
 
                 MeshGroupKey key{

@@ -33,6 +33,10 @@
 #include <essl/cs_blit.sc.bin.h>
 #include <spirv/cs_blit.sc.bin.h>
 
+#include <glsl/cs_exposure.sc.bin.h>
+#include <essl/cs_exposure.sc.bin.h>
+#include <spirv/cs_exposure.sc.bin.h>
+
 #include <glsl/cs_oit_comp.sc.bin.h>
 #include <essl/cs_oit_comp.sc.bin.h>
 #include <spirv/cs_oit_comp.sc.bin.h>
@@ -84,6 +88,7 @@
 #include <dxbc/fs_tonemap.sc.bin.h>
 
 #include <dxbc/cs_blit.sc.bin.h>
+#include <dxbc/cs_exposure.sc.bin.h>
 #include <dxbc/cs_oit_comp.sc.bin.h>
 #include <dxbc/cs_taa_resolve.sc.bin.h>
 #include <dxbc/cs_mb_velocity.sc.bin.h>
@@ -108,6 +113,7 @@
 #include <dxil/fs_tonemap.sc.bin.h>
 
 #include <dxil/cs_blit.sc.bin.h>
+#include <dxil/cs_exposure.sc.bin.h>
 #include <dxil/cs_oit_comp.sc.bin.h>
 #include <dxil/cs_taa_resolve.sc.bin.h>
 #include <dxil/cs_mb_velocity.sc.bin.h>
@@ -132,6 +138,7 @@
 #include <metal/fs_tonemap.sc.bin.h>
 
 #include <metal/cs_blit.sc.bin.h>
+#include <metal/cs_exposure.sc.bin.h>
 #include <metal/cs_oit_comp.sc.bin.h>
 #include <metal/cs_taa_resolve.sc.bin.h>
 #include <metal/cs_mb_velocity.sc.bin.h>

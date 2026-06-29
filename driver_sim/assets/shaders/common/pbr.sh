@@ -2,9 +2,10 @@
 #define PBR_H_HEADER_GUARD
 
 #define PI 3.14159265359
+#define LIGHT_COUNT 6
 
-uniform vec4 u_lightPos[3];
-uniform vec4 u_lightColor[3];
+uniform vec4 u_lightPos[LIGHT_COUNT];
+uniform vec4 u_lightColor[LIGHT_COUNT];
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
@@ -15,7 +16,7 @@ float DistributionGGX(vec3 N, vec3 H, float roughness)
     float NdotH2 = NdotH * NdotH;
 
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
+    denom = max(PI * denom * denom, 1e-4);
 
     return a2 / denom;
 }
@@ -71,14 +72,12 @@ vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, 
     return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
-vec4 pbr(vec3 albedo, vec3 emission, vec3 world_position, vec3 camera_position, vec3 normal, float alpha) {
+vec4 pbr(vec3 albedo, vec3 emission, vec3 world_position, vec3 camera_position, vec3 normal, float alpha, float metallic, float roughness) {
     if(alpha == 0.0) {
         return vec4_splat(0.0);
     }
 
     albedo = pow(abs(albedo), vec3_splat(2.2));
-    float metallic = 0.0;
-    float roughness = 0.5;
     float ao = 1.0;
 
     vec3 N = normal;
@@ -89,7 +88,7 @@ vec4 pbr(vec3 albedo, vec3 emission, vec3 world_position, vec3 camera_position, 
 
     vec3 Lo = vec3_splat(0.0);
 
-    for(int i = 0; i < 3; i++)
+    for(int i = 0; i < LIGHT_COUNT; i++)
         Lo += computeLight(u_lightPos[i].xyz, u_lightColor[i].rgb, u_lightColor[i].a, world_position, N, V, albedo, metallic, roughness, F0);
 
     vec3 ambient = vec3_splat(0.03) * albedo * ao;

@@ -43,14 +43,14 @@ Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, floa
     mipCount = calcNumMips(this->hasMips, this->width, this->height, this->numLayers);
 }
 
-Texture::Texture(std::string name, void *image_data, int image_data_size, uint64_t _flags)
-    : name(name), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1), format(bgfx::TextureFormat::BGRA8), flags(_flags), hasResized(false)
+Texture::Texture(std::string name, void *image_data, int image_data_size, bimg::TextureFormat::Enum imageFormat, bgfx::TextureFormat::Enum format, uint64_t _flags)
+    : name(name), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1), format(format), flags(_flags), hasResized(false)
 {
     bimg::ImageContainer *image = bimg::imageParse(
         &s_allocator,
         image_data,
         static_cast<uint32_t>(image_data_size),
-        bimg::TextureFormat::BGRA8);
+        imageFormat);
 
     if (image == nullptr)
     {
@@ -66,7 +66,7 @@ Texture::Texture(std::string name, void *image_data, int image_data_size, uint64
         static_cast<uint16_t>(image->m_height),
         false,
         1,
-        bgfx::TextureFormat::BGRA8,
+        format,
         _flags,
         bgfx::copy(image->m_data, image->m_size));
 

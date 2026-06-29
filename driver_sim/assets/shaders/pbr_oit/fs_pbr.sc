@@ -15,6 +15,7 @@ void main()
 	gl_FragData[0] = u_baseColor;
 	gl_FragData[1] = u_emissionColor;
 	gl_FragData[2] = vec4(v_worldNormal, 1.0);
+	gl_FragData[3] = u_pbrData;
 
 	if(writeMotionVectors) {
 		vec3 currentPosNDC = v_currentPosition.xyz / v_currentPosition.w;
@@ -24,8 +25,8 @@ void main()
 		vec2 previousPosUV = (previousPosNDC.xy - u_jitter.zw) * 0.5 + 0.5;
 		vec2 velocity = previousPosUV - currentPosUV;
 		
-		gl_FragData[3] = vec4(velocity, 0.0, 1.0);
+		gl_FragData[4] = vec4(velocity, 0.0, 1.0);
 	} else {
-		gl_FragData[3] = vec4_splat(0.0);
+		gl_FragData[4] = vec4_splat(0.0);
 	}
 }

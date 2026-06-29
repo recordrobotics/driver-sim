@@ -4,6 +4,7 @@
 #include <bx/file.h>
 #include <bx/error.h>
 #include <bx/pixelformat.h>
+#include <bimg/decode.h>
 #include <imgui/imgui.h>
 
 #include <vector>
@@ -37,6 +38,7 @@
 #include "../settings/settingsstore.h"
 
 #include <bloom_dirt_mask.png.h>
+#include <lut.exr.h>
 
 #if GAME_YEAR == 2026
 #include "seasonspecific/rebuilt2026/fmsui.h"
@@ -99,6 +101,7 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(fs_tonemap),
 
         BGFX_EMBEDDED_SHADER(cs_blit),
+        BGFX_EMBEDDED_SHADER(cs_exposure),
         BGFX_EMBEDDED_SHADER(cs_oit_comp),
         BGFX_EMBEDDED_SHADER(cs_taa_resolve),
         BGFX_EMBEDDED_SHADER(cs_mb_velocity),
@@ -176,14 +179,50 @@ enum class CameraView
 {
     Field,
     Robot,
-    RobotRelative
+    RobotRelative,
+    Count
 };
-#define CAMERA_VIEW_COUNT 3
 
-static const std::array<std::string, CAMERA_VIEW_COUNT> CAMERA_VIEW_NAMES = {
+static const std::array<std::string, static_cast<size_t>(CameraView::Count)> CAMERA_VIEW_NAMES = {
     "Field",
     "Robot",
     "Robot Relative"};
+
+
+enum class DebugView {
+    None,
+    Albedo,
+    Normal,
+    Emission,
+    PBRData,
+    Velocity,
+    Depth,
+    OITAccum,
+    OITReveal,
+    MotionBlurVelocity,
+    MotionBlurTileMaxX,
+    MotionBlurTileMaxY,
+    MotionBlurNeighborMax,
+    MotionBlurTileVariance,
+    Count
+};
+
+static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBUG_VIEW_NAMES = {
+    "None",
+    "Albedo",
+    "Normal",
+    "Emission",
+    "PBR Data",
+    "Velocity",
+    "Depth",
+    "OIT Accum",
+    "OIT Reveal",
+    "Motion Blur Velocity",
+    "Motion Blur Tile Max X",
+    "Motion Blur Tile Max Y",
+    "Motion Blur Neighbor Max",
+    "Motion Blur Tile Variance"
+};
 
 static constexpr float INCHES_TO_METERS = 0.0254f;
 
@@ -235,6 +274,8 @@ static constexpr uint16_t VIEW_OIT_DEPTH_POST_PASS = 2;
 static constexpr uint16_t VIEW_POSTPROCESS = 3;
 static constexpr uint16_t VIEW_BLIT = 4;
 
+static constexpr uint8_t LIGHT_COUNT = 6;
+
 bgfx::UniformHandle u_baseColor;
 bgfx::UniformHandle u_emissionColor;
 bgfx::UniformHandle u_info;
@@ -255,6 +296,8 @@ bgfx::UniformHandle u_bloomThreshold;
 bgfx::UniformHandle u_bloomTexelSize;
 bgfx::UniformHandle u_bloomIntensity;
 
+bgfx::UniformHandle u_lutParams;
+
 bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
@@ -263,6 +306,7 @@ bgfx::ProgramHandle programOitDepthPostPass = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitDepthPostPassInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle tonemapProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle exposureProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle taaResolveProgram = BGFX_INVALID_HANDLE;
@@ -283,6 +327,7 @@ Texture gRevealTex;
 Texture gbufAlbedo;
 Texture gbufEmission;
 Texture gbufNormal;
+Texture gbufPBRData;
 Texture gbufVelocity;
 Texture gFullVelocity;
 Texture gbufDepth;
@@ -301,6 +346,8 @@ Texture gMBOutputColor;
 
 Texture bloomDirtMask;
 
+Texture tonemappingLut;
+
 FrameBuffer gBufFbo;
 FrameBuffer gOitFbo;
 FrameBuffer gOitDepthPostPassFbo;
@@ -311,6 +358,7 @@ bgfx::UniformHandle s_taaHistory;
 bgfx::UniformHandle s_color;
 bgfx::UniformHandle s_velocity;
 bgfx::UniformHandle s_depth;
+
 bgfx::UniformHandle s_mbTileMaxX;
 bgfx::UniformHandle s_mbTileMax;
 bgfx::UniformHandle s_mbNeighborMax;
@@ -318,10 +366,14 @@ bgfx::UniformHandle s_mbTileVariance;
 
 bgfx::UniformHandle s_bloomDirt;
 
+bgfx::UniformHandle s_lut;
+
 float bloomThreshold = 5.2f;
 float bloomKnee = 0.1f;
 float bloomIntensity = 1.0f;
 float bloomDirtIntensity = 1.1f;
+
+float tonemappingExposure = -1.171f;
 
 float fieldModelMatrix[16];
 float fieldNormalMatrix[9];
@@ -340,6 +392,7 @@ std::unique_ptr<Rebuilt2026FMSUI> fmsUI;
 #endif
 
 CameraView cameraView = CameraView::Field;
+DebugView debugView = DebugView::None;
 
 bool freezeTemporalEffects = false;
 
@@ -454,14 +507,14 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_pbrData");
     }
 
-    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, 3);
+    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, LIGHT_COUNT);
     if (!bgfx::isValid(u_lightPos))
     {
         logger->error("Failed to create uniform: u_lightPos");
         throw std::runtime_error("Failed to create uniform: u_lightPos");
     }
 
-    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, 3);
+    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, LIGHT_COUNT);
     if (!bgfx::isValid(u_lightColor))
     {
         logger->error("Failed to create uniform: u_lightColor");
@@ -510,6 +563,15 @@ void initTonemap()
 {
     const auto type = bgfx::getRendererType();
 
+    exposureProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_exposure"), true);
+
+    if (!bgfx::isValid(exposureProgram))
+    {
+        logger->error("Failed to create exposure program.");
+        throw std::runtime_error("Failed to create exposure program.");
+    }
+
     tonemapProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
                             bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tonemap"), true);
@@ -519,6 +581,27 @@ void initTonemap()
         logger->error("Failed to create tonemap program.");
         throw std::runtime_error("Failed to create tonemap program.");
     }
+
+    s_lut = bgfx::createUniform("s_lut", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_lut))
+    {
+        logger->error("Failed to create uniform: s_lut");
+        throw std::runtime_error("Failed to create uniform: s_lut");
+    }
+
+    u_lutParams = bgfx::createUniform("u_lutParams", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_lutParams))
+    {
+        logger->error("Failed to create uniform: u_lutParams");
+        throw std::runtime_error("Failed to create uniform: u_lutParams");
+    }
+
+    TEXTURE_EMBEDDED(
+        tonemappingLut,
+        lut_exr,
+        bimg::TextureFormat::RGBA32F,
+        bgfx::TextureFormat::RGBA32F,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
 void initTAA(uint16_t width, uint16_t height)
@@ -601,6 +684,15 @@ void initGBuffer(uint16_t width, uint16_t height)
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     TEXTURE(
+        gbufPBRData,
+        width, height,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::RGBA16F,
+        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+
+    TEXTURE(
         gbufVelocity,
         width, height,
         1.0f, 1.0f,
@@ -629,7 +721,7 @@ void initGBuffer(uint16_t width, uint16_t height)
 
     FRAMEBUFFER(
         gBufFbo,
-        &gbufAlbedo, &gbufEmission, &gbufNormal, &gbufVelocity, &gbufDepth);
+        &gbufAlbedo, &gbufEmission, &gbufNormal, &gbufPBRData, &gbufVelocity, &gbufDepth);
 }
 
 void initMotionBlur(uint16_t width, uint16_t height)
@@ -836,6 +928,8 @@ void initBloom(uint16_t width, uint16_t height)
     TEXTURE_EMBEDDED(
         bloomDirtMask,
         bloom_dirt_mask_png,
+        bimg::TextureFormat::BGRA8,
+        bgfx::TextureFormat::BGRA8,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
@@ -1552,6 +1646,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gbufAlbedo.beginFrame();
     gbufEmission.beginFrame();
     gbufNormal.beginFrame();
+    gbufPBRData.beginFrame();
     gbufVelocity.beginFrame();
     gFullVelocity.beginFrame();
     gbufDepth.beginFrame();
@@ -1577,6 +1672,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gbufAlbedo.ensure(width, height);
     gbufEmission.ensure(width, height);
     gbufNormal.ensure(width, height);
+    gbufPBRData.ensure(width, height);
     gbufVelocity.ensure(width, height);
     gFullVelocity.ensure(width, height);
     gbufDepth.ensure(width, height);
@@ -1723,6 +1819,24 @@ void field::render(const blackboard::app::Window &window)
     int sampleCount = MB_SAMPLE_COUNT;
     ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
     MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
+
+    ImGui::Separator();
+    ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
+
+    ImGui::Separator();
+
+    if (ImGui::BeginCombo("Debug View", DEBUG_VIEW_NAMES[static_cast<int>(debugView)].c_str()))
+    {
+        for (int i = 0; i < DEBUG_VIEW_NAMES.size(); i++)
+        {
+            if (ImGui::Selectable(DEBUG_VIEW_NAMES[i].c_str(), debugView == static_cast<DebugView>(i)))
+            {
+                debugView = static_cast<DebugView>(i);
+            }
+        }
+
+        ImGui::EndCombo();
+    }
 
     ImGui::Separator();
 
@@ -1959,16 +2073,23 @@ void field::render(const blackboard::app::Window &window)
     encoder->setUniform(u_jitter, jitter);
 
     // Light uniforms
-    float lightPos[3][4] = {
-        {-fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f},
-        {0.0f, 0.0f, 6.0f, 0.0f},
-        {fieldWidthMeters / 2.3f, 0.0f, 6.0f, 0.0f}};
-    float lightColor[3][4] = {
+    float lightPos[LIGHT_COUNT][4] = {
+        {-fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f, 0.0f},
+        {-fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f, 0.0f},
+        {0.0f, fieldHeightMeters / 2.5f, 6.0f, 0.0f},
+        {0.0f, -fieldHeightMeters / 2.5f, 6.0f, 0.0f},
+        {fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f, 0.0f},
+        {fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f, 0.0f}};
+    float lightColor[LIGHT_COUNT][4] = {
         {1.0f, 0.25f, 0.25f, 432.0f},
+        {1.0f, 0.85f, 0.85f, 332.0f},
         {1.0f, 1.0f, 1.0f, 432.0f},
-        {0.25f, 0.45f, 1.0f, 432.0f}};
-    encoder->setUniform(u_lightPos, lightPos, 3);
-    encoder->setUniform(u_lightColor, lightColor, 3);
+        {1.0f, 1.0f, 1.0f, 332.0f},
+        {0.25f, 0.45f, 1.0f, 432.0f},
+        {0.65f, 0.85f, 1.0f, 332.0f}
+    };
+    encoder->setUniform(u_lightPos, lightPos, LIGHT_COUNT);
+    encoder->setUniform(u_lightColor, lightColor, LIGHT_COUNT);
 
     // OPAQUE PASS
     bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
@@ -2073,8 +2194,9 @@ void field::render(const blackboard::app::Window &window)
     encoder->setImage(2, gbufAlbedo.handle, 0, bgfx::Access::Read);
     encoder->setImage(3, gbufEmission.handle, 0, bgfx::Access::Read);
     encoder->setImage(4, gbufNormal.handle, 0, bgfx::Access::Read);
-    encoder->setImage(5, gbufDepth.handle, 0, bgfx::Access::Read);
-    encoder->setImage(6, gOutputColor.handle, 0, bgfx::Access::Write);
+    encoder->setImage(5, gbufPBRData.handle, 0, bgfx::Access::Read);
+    encoder->setImage(6, gbufDepth.handle, 0, bgfx::Access::Read);
+    encoder->setImage(7, gOutputColor.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity
@@ -2207,6 +2329,12 @@ void field::render(const blackboard::app::Window &window)
         }
     }
 
+    // Exposure
+    float lutParams[4] = {1.0f / static_cast<float>(tonemappingLut.width), 1.0f / static_cast<float>(tonemappingLut.height), static_cast<float>(tonemappingLut.height - 1), powf(2.0f, tonemappingExposure)};
+    encoder->setUniform(u_lutParams, lutParams);
+    encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::ReadWrite);
+    encoder->dispatch(VIEW_POSTPROCESS, exposureProgram, xGroups, yGroups);
+
     // Bloom
     if(settings::enableBloom)
     {
@@ -2260,7 +2388,52 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewName(VIEW_BLIT, "Field - Blit");
     bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
 
-    encoder->setTexture(0, s_tex, gOutputColor.handle);
+    switch(debugView)
+    {
+        case DebugView::Albedo:
+            encoder->setTexture(0, s_tex, gbufAlbedo.handle);
+            break;
+        case DebugView::Normal:
+            encoder->setTexture(0, s_tex, gbufNormal.handle);
+            break;
+        case DebugView::Emission:
+            encoder->setTexture(0, s_tex, gbufEmission.handle);
+            break;
+        case DebugView::PBRData:
+            encoder->setTexture(0, s_tex, gbufPBRData.handle);
+            break;
+        case DebugView::Velocity:
+            encoder->setTexture(0, s_tex, gbufVelocity.handle);
+            break;
+        case DebugView::Depth:
+            encoder->setTexture(0, s_tex, gbufDepth.handle);
+            break;
+        case DebugView::OITAccum:
+            encoder->setTexture(0, s_tex, gAccumTex.handle);
+            break;
+        case DebugView::OITReveal:
+            encoder->setTexture(0, s_tex, gRevealTex.handle);
+            break;
+        case DebugView::MotionBlurVelocity:
+            encoder->setTexture(0, s_tex, gMBVelocity.handle);
+            break;
+        case DebugView::MotionBlurTileMaxX:
+            encoder->setTexture(0, s_tex, gMBTileMaxX.handle);
+            break;
+        case DebugView::MotionBlurTileMaxY:
+            encoder->setTexture(0, s_tex, gMBTileMax.handle);
+            break;
+        case DebugView::MotionBlurNeighborMax:
+            encoder->setTexture(0, s_tex, gMBNeighborMax.handle);
+            break;
+        case DebugView::MotionBlurTileVariance:
+            encoder->setTexture(0, s_tex, gMBTileVariance.handle);
+            break;
+        default:
+            encoder->setTexture(0, s_tex, gOutputColor.handle);
+            break;
+    }
+    encoder->setTexture(1, s_lut, tonemappingLut.handle);
     encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
 
     screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
@@ -2342,6 +2515,9 @@ void field::cleanup()
     if (bgfx::isValid(u_bloomIntensity))
         bgfx::destroy(u_bloomIntensity);
 
+    if(bgfx::isValid(u_lutParams))
+        bgfx::destroy(u_lutParams);
+
     if (bgfx::isValid(programPBR))
         bgfx::destroy(programPBR);
     if (bgfx::isValid(programPBRInstanced))
@@ -2360,6 +2536,8 @@ void field::cleanup()
         bgfx::destroy(tonemapProgram);
     if (bgfx::isValid(blitProgram))
         bgfx::destroy(blitProgram);
+    if (bgfx::isValid(exposureProgram))
+        bgfx::destroy(exposureProgram);
     if (bgfx::isValid(taaResolveProgram))
         bgfx::destroy(taaResolveProgram);
     if (bgfx::isValid(mbVelocityProgram))
@@ -2388,6 +2566,7 @@ void field::cleanup()
     gbufAlbedo.destroy();
     gbufEmission.destroy();
     gbufNormal.destroy();
+    gbufPBRData.destroy();
     gbufVelocity.destroy();
     gFullVelocity.destroy();
     gbufDepth.destroy();
@@ -2407,6 +2586,8 @@ void field::cleanup()
     gMBVelocity.destroy();
 
     bloomDirtMask.destroy();
+
+    tonemappingLut.destroy();
 
     if (bgfx::isValid(s_tex))
         bgfx::destroy(s_tex);
@@ -2430,4 +2611,6 @@ void field::cleanup()
 
     if (bgfx::isValid(s_bloomDirt))
         bgfx::destroy(s_bloomDirt);
+    if (bgfx::isValid(s_lut))
+        bgfx::destroy(s_lut);
 }

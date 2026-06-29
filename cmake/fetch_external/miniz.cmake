@@ -13,5 +13,6 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/richgel999/miniz.git
     GIT_TAG        2.2.0
     GIT_SHALLOW 1
+    SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/miniz
 )
 FetchContent_MakeAvailable(miniz)

@@ -11,8 +11,8 @@ namespace Rebuilt2026
     constexpr std::string_view blueHubLedTag = "blue_hub_led";
 
     constexpr std::array<float, 4> hubLedOffColor = {0.0f, 0.0f, 0.0f, 1.0f};
-    constexpr std::array<float, 4> redHubLedColor = {20.0f, 0.0f, 0.0f, 1.0f};
-    constexpr std::array<float, 4> blueHubLedColor = {0.0f, 0.0f, 20.0f, 1.0f};
+    constexpr std::array<float, 4> redHubLedColor = {42.0f, 0.0f, 0.0f, 1.0f};
+    constexpr std::array<float, 4> blueHubLedColor = {0.0f, 0.0f, 42.0f, 1.0f};
 
     inline void addHubLedTags(std::unordered_map<std::string, std::string> &tags)
     {
