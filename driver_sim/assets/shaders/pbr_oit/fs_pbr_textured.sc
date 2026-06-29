@@ -1,4 +1,4 @@
-$input v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition, v_worldPosition
+$input v_viewPosition, v_viewNormal, v_currentPosition, v_previousPosition, v_worldPosition
 
 #include <bgfx_shader.sh>
 #include "../common/utils.sh"
@@ -21,10 +21,6 @@ vec3 ComputeHeightNormalTS(vec2 uv, vec2 texelSize, float heightScale, float cel
     float dU = (hR - hL) * heightScale;
     float dV = (hU - hD) * heightScale;
 
-    // Z-up tangent space:
-    // X = tangent
-    // Y = bitangent
-    // Z = surface normal
     return normalize(vec3(
         -dU,
         -dV,
@@ -38,24 +34,20 @@ void main()
 
     vec2 uv = v_worldPosition.xy * 0.4;
 
-    vec3 N = normalize(v_worldNormal);
-    vec3 T = vec3(1.0, 0.0, 0.0);
+    vec3 N = normalize(v_viewNormal);
+    vec3 T = normalize(mtxGetColumn(u_modelView, 0)).xyz;
     T = normalize(T - N * dot(T, N));
     vec3 B = normalize(cross(N, T));
 
-    vec3 normalTS = ComputeHeightNormalTS(uv, vec2_splat(1.0 / 1024.0), 0.1, 1.0);
+    mat3 TBN = mtxFromCols(T, B, N);
 
-    mat3 TBN = mtxFromCols(
-        T,
-        B,
-        N
-    );
+    vec3 normalTS = ComputeHeightNormalTS(uv, vec2_splat(1.0 / 1024.0), 0.7, 1.0);
 
-    vec3 worldNormal = normalize(mul(normalTS, TBN));
+    vec3 viewNormal = normalize(mul(TBN, normalTS));
 
 	gl_FragData[0] = u_baseColor * vec4(texture2D(s_baseColor, uv).rgb, 1.0);
 	gl_FragData[1] = u_emissionColor;
-	gl_FragData[2] = vec4(worldNormal, 1.0);
+	gl_FragData[2] = vec4(viewNormal, 1.0);
 	gl_FragData[3] = u_pbrData;
 
 	if(writeMotionVectors) {

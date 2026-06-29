@@ -1,4 +1,4 @@
-$input v_viewPosition, v_worldNormal, v_currentPosition, v_previousPosition, v_worldPosition
+$input v_viewPosition, v_viewNormal, v_currentPosition, v_previousPosition, v_worldPosition
 
 #include <bgfx_shader.sh>
 #include "../common/utils.sh"
@@ -14,7 +14,7 @@ void main()
 
 	gl_FragData[0] = u_baseColor;
 	gl_FragData[1] = u_emissionColor;
-	gl_FragData[2] = vec4(v_worldNormal, 1.0);
+	gl_FragData[2] = vec4(v_viewNormal, 1.0);
 	gl_FragData[3] = u_pbrData;
 
 	if(writeMotionVectors) {

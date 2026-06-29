@@ -46,13 +46,13 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0)
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, vec3 world_position, vec3 N, vec3 V, vec3 albedo,
+vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, vec3 position, vec3 N, vec3 V, vec3 albedo,
                   float metallic, float roughness, vec3 F0)
 {
-    vec3 L = normalize(light_position - world_position);
+    vec3 L = normalize(light_position - position);
     vec3 H = normalize(V + L);
 
-    float distance = length(light_position - world_position);
+    float distance = length(light_position - position);
     float attenuation = 1.0 / (distance * distance);
     vec3 radiance = light_color * light_intensity * attenuation;
 
@@ -72,7 +72,8 @@ vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, 
     return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
-vec4 pbr(vec3 albedo, vec3 emission, vec3 world_position, vec3 camera_position, vec3 normal, float alpha, float emissionStrength, float metallic, float roughness) {
+// in view space
+vec4 pbr(vec3 albedo, vec3 emission, vec3 position, vec3 normal, float alpha, float emissionStrength, float metallic, float roughness) {
     if(alpha == 0.0) {
         return vec4_splat(0.0);
     }
@@ -81,8 +82,8 @@ vec4 pbr(vec3 albedo, vec3 emission, vec3 world_position, vec3 camera_position, 
     emission = pow(abs(emission), vec3_splat(2.2)) * emissionStrength;
     float ao = 1.0;
 
-    vec3 N = normal;
-    vec3 V = normalize(camera_position - world_position);
+    vec3 N = normalize(normal);
+    vec3 V = normalize(-position);
 
     vec3 F0 = vec3_splat(0.04);
     F0 = mix(F0, albedo, metallic);
@@ -90,7 +91,7 @@ vec4 pbr(vec3 albedo, vec3 emission, vec3 world_position, vec3 camera_position, 
     vec3 Lo = vec3_splat(0.0);
 
     for(int i = 0; i < LIGHT_COUNT; i++)
-        Lo += computeLight(u_lightPos[i].xyz, u_lightColor[i].rgb, u_lightColor[i].a, world_position, N, V, albedo, metallic, roughness, F0);
+        Lo += computeLight(u_lightPos[i].xyz, pow(abs(u_lightColor[i].rgb), vec3_splat(2.2)), u_lightColor[i].a, position, N, V, albedo, metallic, roughness, F0);
 
     vec3 ambient = vec3_splat(0.03) * albedo * ao;
 

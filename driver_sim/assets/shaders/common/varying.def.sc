@@ -1,6 +1,6 @@
 vec2 v_texcoord0 : TEXCOORD0 = vec2(0.0, 0.0);
 vec3 v_viewPosition  : TEXCOORD1 = vec3(0.0, 0.0, 0.0);
-vec3 v_worldNormal  : NORMAL = vec3(0.0, 0.0, 0.0);
+vec3 v_viewNormal  : NORMAL = vec3(0.0, 0.0, 0.0);
 vec4 v_currentPosition : TEXCOORD2 = vec4(0.0, 0.0, 0.0, 1.0);
 vec4 v_previousPosition : TEXCOORD3 = vec4(0.0, 0.0, 0.0, 1.0);
 vec3 v_worldPosition  : TEXCOORD4 = vec3(0.0, 0.0, 0.0);

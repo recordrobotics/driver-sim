@@ -228,6 +228,15 @@ static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBU
     "Motion Blur Tile Variance"
 };
 
+struct Vec3Padded {
+    bx::Vec3 vec;
+    float padding; // padding to make it vec4 that bgfx expects
+
+    Vec3Padded() : vec(0.0f, 0.0f, 0.0f), padding(0.0f) {}
+    Vec3Padded(float x, float y, float z) : vec(x, y, z), padding(0.0f) {}
+    Vec3Padded(const bx::Vec3& v) : vec(v), padding(0.0f) {}
+};
+
 static constexpr float INCHES_TO_METERS = 0.0254f;
 
 uint8_t MB_TILE_SIZE = 40;
@@ -283,7 +292,6 @@ static constexpr uint8_t LIGHT_COUNT = 6;
 bgfx::UniformHandle u_baseColor;
 bgfx::UniformHandle u_emissionColor;
 bgfx::UniformHandle u_info;
-bgfx::UniformHandle u_normalMatrix;
 bgfx::UniformHandle u_previousModelViewProj;
 bgfx::UniformHandle u_previousView;
 bgfx::UniformHandle u_previousProj;
@@ -387,7 +395,6 @@ float bloomDirtIntensity = 1.1f;
 float tonemappingExposure = -2.0f;
 
 float fieldModelMatrix[16];
-float fieldNormalMatrix[9];
 
 WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
 float fieldWidthMeters = 1.0f;
@@ -526,13 +533,6 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create uniform: u_info");
         throw std::runtime_error("Failed to create uniform: u_info");
-    }
-
-    u_normalMatrix = bgfx::createUniform("u_normalMatrix", bgfx::UniformType::Mat3);
-    if (!bgfx::isValid(u_normalMatrix))
-    {
-        logger->error("Failed to create uniform: u_normalMatrix");
-        throw std::runtime_error("Failed to create uniform: u_normalMatrix");
     }
 
     u_pbrData = bgfx::createUniform("u_pbrData", bgfx::UniformType::Vec4);
@@ -1239,45 +1239,6 @@ bx::Vec3 getOrbitEye()
         orbitCamera.target.z + orbitCamera.distance * sinPitch};
 }
 
-static void toMat3(float m3[9], const float m4[16])
-{
-    m3[0] = m4[0];
-    m3[1] = m4[1];
-    m3[2] = m4[2];
-
-    m3[3] = m4[4];
-    m3[4] = m4[5];
-    m3[5] = m4[6];
-
-    m3[6] = m4[8];
-    m3[7] = m4[9];
-    m3[8] = m4[10];
-}
-
-static void mtx3Transpose(float out[9], const float in[9])
-{
-    out[0] = in[0];
-    out[1] = in[3];
-    out[2] = in[6];
-
-    out[3] = in[1];
-    out[4] = in[4];
-    out[5] = in[7];
-
-    out[6] = in[2];
-    out[7] = in[5];
-    out[8] = in[8];
-}
-
-static void toNormalMatrix(float normalMatrix[9], const float model[16])
-{
-    float mat3[9];
-    toMat3(mat3, model);
-    float inverse[9];
-    bx::mtx3Inverse(inverse, mat3);
-    mtx3Transpose(normalMatrix, inverse);
-}
-
 static void performRotationStack(float out[16], const std::vector<ModelRotationConfig> &rotations)
 {
     float result[16];
@@ -1386,7 +1347,6 @@ void loadFieldModel()
         logger->info("Loaded field config file: {0}", configFile);
 
         performRotationStack(fieldModelMatrix, j["rotations"].get<std::vector<ModelRotationConfig>>());
-        toNormalMatrix(fieldNormalMatrix, fieldModelMatrix);
 
         coordinateSystem = coordinateSystemFromString(j["coordinateSystem"].get<std::string>());
         fieldWidthMeters = j["widthInches"].get<float>() * INCHES_TO_METERS;
@@ -1794,13 +1754,12 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
 }
 
 template <std::ranges::input_range R>
-void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16], float normalMatrix[9])
+void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16])
 {
     for (const auto &mesh : meshes)
     {
         setupMesh(encoder, mesh, false);
         encoder->setTransform(modelMatrix);
-        encoder->setUniform(u_normalMatrix, normalMatrix);
         if (mesh.material.type == MaterialType::Transparent)
         {
             encoder->submit(VIEW_OIT, programOit);
@@ -1808,7 +1767,6 @@ void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16], float
 #if 0 // IF TRANSPARENT MOTION VECTORS AND DEPTH (transparent TAA)
             setupMesh(encoder, mesh, true);
             encoder->setTransform(modelMatrix);
-            encoder->setUniform(u_normalMatrix, normalMatrix);
             encoder->submit(VIEW_OIT_DEPTH_POST_PASS, programOitDepthPostPass);
 #endif
         }
@@ -2127,13 +2085,14 @@ void field::render(const blackboard::app::Window &window)
     encoder->setUniform(u_jitter, jitter);
 
     // Light uniforms
-    float lightPos[LIGHT_COUNT][4] = {
-        {-fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f, 0.0f},
-        {-fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f, 0.0f},
-        {0.0f, fieldHeightMeters / 2.5f, 6.0f, 0.0f},
-        {0.0f, -fieldHeightMeters / 2.5f, 6.0f, 0.0f},
-        {fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f, 0.0f},
-        {fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f, 0.0f}};
+    Vec3Padded lightPos[LIGHT_COUNT] = {
+        Vec3Padded(bx::mul({-fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f}, view)),
+        Vec3Padded(bx::mul({-fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f}, view)),
+        Vec3Padded(bx::mul({0.0f, fieldHeightMeters / 2.5f, 6.0f}, view)),
+        Vec3Padded(bx::mul({0.0f, -fieldHeightMeters / 2.5f, 6.0f}, view)),
+        Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f}, view)),
+        Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f}, view))};
+        
     float lightColor[LIGHT_COUNT][4] = {
         {1.0f, 0.25f, 0.25f, 432.0f},
         {1.0f, 0.85f, 0.85f, 332.0f},
@@ -2196,7 +2155,7 @@ void field::render(const blackboard::app::Window &window)
 
         drawMeshes(encoder, fieldMeshes | std::views::filter([&drawnGamePieces](const Mesh &mesh)
                                                              { return std::find(drawnGamePieces.begin(), drawnGamePieces.end(), mesh.tag) == drawnGamePieces.end(); /* only draw meshes that haven't been drawn by game pieces */ }),
-                   fieldModelMatrix, fieldNormalMatrix);
+                   fieldModelMatrix);
     }
 
     if (createdRobotMeshBuffers)
@@ -2540,8 +2499,6 @@ void field::cleanup()
         bgfx::destroy(u_emissionColor);
     if (bgfx::isValid(u_info))
         bgfx::destroy(u_info);
-    if (bgfx::isValid(u_normalMatrix))
-        bgfx::destroy(u_normalMatrix);
     if (bgfx::isValid(u_previousModelViewProj))
         bgfx::destroy(u_previousModelViewProj);
     if (bgfx::isValid(u_previousView))
