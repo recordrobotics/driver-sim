@@ -18,7 +18,7 @@ void main()
 
     color.rgb *= color.a;
 
-    float z = norm_depth(v_viewPosition);
+    float z = Linear01Depth(v_viewPosition.z);
 	gl_FragData[0] = color * w(z, color.a);
 	gl_FragData[1] = vec4_splat(color.a);
 }

@@ -4,7 +4,9 @@
 #define PI 3.14159265359
 #define LIGHT_COUNT 6
 
+// view space
 uniform vec4 u_lightPos[LIGHT_COUNT];
+// linear space, rgb = color, a = intensity
 uniform vec4 u_lightColor[LIGHT_COUNT];
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
@@ -72,14 +74,13 @@ vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, 
     return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
-// in view space
+// all vectors in view space
+// all colors expected to be in linear space
 vec4 pbr(vec3 albedo, vec3 emission, vec3 position, vec3 normal, float alpha, float emissionStrength, float metallic, float roughness) {
     if(alpha == 0.0) {
         return vec4_splat(0.0);
     }
 
-    albedo = pow(abs(albedo), vec3_splat(2.2));
-    emission = pow(abs(emission), vec3_splat(2.2)) * emissionStrength;
     float ao = 1.0;
 
     vec3 N = normalize(normal);
@@ -91,11 +92,11 @@ vec4 pbr(vec3 albedo, vec3 emission, vec3 position, vec3 normal, float alpha, fl
     vec3 Lo = vec3_splat(0.0);
 
     for(int i = 0; i < LIGHT_COUNT; i++)
-        Lo += computeLight(u_lightPos[i].xyz, pow(abs(u_lightColor[i].rgb), vec3_splat(2.2)), u_lightColor[i].a, position, N, V, albedo, metallic, roughness, F0);
+        Lo += computeLight(u_lightPos[i].xyz, u_lightColor[i].rgb, u_lightColor[i].a, position, N, V, albedo, metallic, roughness, F0);
 
     vec3 ambient = vec3_splat(0.03) * albedo * ao;
 
-    vec3 color = ambient + Lo + emission;
+    vec3 color = ambient + Lo + emission * emissionStrength;
 
     return vec4(color, alpha);
 }

@@ -3,11 +3,11 @@
 
 uniform vec4 u_info;
 
+// assumes reverse z, infinite far
 #define CAMERA_NEAR u_info.x
-#define CAMERA_FAR u_info.y
 
-float norm_depth(vec3 viewPosition) {
-    return (viewPosition.z - CAMERA_NEAR) / max(CAMERA_FAR - CAMERA_NEAR, 1e-5);
+float Linear01Depth(float depth) {
+    return CAMERA_NEAR / depth;
 }
 
 #endif // UTILS_H_HEADER_GUARD

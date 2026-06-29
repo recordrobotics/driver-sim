@@ -118,6 +118,8 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(cs_bloom_downscale),
         BGFX_EMBEDDED_SHADER(cs_bloom_upscale),
 
+        BGFX_EMBEDDED_SHADER(cs_ssao),
+
         BGFX_EMBEDDED_SHADER_END()};
 
 enum class ModelRotationAxis
@@ -208,6 +210,7 @@ enum class DebugView {
     MotionBlurTileMaxY,
     MotionBlurNeighborMax,
     MotionBlurTileVariance,
+    SSAO,
     Count
 };
 
@@ -225,7 +228,8 @@ static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBU
     "Motion Blur Tile Max X",
     "Motion Blur Tile Max Y",
     "Motion Blur Neighbor Max",
-    "Motion Blur Tile Variance"
+    "Motion Blur Tile Variance",
+    "SSAO"
 };
 
 struct Vec3Padded {
@@ -289,8 +293,31 @@ static constexpr uint16_t VIEW_BLIT = 4;
 
 static constexpr uint8_t LIGHT_COUNT = 6;
 
+static constexpr uint8_t SSAO_KERNEL_SIZE = 128;
+
+// from https://github.com/Unity-Technologies/Graphics/blob/master/com.unity.postprocessing/PostProcessing/Shaders/Colors.hlsl
+inline float PositivePow(float base, float power)
+{
+    return std::pow(std::max(std::abs(base), 1.192092896e-07f), power);
+}
+
+inline std::array<float, 4> SRGBToLinear(const std::array<float, 4>& srgb)
+{
+    std::array<float, 4> linear;
+    for (size_t i = 0; i < 3; ++i)
+    {
+        if (srgb[i] <= 0.04045f)
+            linear[i] = srgb[i] / 12.92f;
+        else
+            linear[i] = PositivePow((srgb[i] + 0.055f) / 1.055f, 2.4f);
+    }
+    linear[3] = srgb[3]; // Alpha channel remains unchanged
+    return linear;
+}
+
 bgfx::UniformHandle u_baseColor;
 bgfx::UniformHandle u_emissionColor;
+bgfx::UniformHandle u_skyColor;
 bgfx::UniformHandle u_info;
 bgfx::UniformHandle u_previousModelViewProj;
 bgfx::UniformHandle u_previousView;
@@ -309,6 +336,9 @@ bgfx::UniformHandle u_bloomTexelSize;
 bgfx::UniformHandle u_bloomIntensity;
 
 bgfx::UniformHandle u_lutParams;
+
+bgfx::UniformHandle u_SSAOData;
+bgfx::UniformHandle u_SSAOSamples;
 
 bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRTextured = BGFX_INVALID_HANDLE;
@@ -334,6 +364,8 @@ bgfx::ProgramHandle mbGuertinExperimentalBlurProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle bloomDownscaleProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle bloomUpscaleProgram = BGFX_INVALID_HANDLE;
 
+bgfx::ProgramHandle ssaoProgram = BGFX_INVALID_HANDLE;
+
 Texture gAccumTex;
 Texture gRevealTex;
 
@@ -357,6 +389,9 @@ Texture gMBTileVariance;
 Texture gMBVelocity;
 Texture gMBOutputColor;
 
+Texture gSSAOOutput;
+
+Texture ssaoNoise;
 Texture bloomDirtMask;
 
 Texture carpetBaseColor;
@@ -393,6 +428,14 @@ float bloomIntensity = 1.0f;
 float bloomDirtIntensity = 1.1f;
 
 float tonemappingExposure = -2.0f;
+
+float ssaoTotalStrength = 1.0f;
+float ssaoBase = 0.2f;
+float ssaoArea = 0.0075f;
+float ssaoFalloff = 0.000001f;
+float ssaoRadius = 0.0002;
+float ssaoBias = 0.025f;
+Vec3Padded ssaoSamples[SSAO_KERNEL_SIZE];
 
 float fieldModelMatrix[16];
 
@@ -525,6 +568,14 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create uniform: u_emissionColor");
         throw std::runtime_error("Failed to create uniform: u_emissionColor");
+    }
+
+    u_skyColor = bgfx::createUniform("u_skyColor", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_skyColor))
+    {
+        logger->error("Failed to create uniform: u_skyColor");
+        throw std::runtime_error("Failed to create uniform: u_skyColor");
     }
 
     u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4);
@@ -980,6 +1031,49 @@ void initBloom(uint16_t width, uint16_t height)
         bimg::TextureFormat::BGRA8,
         bgfx::TextureFormat::BGRA8,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+}
+
+void initSSAO(uint16_t width, uint16_t height)
+{
+    const auto type = bgfx::getRendererType();
+
+    ssaoProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_ssao"), true);
+    if (!bgfx::isValid(ssaoProgram))
+    {
+        logger->error("Failed to create SSAO program.");
+        throw std::runtime_error("Failed to create SSAO program.");
+    }
+
+    u_SSAOData = bgfx::createUniform("u_SSAOData", bgfx::UniformType::Vec4, 2);
+    if(!bgfx::isValid(u_SSAOData))
+    {
+        logger->error("Failed to create uniform: u_SSAOData");
+        throw std::runtime_error("Failed to create uniform: u_SSAOData");
+    }
+
+    u_SSAOSamples = bgfx::createUniform("u_SSAOSamples", bgfx::UniformType::Vec4, SSAO_KERNEL_SIZE);
+    if(!bgfx::isValid(u_SSAOSamples))
+    {
+        logger->error("Failed to create uniform: u_SSAOSamples");
+        throw std::runtime_error("Failed to create uniform: u_SSAOSamples");
+    }
+
+    TEXTURE(
+        gSSAOOutput,
+        width, height,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::R16F,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+
+    // TEXTURE_EMBEDDED(
+    //     ssaoNoise,
+    //     ssao_noise_png,
+    //     bimg::TextureFormat::BGRA8,
+    //     bgfx::TextureFormat::BGRA8,
+    //     BGFX_SAMPLER_U_REPEAT | BGFX_SAMPLER_V_REPEAT);
 }
 
 inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
@@ -1532,6 +1626,7 @@ void field::init(const blackboard::app::Window &window)
     initTAA(window.width, window.height);
     initMotionBlur(window.width, window.height);
     initBloom(window.width, window.height);
+    // initSSAO(window.width, window.height);
 }
 
 void field::startNTClient()
@@ -1557,9 +1652,10 @@ void field::startNTClient()
     ntInst.StartClient4("driver-sim");
 }
 
-void updateInfo(bgfx::Encoder *encoder, float cameraNear, float cameraFar)
+// assumes reverse z, infinite far
+void updateInfo(bgfx::Encoder *encoder, float cameraNear)
 {
-    float info[4] = {cameraNear, cameraFar, 0.0f, 0.0f};
+    float info[4] = {cameraNear, 0.0f, 0.0f, 0.0f};
     encoder->setUniform(u_info, info);
 }
 
@@ -1742,8 +1838,8 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
     encoder->setVertexBuffer(0, mesh.vertexBuffer);
     encoder->setIndexBuffer(mesh.indexBuffer);
 
-    encoder->setUniform(u_baseColor, mesh.material.baseColor.data());
-    encoder->setUniform(u_emissionColor, mesh.material.emissionColor.data());
+    encoder->setUniform(u_baseColor, SRGBToLinear(mesh.material.baseColor).data());
+    encoder->setUniform(u_emissionColor, SRGBToLinear(mesh.material.emissionColor).data());
     encoder->setUniform(u_previousModelViewProj, previousViewProj);
     encoder->setUniform(u_pbrData, pbrData);
 
@@ -1811,6 +1907,16 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes
 bool createdFieldMeshBuffers = false;
 bool createdRobotMeshBuffers = false;
 int currentDataUpdateIndex = 0;
+
+std::array<float, 4> skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
+std::array<std::array<float, 4>, LIGHT_COUNT> lightColor = {
+    SRGBToLinear({1.0f, 0.25f, 0.25f, 432.0f}),
+    SRGBToLinear({1.0f, 0.85f, 0.85f, 332.0f}),
+    SRGBToLinear({1.0f, 1.0f, 1.0f, 432.0f}),
+    SRGBToLinear({1.0f, 1.0f, 1.0f, 332.0f}),
+    SRGBToLinear({0.25f, 0.45f, 1.0f, 432.0f}),
+    SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})
+};
 
 void field::render(const blackboard::app::Window &window)
 {
@@ -2074,7 +2180,7 @@ void field::render(const blackboard::app::Window &window)
 
     bgfx::Encoder *encoder = bgfx::begin();
 
-    updateInfo(encoder, 0.1f, 100.0f);
+    updateInfo(encoder, 0.1f);
 
     if (!freezeTemporalEffects)
     {
@@ -2093,16 +2199,8 @@ void field::render(const blackboard::app::Window &window)
         Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f}, view)),
         Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f}, view))};
         
-    float lightColor[LIGHT_COUNT][4] = {
-        {1.0f, 0.25f, 0.25f, 432.0f},
-        {1.0f, 0.85f, 0.85f, 332.0f},
-        {1.0f, 1.0f, 1.0f, 432.0f},
-        {1.0f, 1.0f, 1.0f, 332.0f},
-        {0.25f, 0.45f, 1.0f, 432.0f},
-        {0.65f, 0.85f, 1.0f, 332.0f}
-    };
     encoder->setUniform(u_lightPos, lightPos, LIGHT_COUNT);
-    encoder->setUniform(u_lightColor, lightColor, LIGHT_COUNT);
+    encoder->setUniform(u_lightColor, lightColor.data(), LIGHT_COUNT);
 
     // OPAQUE PASS
     bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
@@ -2202,6 +2300,7 @@ void field::render(const blackboard::app::Window &window)
     int yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
     // OIT Composition
+    encoder->setUniform(u_skyColor, skyColor.data());
     encoder->setImage(0, gAccumTex.handle, 0, bgfx::Access::Read);
     encoder->setImage(1, gRevealTex.handle, 0, bgfx::Access::Read);
     encoder->setImage(2, gbufAlbedo.handle, 0, bgfx::Access::Read);
@@ -2497,6 +2596,8 @@ void field::cleanup()
         bgfx::destroy(u_baseColor);
     if (bgfx::isValid(u_emissionColor))
         bgfx::destroy(u_emissionColor);
+    if (bgfx::isValid(u_skyColor))
+        bgfx::destroy(u_skyColor);
     if (bgfx::isValid(u_info))
         bgfx::destroy(u_info);
     if (bgfx::isValid(u_previousModelViewProj))

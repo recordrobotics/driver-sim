@@ -81,6 +81,10 @@
 #include <essl/cs_bloom_upscale.sc.bin.h>
 #include <spirv/cs_bloom_upscale.sc.bin.h>
 
+#include <glsl/cs_ssao.sc.bin.h>
+#include <essl/cs_ssao.sc.bin.h>
+#include <spirv/cs_ssao.sc.bin.h>
+
 #if BGFX_PLATFORM_SUPPORTS_DXBC
 #include <dxbc/vs_pbr.sc.bin.h>
 #include <dxbc/vs_pbr_instanced.sc.bin.h>
@@ -105,6 +109,8 @@
 
 #include <dxbc/cs_bloom_downscale.sc.bin.h>
 #include <dxbc/cs_bloom_upscale.sc.bin.h>
+
+#include <dxbc/cs_ssao.sc.bin.h>
 #endif
 
 #if BGFX_PLATFORM_SUPPORTS_DXIL
@@ -131,6 +137,8 @@
 
 #include <dxil/cs_bloom_downscale.sc.bin.h>
 #include <dxil/cs_bloom_upscale.sc.bin.h>
+
+#include <dxil/cs_ssao.sc.bin.h>
 #endif
 
 #if BGFX_PLATFORM_SUPPORTS_METAL
@@ -157,4 +165,6 @@
 
 #include <metal/cs_bloom_downscale.sc.bin.h>
 #include <metal/cs_bloom_upscale.sc.bin.h>
+
+#include <metal/cs_ssao.sc.bin.h>
 #endif

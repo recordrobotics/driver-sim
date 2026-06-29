@@ -2,6 +2,7 @@ $input v_viewPosition, v_viewNormal, v_currentPosition, v_previousPosition, v_wo
 
 #include <bgfx_shader.sh>
 #include "../common/utils.sh"
+#include "../common/color.sh"
 
 SAMPLER2D(s_baseColor, 0);
 SAMPLER2D(s_bump, 1);
@@ -45,7 +46,7 @@ void main()
 
     vec3 viewNormal = normalize(mul(TBN, normalTS));
 
-	gl_FragData[0] = u_baseColor * vec4(texture2D(s_baseColor, uv).rgb, 1.0);
+	gl_FragData[0] = u_baseColor * vec4(SRGBToLinear(texture2D(s_baseColor, uv).rgb), 1.0);
 	gl_FragData[1] = u_emissionColor;
 	gl_FragData[2] = vec4(viewNormal, 1.0);
 	gl_FragData[3] = u_pbrData;
