@@ -229,8 +229,17 @@ void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::
         outFile.write(reinterpret_cast<const char *>(&tagLength), sizeof(tagLength));
         outFile.write(reinterpret_cast<const char *>(mesh.tag.data()), tagLength);
 
-        outFile.write(reinterpret_cast<const char *>(&mesh.material), sizeof(mesh.material));
-
+        // write material
+        outFile.write(reinterpret_cast<const char *>(&mesh.material.type), sizeof(mesh.material.type));
+        outFile.write(reinterpret_cast<const char *>(mesh.material.baseColor.data()), mesh.material.baseColor.size() * sizeof(float));
+        outFile.write(reinterpret_cast<const char *>(mesh.material.emissionColor.data()), mesh.material.emissionColor.size() * sizeof(float));
+        outFile.write(reinterpret_cast<const char *>(&mesh.material.writesObjectMotionVectors), sizeof(mesh.material.writesObjectMotionVectors));
+        outFile.write(reinterpret_cast<const char *>(&mesh.material.metallic), sizeof(mesh.material.metallic));
+        outFile.write(reinterpret_cast<const char *>(&mesh.material.roughness), sizeof(mesh.material.roughness));
+        uint32_t textureLength = static_cast<uint32_t>(mesh.material.texture.length());
+        outFile.write(reinterpret_cast<const char *>(&textureLength), sizeof(textureLength));
+        outFile.write(reinterpret_cast<const char *>(mesh.material.texture.data()), textureLength);
+        
         uint32_t vertexCount = static_cast<uint32_t>(mesh.vertices.size());
         outFile.write(reinterpret_cast<const char *>(&vertexCount), sizeof(vertexCount));
         outFile.write(reinterpret_cast<const char *>(mesh.vertices.data()), vertexCount * sizeof(MeshVertex));
@@ -283,7 +292,22 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
             mesh.tag = tag;
         }
 
-        inFile.read(reinterpret_cast<char *>(&mesh.material), sizeof(mesh.material));
+        // read material
+        Material material;
+        inFile.read(reinterpret_cast<char *>(&material.type), sizeof(material.type));
+        inFile.read(reinterpret_cast<char *>(material.baseColor.data()), material.baseColor.size() * sizeof(float));
+        inFile.read(reinterpret_cast<char *>(material.emissionColor.data()), material.emissionColor.size() * sizeof(float));
+        inFile.read(reinterpret_cast<char *>(&material.writesObjectMotionVectors), sizeof(material.writesObjectMotionVectors));
+        inFile.read(reinterpret_cast<char *>(&material.metallic), sizeof(material.metallic));
+        inFile.read(reinterpret_cast<char *>(&material.roughness), sizeof(material.roughness));
+        uint32_t textureLength;
+        inFile.read(reinterpret_cast<char *>(&textureLength), sizeof(textureLength));
+        if (textureLength > 0)
+        {
+            material.texture.resize(textureLength);
+            inFile.read(reinterpret_cast<char *>(material.texture.data()), textureLength);
+        }
+        mesh.material = material;
 
         uint32_t vertexCount;
         inFile.read(reinterpret_cast<char *>(&vertexCount), sizeof(vertexCount));

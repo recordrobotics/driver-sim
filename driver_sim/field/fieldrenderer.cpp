@@ -40,6 +40,9 @@
 #include <bloom_dirt_mask.png.h>
 #include <lut.exr.h>
 
+#include <carpet_base_color.jpg.h>
+#include <carpet_bump.jpg.h>
+
 #if GAME_YEAR == 2026
 #include "seasonspecific/rebuilt2026/fmsui.h"
 #include "seasonspecific/rebuilt2026/hublights.h"
@@ -94,6 +97,7 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(vs_pbr),
         BGFX_EMBEDDED_SHADER(vs_pbr_instanced),
         BGFX_EMBEDDED_SHADER(fs_pbr),
+        BGFX_EMBEDDED_SHADER(fs_pbr_textured),
         BGFX_EMBEDDED_SHADER(fs_pbr_oit),
         BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
 
@@ -299,6 +303,7 @@ bgfx::UniformHandle u_bloomIntensity;
 bgfx::UniformHandle u_lutParams;
 
 bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programPBRTextured = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitInstanced = BGFX_INVALID_HANDLE;
@@ -346,6 +351,9 @@ Texture gMBOutputColor;
 
 Texture bloomDirtMask;
 
+Texture carpetBaseColor;
+Texture carpetBump;
+
 Texture tonemappingLut;
 
 FrameBuffer gBufFbo;
@@ -368,12 +376,15 @@ bgfx::UniformHandle s_bloomDirt;
 
 bgfx::UniformHandle s_lut;
 
+bgfx::UniformHandle s_baseColor;
+bgfx::UniformHandle s_bump;
+
 float bloomThreshold = 5.2f;
 float bloomKnee = 0.1f;
 float bloomIntensity = 1.0f;
 float bloomDirtIntensity = 1.1f;
 
-float tonemappingExposure = -1.171f;
+float tonemappingExposure = -2.0f;
 
 float fieldModelMatrix[16];
 float fieldNormalMatrix[9];
@@ -398,6 +409,20 @@ bool freezeTemporalEffects = false;
 
 void initPBROIT(uint16_t width, uint16_t height)
 {
+    s_baseColor = bgfx::createUniform("s_baseColor", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_baseColor))
+    {
+        logger->error("Failed to create uniform for base color texture.");
+        throw std::runtime_error("Failed to create uniform for base color texture.");
+    }
+
+    s_bump = bgfx::createUniform("s_bump", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_bump))
+    {
+        logger->error("Failed to create uniform for bump texture.");
+        throw std::runtime_error("Failed to create uniform for bump texture.");
+    }
+
     const auto type = bgfx::getRendererType();
 
     programPBR =
@@ -408,6 +433,16 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create PBR rendering program.");
         throw std::runtime_error("Failed to create PBR rendering program.");
+    }
+
+    programPBRTextured =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_textured"), true);
+
+    if (!bgfx::isValid(programPBRTextured))
+    {
+        logger->error("Failed to create PBR textured rendering program.");
+        throw std::runtime_error("Failed to create PBR textured rendering program.");
     }
 
     programPBRInstanced =
@@ -557,6 +592,20 @@ void initPBROIT(uint16_t width, uint16_t height)
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     gOutputColor.mipCount = calculateBloomMipmapLevels(gOutputColor.width, gOutputColor.height);
+
+    TEXTURE_EMBEDDED(
+        carpetBaseColor,
+        carpet_base_color_jpg,
+        bimg::TextureFormat::BGRA8,
+        bgfx::TextureFormat::BGRA8,
+        0);
+
+    TEXTURE_EMBEDDED(
+        carpetBump,
+        carpet_bump_jpg,
+        bimg::TextureFormat::BGRA8,
+        bgfx::TextureFormat::BGRA8,
+        0);
 }
 
 void initTonemap()
@@ -1737,6 +1786,11 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
     encoder->setUniform(u_emissionColor, mesh.material.emissionColor.data());
     encoder->setUniform(u_previousModelViewProj, previousViewProj);
     encoder->setUniform(u_pbrData, pbrData);
+
+    if(mesh.material.texture == "carpet") {
+        encoder->setTexture(0, s_baseColor, carpetBaseColor.handle);
+        encoder->setTexture(1, s_bump, carpetBump.handle);
+    }
 }
 
 template <std::ranges::input_range R>
@@ -1760,7 +1814,7 @@ void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16], float
         }
         else
         {
-            encoder->submit(VIEW_GBUFFER, programPBR);
+            encoder->submit(VIEW_GBUFFER, mesh.material.texture.empty() ? programPBR : programPBRTextured);
         }
     }
 }
@@ -2520,6 +2574,8 @@ void field::cleanup()
 
     if (bgfx::isValid(programPBR))
         bgfx::destroy(programPBR);
+    if (bgfx::isValid(programPBRTextured))
+        bgfx::destroy(programPBRTextured);
     if (bgfx::isValid(programPBRInstanced))
         bgfx::destroy(programPBRInstanced);
     if (bgfx::isValid(programOit))
@@ -2589,6 +2645,9 @@ void field::cleanup()
 
     tonemappingLut.destroy();
 
+    carpetBaseColor.destroy();
+    carpetBump.destroy();
+
     if (bgfx::isValid(s_tex))
         bgfx::destroy(s_tex);
     if (bgfx::isValid(s_taaHistory))
@@ -2613,4 +2672,9 @@ void field::cleanup()
         bgfx::destroy(s_bloomDirt);
     if (bgfx::isValid(s_lut))
         bgfx::destroy(s_lut);
+
+    if (bgfx::isValid(s_baseColor))
+        bgfx::destroy(s_baseColor);
+    if (bgfx::isValid(s_bump))
+        bgfx::destroy(s_bump);
 }

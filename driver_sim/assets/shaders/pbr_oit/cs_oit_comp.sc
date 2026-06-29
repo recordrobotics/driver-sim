@@ -56,7 +56,7 @@ void main()
     vec4 final_col = oit_col * (1.0 - oit_col.a) + pbr_col * oit_col.a;
     final_col.a = saturate(final_col.a);
 
-    vec3 sky_col = pow(vec3(0.18, 0.18, 0.2) * 1.5, vec3_splat(2.2));
+    vec3 sky_col = pow(vec3(0.54, 0.54, 0.6), vec3_splat(2.2));
 
     imageStore(s_output, uvi, vec4(sky_col * (1.0 - final_col.a) + final_col.rgb * final_col.a, 1.0));
 }

@@ -13,6 +13,10 @@
 #include <essl/fs_pbr.sc.bin.h>
 #include <spirv/fs_pbr.sc.bin.h>
 
+#include <glsl/fs_pbr_textured.sc.bin.h>
+#include <essl/fs_pbr_textured.sc.bin.h>
+#include <spirv/fs_pbr_textured.sc.bin.h>
+
 #include <glsl/fs_pbr_oit.sc.bin.h>
 #include <essl/fs_pbr_oit.sc.bin.h>
 #include <spirv/fs_pbr_oit.sc.bin.h>
@@ -81,6 +85,7 @@
 #include <dxbc/vs_pbr.sc.bin.h>
 #include <dxbc/vs_pbr_instanced.sc.bin.h>
 #include <dxbc/fs_pbr.sc.bin.h>
+#include <dxbc/fs_pbr_textured.sc.bin.h>
 #include <dxbc/fs_pbr_oit.sc.bin.h>
 #include <dxbc/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
@@ -106,6 +111,7 @@
 #include <dxil/vs_pbr.sc.bin.h>
 #include <dxil/vs_pbr_instanced.sc.bin.h>
 #include <dxil/fs_pbr.sc.bin.h>
+#include <dxil/fs_pbr_textured.sc.bin.h>
 #include <dxil/fs_pbr_oit.sc.bin.h>
 #include <dxil/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
@@ -131,6 +137,7 @@
 #include <metal/vs_pbr.sc.bin.h>
 #include <metal/vs_pbr_instanced.sc.bin.h>
 #include <metal/fs_pbr.sc.bin.h>
+#include <metal/fs_pbr_textured.sc.bin.h>
 #include <metal/fs_pbr_oit.sc.bin.h>
 #include <metal/fs_pbr_oit_depth_post_pass.sc.bin.h>
 

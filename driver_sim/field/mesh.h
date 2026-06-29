@@ -17,7 +17,7 @@
 #endif
 
 constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 3; // increment to force reload cache
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 4; // increment to force reload cache
 
 enum class MaterialType
 {
@@ -56,8 +56,9 @@ typedef struct Material
     bool writesObjectMotionVectors;
     float metallic;
     float roughness;
+    std::string texture;
 
-    Material() : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f}, emissionColor{0.0f, 0.0f, 0.0f, 1.0f}, writesObjectMotionVectors(false), metallic(0.0f), roughness(0.5f)
+    Material() : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f}, emissionColor{0.0f, 0.0f, 0.0f, 1.0f}, writesObjectMotionVectors(false), metallic(0.0f), roughness(0.5f), texture("")
     {
     }
 
@@ -85,9 +86,15 @@ typedef struct Material
             // playing field carpet floor is rough
             metallic = 0.0f;
             roughness = 0.6f;
+            baseColor[0] = 0.9f;
+            baseColor[1] = 0.9f;
+            baseColor[2] = 0.9f;
+            baseColor[3] = 1.0f;
+            texture = "carpet"; // carpet texture
         } else {
             metallic = 0.0f;
             roughness = 0.4f;
+            texture = "";
         }
     }
 
@@ -100,6 +107,10 @@ typedef struct Material
                bit_equal(emissionColor[0], other.emissionColor[0]) &&
                bit_equal(emissionColor[1], other.emissionColor[1]) &&
                bit_equal(emissionColor[2], other.emissionColor[2]) &&
+               bit_equal(emissionColor[3], other.emissionColor[3]) &&
+               bit_equal(metallic, other.metallic) &&
+               bit_equal(roughness, other.roughness) &&
+               texture == other.texture &&
                type == other.type;
     }
 } Material;
@@ -114,7 +125,15 @@ typedef struct MaterialHash
             hash_combine(h, mat.baseColor[i]);
         }
 
+        for (std::size_t i = 0; i < mat.emissionColor.size(); ++i)
+        {
+            hash_combine(h, mat.emissionColor[i]);
+        }
+
         hash_combine(h, mat.type);
+        hash_combine(h, mat.texture);
+        hash_combine(h, mat.metallic);
+        hash_combine(h, mat.roughness);
 
         return h;
     }
