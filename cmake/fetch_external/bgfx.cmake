@@ -5,9 +5,14 @@ include(FetchContent)
 FetchContent_Declare(
     bgfx
     GIT_REPOSITORY https://github.com/bkaradzic/bgfx.cmake.git
-    GIT_TAG v1.146.9317-553
+    GIT_TAG v1.147.9336-554
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/bgfx
+    PATCH_COMMAND
+        ${CMAKE_COMMAND}
+            -DSOURCE_DIR=<SOURCE_DIR>/bgfx
+            -DPATCH_URL=https://github.com/bkaradzic/bgfx/compare/master...Compdog-inc:bgfx:shaderc-rt-format.patch
+            -P ${CMAKE_CURRENT_LIST_DIR}/../ApplyBgfxPatch.cmake
 )
 
 set( BGFX_BUILD_TOOLS ON CACHE INTERNAL "")

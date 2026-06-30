@@ -17,3 +17,5 @@ vec4 i_data7 : TEXCOORD0;
 vec3 a_position  : POSITION;
 vec4 a_normal    : NORMAL;
 vec2 a_texcoord0 : TEXCOORD0;
+
+uint gl_FragData[2];

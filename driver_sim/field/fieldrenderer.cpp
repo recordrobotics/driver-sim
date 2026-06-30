@@ -105,6 +105,7 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(fs_tonemap),
 
         BGFX_EMBEDDED_SHADER(cs_blit),
+        BGFX_EMBEDDED_SHADER(cs_debug_normals),
         BGFX_EMBEDDED_SHADER(cs_exposure),
         BGFX_EMBEDDED_SHADER(cs_oit_comp),
         BGFX_EMBEDDED_SHADER(cs_taa_resolve),
@@ -351,6 +352,7 @@ bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle tonemapProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle exposureProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle debugNormalsProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle taaResolveProgram = BGFX_INVALID_HANDLE;
 
@@ -780,7 +782,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA8S,
+        bgfx::TextureFormat::R32U,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     TEXTURE(
@@ -789,7 +791,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA16F,
+        bgfx::TextureFormat::RGBA8,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     TEXTURE(
@@ -1620,6 +1622,15 @@ void field::init(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create blit program.");
     }
 
+    debugNormalsProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_debug_normals"), true);
+
+    if (!bgfx::isValid(debugNormalsProgram))
+    {
+        logger->error("Failed to create debug normals program.");
+        throw std::runtime_error("Failed to create debug normals program.");
+    }
+
     initGBuffer(window.width, window.height);
     initPBROIT(window.width, window.height);
     initTonemap();
@@ -2415,6 +2426,9 @@ void field::render(const blackboard::app::Window &window)
 
     if (settings::enableTAA)
     {
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
         // TAA resolve
         Texture taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;
 
@@ -2506,7 +2520,15 @@ void field::render(const blackboard::app::Window &window)
             encoder->setTexture(0, s_tex, gbufAlbedo.handle);
             break;
         case DebugView::Normal:
-            encoder->setTexture(0, s_tex, gbufNormal.handle);
+            // Unpack and store normals in gOutputColor
+            xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+            yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+            encoder->setImage(0, gbufNormal.handle, 0, bgfx::Access::Read);
+            encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+            encoder->dispatch(VIEW_BLIT, debugNormalsProgram, xGroups, yGroups);
+
+            encoder->setTexture(0, s_tex, gOutputColor.handle);
             break;
         case DebugView::Emission:
             encoder->setTexture(0, s_tex, gbufEmission.handle);
@@ -2650,6 +2672,8 @@ void field::cleanup()
         bgfx::destroy(tonemapProgram);
     if (bgfx::isValid(blitProgram))
         bgfx::destroy(blitProgram);
+    if (bgfx::isValid(debugNormalsProgram))
+        bgfx::destroy(debugNormalsProgram);
     if (bgfx::isValid(exposureProgram))
         bgfx::destroy(exposureProgram);
     if (bgfx::isValid(taaResolveProgram))

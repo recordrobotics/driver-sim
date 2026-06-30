@@ -2,6 +2,7 @@ $input v_viewPosition, v_viewNormal, v_currentPosition, v_previousPosition, v_wo
 
 #include <bgfx_shader.sh>
 #include "../common/utils.sh"
+#include "../common/packing.sh"
 
 uniform vec4 u_baseColor;
 uniform vec4 u_emissionColor;
@@ -12,9 +13,12 @@ void main()
 {
 	bool writeMotionVectors = u_pbrData.x > 0.5;
 
+    vec3 unpackedInput = v_viewNormal * vec3_splat(0.5) + vec3_splat(0.5);
+    uint packedOutput = FLOAT3_to_R11G11B10_UNORM( unpackedInput );
+
 	gl_FragData[0] = u_baseColor;
 	gl_FragData[1] = u_emissionColor;
-	gl_FragData[2] = vec4(v_viewNormal, 1.0);
+	gl_FragData[2] = packedOutput;
 	gl_FragData[3] = u_pbrData;
 
 	if(writeMotionVectors) {

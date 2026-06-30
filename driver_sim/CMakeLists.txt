@@ -77,11 +77,33 @@ set(BIG_SHADER_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/blackboard_app/platform/include
 )
 
+set(SHADER_PROFILES spirv 430 300_es)
+
+if(IOS)
+    list(APPEND SHADER_PROFILES metal)
+elseif(APPLE)
+    list(APPEND SHADER_PROFILES metal)
+elseif(
+    WIN32
+    OR MINGW
+    OR MSYS
+    OR CYGWIN
+)
+    list(APPEND SHADER_PROFILES s_5_0 s_6_0)
+elseif(ORBIS) # ORBIS should be defined by a PS4 CMake toolchain
+    list(APPEND SHADER_PROFILES pssl)
+else()
+    # pssl for Agc and Gnm renderers
+    # nvn for Nvn renderer
+    message(error "shaderc: Unsupported platform")
+endif()
+
 bgfx_compile_shaders(
   TYPE VERTEX
   SHADERS ${VS_SHADERS}
     VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/common/varying.def.sc
     INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
+  PROFILES ${SHADER_PROFILES}
   OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
   AS_HEADERS
 )
@@ -90,6 +112,7 @@ bgfx_compile_shaders(
   SHADERS ${FS_SHADERS}
     VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/common/varying.def.sc
     INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
+  PROFILES ${SHADER_PROFILES}
   OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
   AS_HEADERS
 )
@@ -98,6 +121,7 @@ bgfx_compile_shaders(
   SHADERS ${CS_SHADERS}
     VARYING_DEF ${CMAKE_CURRENT_LIST_DIR}/assets/shaders/common/varying.def.sc
     INCLUDE_DIRS ${BIG_SHADER_INCLUDE_DIRS}
+  PROFILES ${SHADER_PROFILES}
   OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/generated/shaders
   AS_HEADERS
 )

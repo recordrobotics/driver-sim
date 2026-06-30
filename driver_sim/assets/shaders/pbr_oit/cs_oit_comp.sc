@@ -1,13 +1,14 @@
 #include <bgfx_compute.sh>
 #include "../common/pbr.sh"
 #include "../common/color.sh"
+#include "../common/packing.sh"
 
 IMAGE2D_RO(s_accum, rgba16f, 0);
 IMAGE2D_RO(s_reveal, r16f, 1);
 IMAGE2D_RO(s_albedo, rgba8, 2);
 IMAGE2D_RO(s_emission, rgba16f, 3);
-IMAGE2D_RO(s_normal, rgba16f, 4);
-IMAGE2D_RO(s_pbrData, rgba16f, 5);
+IMAGE2D_RO(s_normal, r32ui, 4);
+IMAGE2D_RO(s_pbrData, rgba8, 5);
 IMAGE2D_RO(s_depth, r32f, 6);
 IMAGE2D_WO(s_output, rgba16f, 7);
 
@@ -36,7 +37,11 @@ void main()
     if(depth > 0) {
         vec4 albedo = imageLoad(s_albedo, uvi);
         vec4 emission = imageLoad(s_emission, uvi);
-        vec3 normal = imageLoad(s_normal, uvi).xyz;
+
+        uint packedInput = imageLoad(s_normal, uvi).x;
+        vec3 unpackedOutput = R11G11B10_UNORM_to_FLOAT3( packedInput );
+        vec3 normal = normalize(unpackedOutput * vec3_splat(2.0) - vec3_splat(1.0));
+
         vec4 pbrData = imageLoad(s_pbrData, uvi);
 
         vec2 uvn = vec2(uvi + vec2_splat(0.5)) / render_size;
