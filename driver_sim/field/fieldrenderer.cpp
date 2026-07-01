@@ -2351,7 +2351,7 @@ void field::render(const blackboard::app::Window &window)
 
     encoder->setUniform(u_XeGTAOData, &XeGTAOData, 1);
 
-    encoder->setTexture(0, s_depth, gbufDepth.handle);
+    encoder->setTexture(0, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     for (int i = 0; i < XE_GTAO_DEPTH_MIP_LEVELS; ++i)
     {
         encoder->setImage(i + 1, gGTAOWorkingDepth.handle, i, bgfx::Access::Write);
