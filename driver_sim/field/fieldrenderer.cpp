@@ -48,45 +48,52 @@
 #include "seasonspecific/rebuilt2026/hublights.h"
 #endif
 
-struct Pose3dObject {
+struct Pose3dObject
+{
     frc::Pose3d pose;
     int identity;
 
-    Pose3dObject(const frc::Pose3d& p, int id) : pose(p), identity(id) {}
+    Pose3dObject(const frc::Pose3d &p, int id) : pose(p), identity(id) {}
 
     Pose3dObject() : pose(frc::Pose3d()), identity(0) {}
 };
 
-namespace {
+namespace
+{
     constexpr size_t kPoseOff = 0;
     constexpr size_t kIdentityOff =
         kPoseOff + wpi::GetStructSize<frc::Pose3d>();
-}  // namespace
+} // namespace
 
 template <>
-struct wpi::Struct<Pose3dObject> {
-  static constexpr std::string_view GetTypeName() { return "Pose3dObject"; }
-  static constexpr size_t GetSize() {
-    return wpi::GetStructSize<frc::Pose3d>() + 4;
-  }
-  static constexpr std::string_view GetSchema() {
-    return "Pose3d pose;int identity";
-  }
-
-  static Pose3dObject Unpack(std::span<const uint8_t> data) {
-    return Pose3dObject{
-        wpi::UnpackStruct<frc::Pose3d, kPoseOff>(data),
-        wpi::UnpackStruct<int, kIdentityOff>(data)
-    };
+struct wpi::Struct<Pose3dObject>
+{
+    static constexpr std::string_view GetTypeName() { return "Pose3dObject"; }
+    static constexpr size_t GetSize()
+    {
+        return wpi::GetStructSize<frc::Pose3d>() + 4;
     }
-  static void Pack(std::span<uint8_t> data, const Pose3dObject& value) {
-  wpi::PackStruct<kPoseOff>(data, value.pose);
-  wpi::PackStruct<kIdentityOff>(data, value.identity);
-  }
-  static void ForEachNested(
-      std::invocable<std::string_view, std::string_view> auto fn) {
-    wpi::ForEachStructSchema<frc::Pose3d>(fn);
-  }
+    static constexpr std::string_view GetSchema()
+    {
+        return "Pose3d pose;int identity";
+    }
+
+    static Pose3dObject Unpack(std::span<const uint8_t> data)
+    {
+        return Pose3dObject{
+            wpi::UnpackStruct<frc::Pose3d, kPoseOff>(data),
+            wpi::UnpackStruct<int, kIdentityOff>(data)};
+    }
+    static void Pack(std::span<uint8_t> data, const Pose3dObject &value)
+    {
+        wpi::PackStruct<kPoseOff>(data, value.pose);
+        wpi::PackStruct<kIdentityOff>(data, value.identity);
+    }
+    static void ForEachNested(
+        std::invocable<std::string_view, std::string_view> auto fn)
+    {
+        wpi::ForEachStructSchema<frc::Pose3d>(fn);
+    }
 };
 
 static_assert(wpi::StructSerializable<Pose3dObject>);
@@ -119,7 +126,7 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(cs_bloom_downscale),
         BGFX_EMBEDDED_SHADER(cs_bloom_upscale),
 
-        BGFX_EMBEDDED_SHADER(cs_ssao),
+        BGFX_EMBEDDED_SHADER(cs_XeGTAO_PrefilterDepths16x16),
 
         BGFX_EMBEDDED_SHADER_END()};
 
@@ -195,8 +202,8 @@ static const std::array<std::string, static_cast<size_t>(CameraView::Count)> CAM
     "Robot",
     "Robot Relative"};
 
-
-enum class DebugView {
+enum class DebugView
+{
     None,
     Albedo,
     Normal,
@@ -211,7 +218,11 @@ enum class DebugView {
     MotionBlurTileMaxY,
     MotionBlurNeighborMax,
     MotionBlurTileVariance,
-    SSAO,
+    GTAOWorkingDepth0,
+    GTAOWorkingDepth1,
+    GTAOWorkingDepth2,
+    GTAOWorkingDepth3,
+    GTAOWorkingDepth4,
     Count
 };
 
@@ -230,16 +241,20 @@ static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBU
     "Motion Blur Tile Max Y",
     "Motion Blur Neighbor Max",
     "Motion Blur Tile Variance",
-    "SSAO"
-};
+    "GTAO Working Depth 0",
+    "GTAO Working Depth 1",
+    "GTAO Working Depth 2",
+    "GTAO Working Depth 3",
+    "GTAO Working Depth 4"};
 
-struct Vec3Padded {
+struct Vec3Padded
+{
     bx::Vec3 vec;
     float padding; // padding to make it vec4 that bgfx expects
 
     Vec3Padded() : vec(0.0f, 0.0f, 0.0f), padding(0.0f) {}
     Vec3Padded(float x, float y, float z) : vec(x, y, z), padding(0.0f) {}
-    Vec3Padded(const bx::Vec3& v) : vec(v), padding(0.0f) {}
+    Vec3Padded(const bx::Vec3 &v) : vec(v), padding(0.0f) {}
 };
 
 static constexpr float INCHES_TO_METERS = 0.0254f;
@@ -256,16 +271,17 @@ static constexpr uint8_t BLOOM_MAX_ITERATIONS = 16;
 
 static uint8_t calculateBloomMipmapLevels(uint16_t width, uint16_t height)
 {
-    width  /= 2;
+    width /= 2;
     height /= 2;
-    uint8_t  mip_levels = 1;
+    uint8_t mip_levels = 1;
 
     for (uint8_t i = 0; i < BLOOM_MAX_ITERATIONS; ++i)
     {
         width /= 2;
         height /= 2;
 
-        if (width < BLOOM_DOWNSCALE_LIMIT || height < BLOOM_DOWNSCALE_LIMIT) break;
+        if (width < BLOOM_DOWNSCALE_LIMIT || height < BLOOM_DOWNSCALE_LIMIT)
+            break;
 
         ++mip_levels;
     }
@@ -287,14 +303,15 @@ static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {20.0f, 0.0f
 using namespace blackboard::logger;
 
 static constexpr uint16_t VIEW_GBUFFER = 0;
-static constexpr uint16_t VIEW_OIT = 1;
-static constexpr uint16_t VIEW_OIT_DEPTH_POST_PASS = 2;
-static constexpr uint16_t VIEW_POSTPROCESS = 3;
-static constexpr uint16_t VIEW_BLIT = 4;
+static constexpr uint16_t VIEW_GTAO = 1;
+static constexpr uint16_t VIEW_OIT = 2;
+static constexpr uint16_t VIEW_OIT_DEPTH_POST_PASS = 3;
+static constexpr uint16_t VIEW_POSTPROCESS = 4;
+static constexpr uint16_t VIEW_BLIT = 5;
 
 static constexpr uint8_t LIGHT_COUNT = 6;
 
-static constexpr uint8_t SSAO_KERNEL_SIZE = 128;
+static constexpr uint8_t XE_GTAO_DEPTH_MIP_LEVELS = 5;
 
 // from https://github.com/Unity-Technologies/Graphics/blob/master/com.unity.postprocessing/PostProcessing/Shaders/Colors.hlsl
 inline float PositivePow(float base, float power)
@@ -302,7 +319,7 @@ inline float PositivePow(float base, float power)
     return std::pow(std::max(std::abs(base), 1.192092896e-07f), power);
 }
 
-inline std::array<float, 4> SRGBToLinear(const std::array<float, 4>& srgb)
+inline std::array<float, 4> SRGBToLinear(const std::array<float, 4> &srgb)
 {
     std::array<float, 4> linear;
     for (size_t i = 0; i < 3; ++i)
@@ -338,8 +355,7 @@ bgfx::UniformHandle u_bloomIntensity;
 
 bgfx::UniformHandle u_lutParams;
 
-bgfx::UniformHandle u_SSAOData;
-bgfx::UniformHandle u_SSAOSamples;
+bgfx::UniformHandle u_XeGTAOData;
 
 bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRTextured = BGFX_INVALID_HANDLE;
@@ -366,7 +382,7 @@ bgfx::ProgramHandle mbGuertinExperimentalBlurProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle bloomDownscaleProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle bloomUpscaleProgram = BGFX_INVALID_HANDLE;
 
-bgfx::ProgramHandle ssaoProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle XeGTAO_PrefilterDepths16x16Program = BGFX_INVALID_HANDLE;
 
 Texture gAccumTex;
 Texture gRevealTex;
@@ -391,9 +407,8 @@ Texture gMBTileVariance;
 Texture gMBVelocity;
 Texture gMBOutputColor;
 
-Texture gSSAOOutput;
+Texture gGTAOWorkingDepth;
 
-Texture ssaoNoise;
 Texture bloomDirtMask;
 
 Texture carpetBaseColor;
@@ -431,13 +446,9 @@ float bloomDirtIntensity = 1.1f;
 
 float tonemappingExposure = -2.0f;
 
-float ssaoTotalStrength = 1.0f;
-float ssaoBase = 0.2f;
-float ssaoArea = 0.0075f;
-float ssaoFalloff = 0.000001f;
-float ssaoRadius = 0.0002;
-float ssaoBias = 0.025f;
-Vec3Padded ssaoSamples[SSAO_KERNEL_SIZE];
+float gtaoEffectRadius = 0.5f;
+float gtaoRadiusMultiplier = 1.457f;
+float gtaoEffectFalloffRange = 0.615f;
 
 float fieldModelMatrix[16];
 
@@ -1002,26 +1013,26 @@ void initBloom(uint16_t width, uint16_t height)
     }
 
     s_bloomDirt = bgfx::createUniform("s_bloomDirt", bgfx::UniformType::Sampler);
-    if(!bgfx::isValid(s_bloomDirt))
+    if (!bgfx::isValid(s_bloomDirt))
     {
         logger->error("Failed to create uniform: s_bloomDirt");
         throw std::runtime_error("Failed to create uniform: s_bloomDirt");
     }
 
     u_bloomThreshold = bgfx::createUniform("u_threshold", bgfx::UniformType::Vec4);
-    if(!bgfx::isValid(u_bloomThreshold))
+    if (!bgfx::isValid(u_bloomThreshold))
     {
         logger->error("Failed to create uniform: u_bloomThreshold");
         throw std::runtime_error("Failed to create uniform: u_bloomThreshold");
     }
     u_bloomTexelSize = bgfx::createUniform("u_texel_size", bgfx::UniformType::Vec4);
-    if(!bgfx::isValid(u_bloomTexelSize))
+    if (!bgfx::isValid(u_bloomTexelSize))
     {
         logger->error("Failed to create uniform: u_bloomTexelSize");
         throw std::runtime_error("Failed to create uniform: u_bloomTexelSize");
     }
     u_bloomIntensity = bgfx::createUniform("u_bloom_intensity", bgfx::UniformType::Vec4);
-    if(!bgfx::isValid(u_bloomIntensity))
+    if (!bgfx::isValid(u_bloomIntensity))
     {
         logger->error("Failed to create uniform: u_bloomIntensity");
         throw std::runtime_error("Failed to create uniform: u_bloomIntensity");
@@ -1035,52 +1046,39 @@ void initBloom(uint16_t width, uint16_t height)
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
-void initSSAO(uint16_t width, uint16_t height)
+void initGTAO(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
-    ssaoProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_ssao"), true);
-    if (!bgfx::isValid(ssaoProgram))
+    XeGTAO_PrefilterDepths16x16Program =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_PrefilterDepths16x16"), true);
+    if (!bgfx::isValid(XeGTAO_PrefilterDepths16x16Program))
     {
-        logger->error("Failed to create SSAO program.");
-        throw std::runtime_error("Failed to create SSAO program.");
+        logger->error("Failed to create XeGTAO Prefilter Depths 16x16 program.");
+        throw std::runtime_error("Failed to create XeGTAO Prefilter Depths 16x16 program.");
     }
 
-    u_SSAOData = bgfx::createUniform("u_SSAOData", bgfx::UniformType::Vec4, 2);
-    if(!bgfx::isValid(u_SSAOData))
+    u_XeGTAOData = bgfx::createUniform("u_XeGTAOData", bgfx::UniformType::Vec4, 1);
+    if (!bgfx::isValid(u_XeGTAOData))
     {
-        logger->error("Failed to create uniform: u_SSAOData");
-        throw std::runtime_error("Failed to create uniform: u_SSAOData");
-    }
-
-    u_SSAOSamples = bgfx::createUniform("u_SSAOSamples", bgfx::UniformType::Vec4, SSAO_KERNEL_SIZE);
-    if(!bgfx::isValid(u_SSAOSamples))
-    {
-        logger->error("Failed to create uniform: u_SSAOSamples");
-        throw std::runtime_error("Failed to create uniform: u_SSAOSamples");
+        logger->error("Failed to create uniform: u_XeGTAOData");
+        throw std::runtime_error("Failed to create uniform: u_XeGTAOData");
     }
 
     TEXTURE(
-        gSSAOOutput,
+        gGTAOWorkingDepth,
         width, height,
         1.0f, 1.0f,
-        false,
+        true,
         1,
-        bgfx::TextureFormat::R16F,
+        bgfx::TextureFormat::R32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
-
-    // TEXTURE_EMBEDDED(
-    //     ssaoNoise,
-    //     ssao_noise_png,
-    //     bimg::TextureFormat::BGRA8,
-    //     bgfx::TextureFormat::BGRA8,
-    //     BGFX_SAMPLER_U_REPEAT | BGFX_SAMPLER_V_REPEAT);
+    gGTAOWorkingDepth.mipCount = XE_GTAO_DEPTH_MIP_LEVELS;
 }
 
 inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
 {
-    const frc::Quaternion& frcQuat = rotation.GetQuaternion();
+    const frc::Quaternion &frcQuat = rotation.GetQuaternion();
     return {static_cast<float>(frcQuat.X()),
             static_cast<float>(frcQuat.Y()),
             static_cast<float>(frcQuat.Z()),
@@ -1183,21 +1181,27 @@ typedef struct DynamicObjectData
             instanceData.previousTransform = instanceData.transform;
         }
 
-        if(lastDataUpdate == -1) {
+        if (lastDataUpdate == -1)
+        {
             lastPosition = position;
             lastRotation = rotation;
-        } else {
+        }
+        else
+        {
             float interpolationFactor = deltaTime / settings::ntPeriodic;
             lastPosition = bx::lerp(lastPosition, position, interpolationFactor);
             lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
         }
 
-        if(parentMatrix == nullptr) {
+        if (parentMatrix == nullptr)
+        {
             instanceData.transform = {
                 modelMatrix,
                 lastPosition,
                 lastRotation};
-        } else {
+        }
+        else
+        {
             instanceData.transform = {
                 modelMatrix,
                 parentMatrix,
@@ -1205,12 +1209,13 @@ typedef struct DynamicObjectData
                 lastRotation};
         }
 
-        if(lastDataUpdate == -1) {
+        if (lastDataUpdate == -1)
+        {
             instanceData.previousTransform = instanceData.transform;
         }
     }
 
-    void update(float* modelMatrix, float deltaTime)
+    void update(float *modelMatrix, float deltaTime)
     {
         update(modelMatrix, nullptr, deltaTime);
     }
@@ -1481,7 +1486,7 @@ void loadFieldModel()
         for (size_t i = 0; i < gamePieces.size(); i++)
         {
             loadAndCacheMeshes(gamePieces[i].meshes, fieldDirectory, "model_" + std::to_string(i), {});
-            for(auto &mesh : gamePieces[i].meshes)
+            for (auto &mesh : gamePieces[i].meshes)
             {
                 mesh.material.writesObjectMotionVectors = true;
             }
@@ -1547,14 +1552,14 @@ void loadRobotModel()
                           .components = components});
 
         loadAndCacheMeshes(robots.back().meshes, robotDirectory, "model", {});
-        for(auto &mesh : robots.back().meshes)
+        for (auto &mesh : robots.back().meshes)
         {
             mesh.material.writesObjectMotionVectors = true;
         }
         for (size_t i = 0; i < components.size(); i++)
         {
             loadAndCacheMeshes(robots.back().components[i].meshes, robotDirectory, "model_" + std::to_string(i), {});
-            for(auto &mesh : robots.back().components[i].meshes)
+            for (auto &mesh : robots.back().components[i].meshes)
             {
                 mesh.material.writesObjectMotionVectors = true;
             }
@@ -1637,7 +1642,7 @@ void field::init(const blackboard::app::Window &window)
     initTAA(window.width, window.height);
     initMotionBlur(window.width, window.height);
     initBloom(window.width, window.height);
-    // initSSAO(window.width, window.height);
+    initGTAO(window.width, window.height);
 }
 
 void field::startNTClient()
@@ -1779,6 +1784,8 @@ void ensureTextures(uint16_t width, uint16_t height)
     gMBOutputColor.beginFrame();
     gMBVelocity.beginFrame();
 
+    gGTAOWorkingDepth.beginFrame();
+
     gAccumTex.ensure(width, height);
     gRevealTex.ensure(width, height);
 
@@ -1815,6 +1822,9 @@ void ensureTextures(uint16_t width, uint16_t height)
     gMBTileVariance.ensure(width, height);
     gMBOutputColor.ensure(width, height);
     gMBVelocity.ensure(width, height);
+
+    gGTAOWorkingDepth.ensure(width, height);
+    gGTAOWorkingDepth.mipCount = XE_GTAO_DEPTH_MIP_LEVELS;
 }
 
 void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
@@ -1854,7 +1864,8 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
     encoder->setUniform(u_previousModelViewProj, previousViewProj);
     encoder->setUniform(u_pbrData, pbrData);
 
-    if(mesh.material.texture == "carpet") {
+    if (mesh.material.texture == "carpet")
+    {
         encoder->setTexture(0, s_baseColor, carpetBaseColor.handle);
         encoder->setTexture(1, s_bump, carpetBump.handle);
     }
@@ -1926,8 +1937,7 @@ std::array<std::array<float, 4>, LIGHT_COUNT> lightColor = {
     SRGBToLinear({1.0f, 1.0f, 1.0f, 432.0f}),
     SRGBToLinear({1.0f, 1.0f, 1.0f, 332.0f}),
     SRGBToLinear({0.25f, 0.45f, 1.0f, 432.0f}),
-    SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})
-};
+    SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})};
 
 void field::render(const blackboard::app::Window &window)
 {
@@ -1951,6 +1961,14 @@ void field::render(const blackboard::app::Window &window)
 
     ImGui::Separator();
     ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
+
+    ImGui::Separator();
+
+    ImGui::Text("GTAO Settings");
+
+    ImGui::SliderFloat("Effect Radius", &gtaoEffectRadius, 0.01f, 3.0f);
+    ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
+    ImGui::SliderFloat("Effect Falloff Range", &gtaoEffectFalloffRange, 0.0f, 1.0f);
 
     ImGui::Separator();
 
@@ -2070,7 +2088,7 @@ void field::render(const blackboard::app::Window &window)
                     robot.components[i].dynamicData.rotation = rotation3dToQuaternion(frc::Rotation3d{});
                     robot.components[i].dynamicData.update(robot.modelMatrix.data(), robotOrigin.matrix, deltaTime);
                 }
-                
+
                 robot.components[i].dynamicData.lastDataUpdate = currentDataUpdateIndex;
             }
         }
@@ -2098,22 +2116,24 @@ void field::render(const blackboard::app::Window &window)
                 instance.lastDataUpdate = currentDataUpdateIndex;
             };
 
-            if(hasObjects) {
+            if (hasObjects)
+            {
                 auto gamePiecePoseObjects = gamePiece.poseObjectsSub.GetAtomic();
                 for (size_t i = 0; i < gamePiecePoseObjects.value.size(); ++i)
                 {
                     updateInstance(gamePiece.instances[gamePiecePoseObjects.value[i].identity], gamePiecePoseObjects.value[i].pose);
                 }
-            } else {
+            }
+            else
+            {
                 auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
                 for (size_t i = 0; i < gamePiecePoses.value.size(); ++i)
                 {
                     updateInstance(gamePiece.instances[i], gamePiecePoses.value[i]);
                 }
             }
-            std::erase_if(gamePiece.instances, [](const std::pair<int, DynamicObjectData> &pair) {
-                return pair.second.lastDataUpdate != currentDataUpdateIndex;
-            });
+            std::erase_if(gamePiece.instances, [](const std::pair<int, DynamicObjectData> &pair)
+                          { return pair.second.lastDataUpdate != currentDataUpdateIndex; });
         }
         else
         {
@@ -2209,7 +2229,7 @@ void field::render(const blackboard::app::Window &window)
         Vec3Padded(bx::mul({0.0f, -fieldHeightMeters / 2.5f, 6.0f}, view)),
         Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f}, view)),
         Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f}, view))};
-        
+
     encoder->setUniform(u_lightPos, lightPos, LIGHT_COUNT);
     encoder->setUniform(u_lightColor, lightColor.data(), LIGHT_COUNT);
 
@@ -2222,6 +2242,13 @@ void field::render(const blackboard::app::Window &window)
                        BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
                        0x00000000,
                        bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
+
+    // GTAO PASS
+    bgfx::setViewName(VIEW_GTAO, "Field - GTAO");
+    bgfx::setViewMode(VIEW_GTAO, bgfx::ViewMode::Sequential);
+    bgfx::setViewTransform(VIEW_GTAO, view, proj);
+    bgfx::setViewRect(VIEW_GTAO, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_GTAO, BGFX_INVALID_HANDLE);
 
     // TRANSPARENT PASS
     bgfx::setViewName(VIEW_OIT, "Field - OIT");
@@ -2242,6 +2269,18 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewTransform(VIEW_OIT_DEPTH_POST_PASS, view, proj);
     bgfx::setViewRect(VIEW_OIT_DEPTH_POST_PASS, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo.handle);
+
+    // Post processing
+    bgfx::setViewName(VIEW_POSTPROCESS, "Field - Post Process");
+    bgfx::setViewMode(VIEW_POSTPROCESS, bgfx::ViewMode::Sequential);
+    bgfx::setViewTransform(VIEW_POSTPROCESS, view, proj);
+    bgfx::setViewRect(VIEW_POSTPROCESS, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_POSTPROCESS, BGFX_INVALID_HANDLE);
+
+    // Blit and tonemap
+    bgfx::setViewFrameBuffer(VIEW_BLIT, BGFX_INVALID_HANDLE);
+    bgfx::setViewName(VIEW_BLIT, "Field - Blit");
+    bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
 
     if (createdFieldMeshBuffers)
     {
@@ -2294,21 +2333,37 @@ void field::render(const blackboard::app::Window &window)
         }
     }
 
-#if 0 // IF NO TRANSPARENT OBJECTS IN FIELD MODEL (RARE)
-        encoder->touch(VIEW_OIT); // needs to be cleared
-#endif
-
-    // Post processing
-    bgfx::setViewName(VIEW_POSTPROCESS, "Field - Post Process");
-    bgfx::setViewMode(VIEW_POSTPROCESS, bgfx::ViewMode::Sequential);
-    bgfx::setViewTransform(VIEW_POSTPROCESS, view, proj);
-    bgfx::setViewRect(VIEW_POSTPROCESS, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_POSTPROCESS, BGFX_INVALID_HANDLE);
-
-    encoder->setUniform(u_previousModelViewProj, previousViewProj);
+    // always clear OIT buffers
+    encoder->touch(VIEW_OIT);
 
     int xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     int yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+    // GTAO
+
+    // force unbind gbuffer view fbo
+    encoder->touch(VIEW_GTAO);
+
+    float XeGTAOData[4] = {
+        gtaoEffectRadius,
+        gtaoRadiusMultiplier,
+        gtaoEffectFalloffRange};
+
+    encoder->setUniform(u_XeGTAOData, &XeGTAOData, 1);
+
+    encoder->setTexture(0, s_depth, gbufDepth.handle);
+    for (int i = 0; i < XE_GTAO_DEPTH_MIP_LEVELS; ++i)
+    {
+        encoder->setImage(i + 1, gGTAOWorkingDepth.handle, i, bgfx::Access::Write);
+    }
+    encoder->dispatch(VIEW_GTAO, XeGTAO_PrefilterDepths16x16Program, xGroups, yGroups);
+
+    // Post processing
+
+    encoder->setUniform(u_previousModelViewProj, previousViewProj);
+
+    xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+    yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
     // OIT Composition
     encoder->setUniform(u_skyColor, skyColor.data());
@@ -2359,8 +2414,6 @@ void field::render(const blackboard::app::Window &window)
     encoder->setImage(2, gMBVelocity.handle, 0, bgfx::Access::Write);
     encoder->setImage(3, gFullVelocity.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, mbVelocityProgram, xGroups, yGroups);
-
-    // SSAO
 
     // Motion blur
     if (settings::enableMotionBlur)
@@ -2462,14 +2515,15 @@ void field::render(const blackboard::app::Window &window)
     encoder->dispatch(VIEW_POSTPROCESS, exposureProgram, xGroups, yGroups);
 
     // Bloom
-    if(settings::enableBloom)
+    if (settings::enableBloom)
     {
         float bloomThresholdField[4] = {bloomThreshold, bloomThreshold - bloomKnee, 2 * bloomKnee, 0.25f * bloomKnee};
 
         float mipSizeX = (float)m_width / 2;
         float mipSizeY = (float)m_height / 2;
 
-        for(uint8_t i=0;i<gOutputColor.mipCount-1;++i) {
+        for (uint8_t i = 0; i < gOutputColor.mipCount - 1; ++i)
+        {
             encoder->setUniform(u_bloomThreshold, bloomThresholdField);
             encoder->setTexture(0, s_tex, gOutputColor.handle, 0, 1, i, 1);
 
@@ -2479,7 +2533,7 @@ void field::render(const blackboard::app::Window &window)
             float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i), 0.0f};
             encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
 
-            encoder->setImage(1, gOutputColor.handle, i+1, bgfx::Access::Write);
+            encoder->setImage(1, gOutputColor.handle, i + 1, bgfx::Access::Write);
 
             encoder->dispatch(VIEW_POSTPROCESS, bloomDownscaleProgram, xGroups, yGroups);
 
@@ -2489,83 +2543,96 @@ void field::render(const blackboard::app::Window &window)
 
         float bloomIntensityField[4] = {bloomIntensity, bloomDirtIntensity, 0.0f, 0.0f};
 
-        for(uint8_t i=gOutputColor.mipCount-1;i>=1;--i) {
+        for (uint8_t i = gOutputColor.mipCount - 1; i >= 1; --i)
+        {
             encoder->setUniform(u_bloomIntensity, bloomIntensityField);
             encoder->setTexture(0, s_tex, gOutputColor.handle, 0, 1, i, 1);
             encoder->setTexture(2, s_bloomDirt, bloomDirtMask.handle);
 
-            mipSizeX = std::max(1.0f, floorf(float(m_width) / (1 << (i-1))));
-            mipSizeY = std::max(1.0f, floorf(float(m_height) / (1 << (i-1))));
-            
+            mipSizeX = std::max(1.0f, floorf(float(m_width) / (1 << (i - 1))));
+            mipSizeY = std::max(1.0f, floorf(float(m_height) / (1 << (i - 1))));
+
             xGroups = (int)floorf((mipSizeX - 1) / 8 + 1);
             yGroups = (int)floorf((mipSizeY - 1) / 8 + 1);
 
             float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i), 0.0f};
             encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
 
-            encoder->setImage(1, gOutputColor.handle, i-1, bgfx::Access::ReadWrite);
+            encoder->setImage(1, gOutputColor.handle, i - 1, bgfx::Access::ReadWrite);
 
             encoder->dispatch(VIEW_POSTPROCESS, bloomUpscaleProgram, xGroups, yGroups);
         }
     }
 
     // Blit and tonemap
-    bgfx::setViewFrameBuffer(VIEW_BLIT, BGFX_INVALID_HANDLE);
-    bgfx::setViewName(VIEW_BLIT, "Field - Blit");
-    bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
 
-    switch(debugView)
+    switch (debugView)
     {
-        case DebugView::Albedo:
-            encoder->setTexture(0, s_tex, gbufAlbedo.handle);
-            break;
-        case DebugView::Normal:
-            // Unpack and store normals in gOutputColor
-            xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
-            yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+    case DebugView::Albedo:
+        encoder->setTexture(0, s_tex, gbufAlbedo.handle);
+        break;
+    case DebugView::Normal:
+        // Unpack and store normals in gOutputColor
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
-            encoder->setImage(0, gbufNormal.handle, 0, bgfx::Access::Read);
-            encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_BLIT, debugNormalsProgram, xGroups, yGroups);
+        encoder->setImage(0, gbufNormal.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_BLIT, debugNormalsProgram, xGroups, yGroups);
 
-            encoder->setTexture(0, s_tex, gOutputColor.handle);
-            break;
-        case DebugView::Emission:
-            encoder->setTexture(0, s_tex, gbufEmission.handle);
-            break;
-        case DebugView::PBRData:
-            encoder->setTexture(0, s_tex, gbufPBRData.handle);
-            break;
-        case DebugView::Velocity:
-            encoder->setTexture(0, s_tex, gbufVelocity.handle);
-            break;
-        case DebugView::Depth:
-            encoder->setTexture(0, s_tex, gbufDepth.handle);
-            break;
-        case DebugView::OITAccum:
-            encoder->setTexture(0, s_tex, gAccumTex.handle);
-            break;
-        case DebugView::OITReveal:
-            encoder->setTexture(0, s_tex, gRevealTex.handle);
-            break;
-        case DebugView::MotionBlurVelocity:
-            encoder->setTexture(0, s_tex, gMBVelocity.handle);
-            break;
-        case DebugView::MotionBlurTileMaxX:
-            encoder->setTexture(0, s_tex, gMBTileMaxX.handle);
-            break;
-        case DebugView::MotionBlurTileMaxY:
-            encoder->setTexture(0, s_tex, gMBTileMax.handle);
-            break;
-        case DebugView::MotionBlurNeighborMax:
-            encoder->setTexture(0, s_tex, gMBNeighborMax.handle);
-            break;
-        case DebugView::MotionBlurTileVariance:
-            encoder->setTexture(0, s_tex, gMBTileVariance.handle);
-            break;
-        default:
-            encoder->setTexture(0, s_tex, gOutputColor.handle);
-            break;
+        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        break;
+    case DebugView::Emission:
+        encoder->setTexture(0, s_tex, gbufEmission.handle);
+        break;
+    case DebugView::PBRData:
+        encoder->setTexture(0, s_tex, gbufPBRData.handle);
+        break;
+    case DebugView::Velocity:
+        encoder->setTexture(0, s_tex, gbufVelocity.handle);
+        break;
+    case DebugView::Depth:
+        encoder->setTexture(0, s_tex, gbufDepth.handle);
+        break;
+    case DebugView::OITAccum:
+        encoder->setTexture(0, s_tex, gAccumTex.handle);
+        break;
+    case DebugView::OITReveal:
+        encoder->setTexture(0, s_tex, gRevealTex.handle);
+        break;
+    case DebugView::MotionBlurVelocity:
+        encoder->setTexture(0, s_tex, gMBVelocity.handle);
+        break;
+    case DebugView::MotionBlurTileMaxX:
+        encoder->setTexture(0, s_tex, gMBTileMaxX.handle);
+        break;
+    case DebugView::MotionBlurTileMaxY:
+        encoder->setTexture(0, s_tex, gMBTileMax.handle);
+        break;
+    case DebugView::MotionBlurNeighborMax:
+        encoder->setTexture(0, s_tex, gMBNeighborMax.handle);
+        break;
+    case DebugView::MotionBlurTileVariance:
+        encoder->setTexture(0, s_tex, gMBTileVariance.handle);
+        break;
+    case DebugView::GTAOWorkingDepth0:
+        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 0, 1);
+        break;
+    case DebugView::GTAOWorkingDepth1:
+        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 1, 1);
+        break;
+    case DebugView::GTAOWorkingDepth2:
+        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 2, 1);
+        break;
+    case DebugView::GTAOWorkingDepth3:
+        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 3, 1);
+        break;
+    case DebugView::GTAOWorkingDepth4:
+        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 4, 1);
+        break;
+    default:
+        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        break;
     }
     encoder->setTexture(1, s_lut, tonemappingLut.handle);
     encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
@@ -2612,6 +2679,14 @@ void field::cleanup()
         {
             mesh.destroy();
         }
+
+        for (auto &component : robot.components)
+        {
+            for (auto &mesh : component.meshes)
+            {
+                mesh.destroy();
+            }
+        }
     }
 
     if (bgfx::isValid(u_baseColor))
@@ -2649,7 +2724,10 @@ void field::cleanup()
     if (bgfx::isValid(u_bloomIntensity))
         bgfx::destroy(u_bloomIntensity);
 
-    if(bgfx::isValid(u_lutParams))
+    if (bgfx::isValid(u_XeGTAOData))
+        bgfx::destroy(u_XeGTAOData);
+
+    if (bgfx::isValid(u_lutParams))
         bgfx::destroy(u_lutParams);
 
     if (bgfx::isValid(programPBR))
@@ -2690,10 +2768,12 @@ void field::cleanup()
         bgfx::destroy(mbGuertinTileVarianceProgram);
     if (bgfx::isValid(mbGuertinExperimentalBlurProgram))
         bgfx::destroy(mbGuertinExperimentalBlurProgram);
-    if(bgfx::isValid(bloomDownscaleProgram))
+    if (bgfx::isValid(bloomDownscaleProgram))
         bgfx::destroy(bloomDownscaleProgram);
-    if(bgfx::isValid(bloomUpscaleProgram))
+    if (bgfx::isValid(bloomUpscaleProgram))
         bgfx::destroy(bloomUpscaleProgram);
+    if (bgfx::isValid(XeGTAO_PrefilterDepths16x16Program))
+        bgfx::destroy(XeGTAO_PrefilterDepths16x16Program);
 
     gAccumTex.destroy();
     gRevealTex.destroy();
@@ -2722,6 +2802,8 @@ void field::cleanup()
     gMBTileVariance.destroy();
     gMBOutputColor.destroy();
     gMBVelocity.destroy();
+
+    gGTAOWorkingDepth.destroy();
 
     bloomDirtMask.destroy();
 

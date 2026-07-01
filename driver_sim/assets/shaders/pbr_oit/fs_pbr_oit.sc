@@ -18,7 +18,7 @@ void main()
 
     color.rgb *= color.a;
 
-    float z = Linear01Depth(v_viewPosition.z);
+    float z = ScreenSpaceToLinearDepth(v_viewPosition.z);
 	gl_FragData[0] = color * w(z, color.a);
 	gl_FragData[1] = vec4_splat(color.a);
 }
