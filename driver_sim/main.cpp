@@ -5,6 +5,8 @@
 #include <windows.h>
 #endif
 
+#include <argparse/argparse.hpp>
+
 #include <blackboard_app/app.h>
 #include <blackboard_app/gui.h>
 #include <blackboard_app/resources.h>
@@ -21,6 +23,8 @@
 #include <future>
 #include <vector>
 #include <string>
+
+#include <fmt/ranges.h>
 
 #include "ui/components.h"
 #include "ui/theme.h"
@@ -44,7 +48,7 @@ using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
 using namespace ui;
-using namespace blackboard::logger;
+using namespace blackboard;
 
 #define LOAD_FONT(font, set_as_default) \
   blackboard::gui::load_font(#font, (void *)font##_bytes, sizeof(font##_bytes), 12.0f, dpi, set_as_default);
@@ -150,7 +154,7 @@ void initFieldView()
                                                        .environment = {},
                                                        .kill_parent_on_child_exit = true,
                                                        .auto_restart = false},
-                                                   logger);
+                                                   logger::logger);
 
   std::vector<std::string> javaCommandLine = {
       prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
@@ -165,7 +169,7 @@ void initFieldView()
                                                                                                                             { return acc + prefPath + "jni/release/" + ext + ".dll;"; })}},
                                                                       .kill_parent_on_child_exit = false,
                                                                       .auto_restart = true},
-                                                logger);
+                                                logger::logger);
 
   if (settings::launchElastic)
   {
@@ -471,6 +475,34 @@ void app_cleanup()
   javaLogEnforceFuture.wait();
 }
 
+blackboard::renderer::Api getRendererApiFromString(const std::string &api)
+{
+  if (api == "metal")
+  {
+    return blackboard::renderer::Api::METAL;
+  }
+  else if (api == "d3d11")
+  {
+    return blackboard::renderer::Api::D3D11;
+  }
+  else if (api == "d3d12")
+  {
+    return blackboard::renderer::Api::D3D12;
+  }
+  else if (api == "vulkan")
+  {
+    return blackboard::renderer::Api::VULKAN;
+  }
+  else if (api == "opengl")
+  {
+    return blackboard::renderer::Api::OPENGL;
+  }
+  else
+  {
+    return blackboard::renderer::Api::AUTO;
+  }
+}
+
 #ifdef _WIN32
 int WINAPI WinMain(
     HINSTANCE,
@@ -481,8 +513,34 @@ int WINAPI WinMain(
 int main(int argc, char *argv[])
 #endif
 {
+  std::string api;
+
+  argparse::ArgumentParser program("driver_sim", "1.0", argparse::default_arguments::none, false);
+  program.add_argument("--api")
+          .default_value("auto")
+          .choices("auto", "metal", "d3d11", "d3d12", "vulkan", "opengl")
+          .store_into(api);
+
+  logger::init();
+
+  try {
+#ifdef _WIN32
+    auto unknown_args = program.parse_known_args(__argc, __argv);
+#else
+    auto unknown_args = program.parse_known_args(argc, argv);
+#endif
+
+    if(!unknown_args.empty()) {
+      logger::logger->warn("Unknown arguments: {}", fmt::join(unknown_args, " "));
+    }
+  }
+  catch (const std::exception& err) {
+    logger::logger->error("Error parsing arguments: {}", err.what());
+    logger::logger->info(program.help().str());
+  }
+
   blackboard::app::App app("Driver Sim",
-                           blackboard::renderer::Api::AUTO); // autodetect renderer api
+                           getRendererApiFromString(api));
   app_ptr = &app;
   app.on_update = app_update;
   app.on_init = initApp;

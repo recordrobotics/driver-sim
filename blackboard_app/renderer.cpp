@@ -41,6 +41,7 @@ namespace blackboard::renderer
       bgfx_init.type = bgfx::RendererType::Vulkan; // auto choose renderer
       break;
     case Api::WEBGL:
+    case Api::OPENGL:
       bgfx_init.type = bgfx::RendererType::OpenGL; // auto choose renderer
       break;
     default:

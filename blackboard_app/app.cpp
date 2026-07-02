@@ -32,10 +32,8 @@ namespace blackboard::app
         on_update{[]()
                   { logger::logger->info("update function not defined"); }},
         on_resize{[](const uint16_t width, const uint16_t height)
-                  { logger::logger->info("window resize function not defined"); }}
+                  {  }}
   {
-    logger::init();
-    logger::logger->info("App constructor");
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
       logger::logger->error("Error initializing SDL: %s", SDL_GetError());

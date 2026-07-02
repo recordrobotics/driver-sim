@@ -162,6 +162,8 @@ target_link_libraries(${PROJECT_NAME}
     ntcore
     wpiutil
     wpimath
+    argparse
+    fmt::fmt
 )
 
 target_include_directories(${PROJECT_NAME}
