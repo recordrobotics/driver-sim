@@ -21,7 +21,10 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/driver_sim/driver_sim.exe",
-            "args": [],
+            "args": [
+                "--api",
+                "vulkan"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
