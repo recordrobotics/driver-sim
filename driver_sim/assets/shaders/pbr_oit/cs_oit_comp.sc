@@ -11,8 +11,8 @@ IMAGE2D_RO(s_emission, rgba16f, 3);
 UIMAGE2D_RO(s_normal, r32ui, 4);
 IMAGE2D_RO(s_pbrData, rgba8, 5);
 UIMAGE2D_RO(s_finalAOTerm, r32ui, 6);
-SAMPLER2D(s_depth, 7);
-IMAGE2D_WO(s_output, rgba16f, 8);
+IMAGE2D_WO(s_output, rgba16f, 7);
+SAMPLER2D(s_depth, 8);
 
 uniform vec4 u_jitter;
 
@@ -22,6 +22,7 @@ uniform vec4 u_skyColor;
 /*
     float indirectIntensity
     float directIntensity
+    float bentNormalIntensity
 */
 uniform vec4 u_gtaoIntensity;
 
@@ -66,6 +67,7 @@ void main()
 
             indirectAO = mix(1.0, aoVisibility, u_gtaoIntensity.x);
             directAO = mix(1.0, aoVisibility, u_gtaoIntensity.y);
+            normal = mix(normal, bentNormal, u_gtaoIntensity.z);
         }
         
         vec3 current_ndc = vec3(uvn * 2.0 - 1.0, depth);

@@ -485,6 +485,7 @@ float gtaoDenoiseBlurBeta = 1.2f;
 
 float gtaoIntensity = 1.0f;
 float gtaoDirectIntensity = 1.0f;
+float gtaoBentNormalIntensity = 0.7f; // 0.7 looks a bit better than 1.0 with metallic materials
 
 float fieldModelMatrix[16];
 
@@ -2166,6 +2167,7 @@ void field::render(const blackboard::app::Window &window)
         ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
         ImGui::SliderFloat("Intensity", &gtaoIntensity, 0.0f, 3.0f);
         ImGui::SliderFloat("Direct Intensity", &gtaoDirectIntensity, 0.0f, 3.0f);
+        ImGui::SliderFloat("Bent Normal Intensity", &gtaoBentNormalIntensity, 0.0f, 3.0f);
 
         ImGui::Separator();
     }
@@ -2602,7 +2604,7 @@ void field::render(const blackboard::app::Window &window)
     float gtaoIntensityField[4] = {
         settings::enableGTAO ? gtaoIntensity : 0.0f,
         settings::enableGTAO ? (gtaoIntensity * gtaoDirectIntensity) : 0.0f,
-        0.0f,
+        settings::enableGTAO ? (gtaoIntensity * gtaoBentNormalIntensity) : 0.0f,
         0.0f
     };
 
@@ -2615,8 +2617,8 @@ void field::render(const blackboard::app::Window &window)
     encoder->setImage(4, gbufNormal.handle, 0, bgfx::Access::Read);
     encoder->setImage(5, gbufPBRData.handle, 0, bgfx::Access::Read);
     encoder->setImage(6, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Read);
-    encoder->setTexture(7, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-    encoder->setImage(8, gOutputColor.handle, 0, bgfx::Access::Write);
+    encoder->setImage(7, gOutputColor.handle, 0, bgfx::Access::Write);
+    encoder->setTexture(8, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity

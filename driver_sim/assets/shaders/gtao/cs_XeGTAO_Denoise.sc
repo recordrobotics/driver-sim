@@ -131,6 +131,7 @@ void main()
     #ifdef XE_GTAO_COMPUTE_BENT_NORMALS
         float     visibility = aoTerm[side].w * ((finalApply)?(XE_GTAO_OCCLUSION_TERM_SCALE):(1));
         vec3      bentNormal = normalize(aoTerm[side].xyz);
+        bentNormal.z *= -1.0; // flip Z back to view space
         imageStore(s_finalAOTerm, pixCoord.xy, uvec4_splat(XeGTAO_EncodeVisibilityBentNormal( visibility, bentNormal )));
     #else
         imageStore(s_finalAOTerm, pixCoord.xy, uvec4_splat(uint(aoTerm[side] * ((finalApply)?(XE_GTAO_OCCLUSION_TERM_SCALE):(1)) * 255.0 + 0.5)));

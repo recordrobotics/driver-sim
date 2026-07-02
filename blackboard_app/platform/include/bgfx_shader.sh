@@ -386,7 +386,7 @@ uvec4 bgfxTextureGatherOffset0(BgfxUSampler2D _sampler, vec2 _coord, ivec2 _offs
 	return _sampler.m_texture.GatherRed(_sampler.m_sampler, _coord, _offset);
 #else
 	vec2 size = bgfxTextureSize(_sampler, 0);
-	ivec3 texelCoord = ivec3(ivec2(_coord * size) + _offset, 0);
+	ivec3 texelCoord = ivec3(ivec2(_coord * size + vec2(-1, 0)) + _offset, 0);
 
 	uint r1 = _sampler.m_texture.Load( texelCoord, int2(0, 0) ).x;
 	uint r2 = _sampler.m_texture.Load( texelCoord, int2(1, 0) ).x;

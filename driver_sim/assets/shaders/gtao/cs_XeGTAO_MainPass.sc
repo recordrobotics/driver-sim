@@ -109,6 +109,7 @@ void main()
     uint packedInput = imageLoad(s_normal, pixCoord).x;
     vec3 unpackedOutput = R11G11B10_UNORM_to_FLOAT3( packedInput );
     vec3 viewspaceNormal = normalize(unpackedOutput * vec3_splat(2.0) - vec3_splat(1.0));
+    viewspaceNormal.z *= -1.0; // flip Z
 
     // XeGTAO_MainPass
 
