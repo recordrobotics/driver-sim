@@ -55,6 +55,8 @@ TeamLogoCache::~TeamLogoCache()
     {
         texture.destroy();
     }
+
+    placeholderTexture.destroy();
 }
 
 bimg::ImageContainer *readImage(const char *path)

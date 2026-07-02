@@ -130,6 +130,7 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
 
         BGFX_EMBEDDED_SHADER(cs_XeGTAO_PrefilterDepths16x16),
         BGFX_EMBEDDED_SHADER(cs_XeGTAO_MainPass),
+        BGFX_EMBEDDED_SHADER(cs_XeGTAO_Denoise),
         BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugNormals),
         BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugVisibility),
 
@@ -231,6 +232,8 @@ enum class DebugView
     GTAOWorkingAOTermNormals,
     GTAOWorkingAOTermVisibility,
     GTAOWorkingEdges,
+    GTAOFinalAOTermNormals,
+    GTAOFinalAOTermVisibility,
     Count
 };
 
@@ -256,7 +259,9 @@ static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBU
     "GTAO Working Depth 4",
     "GTAO Working AO Term Normals",
     "GTAO Working AO Term Visibility",
-    "GTAO Working Edges"};
+    "GTAO Working Edges",
+    "GTAO Final AO Term Normals",
+    "GTAO Final AO Term Visibility"};
 
 struct Vec3Padded
 {
@@ -395,6 +400,7 @@ bgfx::ProgramHandle bloomUpscaleProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle XeGTAO_PrefilterDepths16x16Program = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle XeGTAO_MainPassProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle XeGTAO_DenoiseProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle XeGTAO_debugNormalsProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle XeGTAO_debugVisibilityProgram = BGFX_INVALID_HANDLE;
 
@@ -425,6 +431,7 @@ Texture gGTAOWorkingDepth;
 Texture gGTAOWorkingAOTerm;
 Texture gGTAOWorkingEdges;
 Texture gGTAOHilbertLut;
+Texture gGTAOFinalAOTerm;
 
 Texture bloomDirtMask;
 
@@ -456,6 +463,9 @@ bgfx::UniformHandle s_lut;
 bgfx::UniformHandle s_baseColor;
 bgfx::UniformHandle s_bump;
 
+bgfx::UniformHandle s_workingAOTerm;
+bgfx::UniformHandle s_workingEdges;
+
 float bloomThreshold = 5.2f;
 float bloomKnee = 0.1f;
 float bloomIntensity = 1.0f;
@@ -470,6 +480,7 @@ float gtaoSampleDistributionPower = 2.0f;
 float gtaoThinOccluderCompensation = 0.0f;
 float gtaoDepthMipSamplingOffset = 3.30f;
 float gtaoFinalValuePower = 2.2f;
+float gtaoDenoiseBlurBeta = 1.2f;
 
 float fieldModelMatrix[16];
 
@@ -1106,6 +1117,20 @@ void initGTAO(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_XeGTAOData");
     }
 
+    s_workingAOTerm = bgfx::createUniform("s_workingAOTerm", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_workingAOTerm))
+    {
+        logger->error("Failed to create uniform: s_workingAOTerm");
+        throw std::runtime_error("Failed to create uniform: s_workingAOTerm");
+    }
+
+    s_workingEdges = bgfx::createUniform("s_workingEdges", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_workingEdges))
+    {
+        logger->error("Failed to create uniform: s_workingEdges");
+        throw std::runtime_error("Failed to create uniform: s_workingEdges");
+    }
+
     XeGTAO_PrefilterDepths16x16Program =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_PrefilterDepths16x16"), true);
     if (!bgfx::isValid(XeGTAO_PrefilterDepths16x16Program))
@@ -1120,6 +1145,14 @@ void initGTAO(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create XeGTAO Main Pass program.");
         throw std::runtime_error("Failed to create XeGTAO Main Pass program.");
+    }
+
+    XeGTAO_DenoiseProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_Denoise"), true);
+    if (!bgfx::isValid(XeGTAO_DenoiseProgram))
+    {
+        logger->error("Failed to create XeGTAO Denoise program.");
+        throw std::runtime_error("Failed to create XeGTAO Denoise program.");
     }
 
     XeGTAO_debugNormalsProgram =
@@ -1192,6 +1225,15 @@ void initGTAO(uint16_t width, uint16_t height)
 
         delete[] data;
     }
+
+    TEXTURE(
+        gGTAOFinalAOTerm,
+        width, height,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::R32U,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
 inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
@@ -1916,6 +1958,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gGTAOWorkingDepth.beginFrame();
     gGTAOWorkingAOTerm.beginFrame();
     gGTAOWorkingEdges.beginFrame();
+    gGTAOFinalAOTerm.beginFrame();
 
     gAccumTex.ensure(width, height);
     gRevealTex.ensure(width, height);
@@ -1958,6 +2001,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gGTAOWorkingDepth.mipCount = XE_GTAO_DEPTH_MIP_LEVELS;
     gGTAOWorkingAOTerm.ensure(width, height);
     gGTAOWorkingEdges.ensure(width, height);
+    gGTAOFinalAOTerm.ensure(width, height);
 }
 
 void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
@@ -2490,7 +2534,7 @@ void field::render(const blackboard::app::Window &window)
 
         gtaoDepthMipSamplingOffset,
         gtaoFinalValuePower,
-        0.0f,
+        gtaoDenoiseBlurBeta,
         0.0f
     };
 
@@ -2514,6 +2558,14 @@ void field::render(const blackboard::app::Window &window)
     encoder->setImage(3, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Write);
     encoder->setImage(4, gGTAOWorkingEdges.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_GTAO, XeGTAO_MainPassProgram, xGroups, yGroups);
+
+    xGroups = (int)floorf(((float)m_width - 1) / 32 + 1); // denoise computes 2 horizontal pixels at a time
+    yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+    encoder->setTexture(0, s_workingAOTerm, gGTAOWorkingAOTerm.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+    encoder->setTexture(1, s_workingEdges, gGTAOWorkingEdges.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+    encoder->setImage(2, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Write);
+    encoder->dispatch(VIEW_GTAO, XeGTAO_DenoiseProgram, xGroups, yGroups);
 
     // Post processing
 
@@ -2799,11 +2851,33 @@ void field::render(const blackboard::app::Window &window)
         encoder->setTexture(0, s_tex, gOutputColor.handle);
         break;
     case DebugView::GTAOWorkingAOTermVisibility:
-        // Unpack and store normals in gOutputColor
+        // Unpack and store visibility in gOutputColor
         xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
         yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
         encoder->setImage(0, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_BLIT, XeGTAO_debugVisibilityProgram, xGroups, yGroups);
+
+        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        break;
+    case DebugView::GTAOFinalAOTermNormals:
+        // Unpack and store normals in gOutputColor
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+        encoder->setImage(0, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_BLIT, XeGTAO_debugNormalsProgram, xGroups, yGroups);
+
+        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        break;
+    case DebugView::GTAOFinalAOTermVisibility:
+        // Unpack and store visibility in gOutputColor
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+        encoder->setImage(0, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Read);
         encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_BLIT, XeGTAO_debugVisibilityProgram, xGroups, yGroups);
 
@@ -2958,6 +3032,8 @@ void field::cleanup()
         bgfx::destroy(XeGTAO_PrefilterDepths16x16Program);
     if (bgfx::isValid(XeGTAO_MainPassProgram))
         bgfx::destroy(XeGTAO_MainPassProgram);
+    if (bgfx::isValid(XeGTAO_DenoiseProgram))
+        bgfx::destroy(XeGTAO_DenoiseProgram);
     if (bgfx::isValid(XeGTAO_debugNormalsProgram))
         bgfx::destroy(XeGTAO_debugNormalsProgram);
     if (bgfx::isValid(XeGTAO_debugVisibilityProgram))
@@ -2995,6 +3071,7 @@ void field::cleanup()
     gGTAOWorkingAOTerm.destroy();
     gGTAOWorkingEdges.destroy();
     gGTAOHilbertLut.destroy();
+    gGTAOFinalAOTerm.destroy();
 
     bloomDirtMask.destroy();
 
@@ -3032,4 +3109,9 @@ void field::cleanup()
         bgfx::destroy(s_baseColor);
     if (bgfx::isValid(s_bump))
         bgfx::destroy(s_bump);
+
+    if(bgfx::isValid(s_workingAOTerm))
+        bgfx::destroy(s_workingAOTerm);
+    if(bgfx::isValid(s_workingEdges))
+        bgfx::destroy(s_workingEdges);
 }

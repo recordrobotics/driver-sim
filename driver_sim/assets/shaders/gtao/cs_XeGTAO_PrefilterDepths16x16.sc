@@ -60,6 +60,7 @@ SHARED float g_scratchDepths[8][8];
 
   float DepthMIPSamplingOffset
   float FinalValuePower
+  float DenoiseBlurBeta
 */
 uniform vec4 u_XeGTAOData[3];
 

@@ -137,6 +137,7 @@ struct BgfxISampler2D
 
 struct BgfxUSampler2D
 {
+	SamplerState m_sampler;
 	Texture2D<uvec4> m_texture;
 };
 
@@ -379,6 +380,23 @@ vec4 bgfxTextureGatherOffset0(BgfxSampler2D _sampler, vec2 _coord, ivec2 _offset
 	return _sampler.m_texture.GatherRed(_sampler.m_sampler, _coord, _offset);
 }
 
+uvec4 bgfxTextureGatherOffset0(BgfxUSampler2D _sampler, vec2 _coord, ivec2 _offset)
+{
+#if BGFX_SHADER_LANGUAGE_HLSL >= 600 || BGFX_SHADER_LANGUAGE_SPIRV
+	return _sampler.m_texture.GatherRed(_sampler.m_sampler, _coord, _offset);
+#else
+	vec2 size = bgfxTextureSize(_sampler, 0);
+	ivec3 texelCoord = ivec3(ivec2(_coord * size) + _offset, 0);
+
+	uint r1 = _sampler.m_texture.Load( texelCoord, int2(0, 0) ).x;
+	uint r2 = _sampler.m_texture.Load( texelCoord, int2(1, 0) ).x;
+	uint r3 = _sampler.m_texture.Load( texelCoord, int2(0, 1) ).x;
+	uint r4 = _sampler.m_texture.Load( texelCoord, int2(1, 1) ).x;
+	
+	return uvec4(r1, r2, r3, r4);
+#endif
+}
+
 vec4 bgfxTextureGatherOffset1(BgfxSampler2D _sampler, vec2 _coord, ivec2 _offset)
 {
 	return _sampler.m_texture.GatherGreen(_sampler.m_sampler, _coord, _offset);
@@ -455,8 +473,9 @@ vec3 bgfxTextureSize(BgfxSampler3D _sampler, int _lod)
 			uniform Texture2D<ivec4> _name ## Texture : REGISTER(t, _reg); \
 			static BgfxISampler2D _name = { _name ## Texture }
 #		define USAMPLER2D(_name, _reg) \
+			uniform SamplerState _name ## Sampler : REGISTER(s, _reg); \
 			uniform Texture2D<uvec4> _name ## Texture : REGISTER(t, _reg); \
-			static BgfxUSampler2D _name = { _name ## Texture }
+			static BgfxUSampler2D _name = { _name ## Sampler, _name ## Texture }
 #		define sampler2D BgfxSampler2D
 #		define texture2D(_sampler, _coord) bgfxTexture2D(_sampler, _coord)
 #		define texture2DBias(_sampler, _coord, _bias) bgfxTexture2DBias(_sampler, _coord, _bias)

@@ -4,18 +4,11 @@
 #include "../common/utils.sh"
 #include "common.sh"
 
-#define XE_GTAO_PI               	(3.1415926535897932384626433832795)
-#define XE_GTAO_PI_HALF             (1.5707963267948966192313216916398)
-
 SAMPLER2D(s_depth, 0);
 UIMAGE2D_RO(s_normal, r32ui, 1);
 UIMAGE2D_RO(s_hilbertLut, r16ui, 2);
 UIMAGE2D_WO(s_workingAOTerm, r32ui, 3);
 IMAGE2D_WO(s_workingEdges, r32f, 4);
-
-#define XE_GTAO_COMPUTE_BENT_NORMALS 1
-#define XE_GTAO_OCCLUSION_TERM_SCALE                    (1.5f)      // for packing in UNORM (because raw, pre-denoised occlusion term can overshoot 1 but will later average out to 1)
-#define XE_GTAO_DEPTH_MIP_LEVELS 5
 
 vec4 XeGTAO_CalculateEdges( const float centerZ, const float leftZ, const float rightZ, const float topZ, const float bottomZ )
 {
@@ -26,18 +19,6 @@ vec4 XeGTAO_CalculateEdges( const float centerZ, const float leftZ, const float 
     vec4 edgesLRTBSlopeAdjusted = edgesLRTB + vec4( slopeLR, -slopeLR, slopeTB, -slopeTB );
     edgesLRTB = min( abs( edgesLRTB ), abs( edgesLRTBSlopeAdjusted ) );
     return vec4(saturate( ( vec4_splat(1.25) - edgesLRTB / vec4_splat(centerZ * 0.011) ) ));
-}
-
-// packing/unpacking for edges; 2 bits per edge mean 4 gradient values (0, 0.33, 0.66, 1) for smoother transitions!
-float XeGTAO_PackEdges( vec4 edgesLRTB )
-{
-    // integer version:
-    // edgesLRTB = saturate(edgesLRTB) * 2.9.xxxx + 0.5.xxxx;
-    // return (((uint)edgesLRTB.x) << 6) + (((uint)edgesLRTB.y) << 4) + (((uint)edgesLRTB.z) << 2) + (((uint)edgesLRTB.w));
-    // 
-    // optimized, should be same as above
-    edgesLRTB = round( saturate( edgesLRTB ) * 2.9 );
-    return dot( edgesLRTB, vec4( 64.0 / 255.0, 16.0 / 255.0, 4.0 / 255.0, 1.0 / 255.0 ) ) ;
 }
 
 // http://h14s.p5r.org/2012/09/0x5f3759df.html, [Drobot2014a] Low Level Optimizations for GCN, https://blog.selfshadow.com/publications/s2016-shading-course/activision/s2016_pbs_activision_occlusion.pdf slide 63
@@ -107,6 +88,7 @@ mat3 XeGTAO_RotFromToMatrix( vec3 from, vec3 to )
 
   float DepthMIPSamplingOffset
   float FinalValuePower
+  float DenoiseBlurBeta
 */
 uniform vec4 u_XeGTAOData[3];
 
