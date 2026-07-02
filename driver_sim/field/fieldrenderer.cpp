@@ -850,7 +850,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::D32,
+        bgfx::TextureFormat::D32F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     FRAMEBUFFER(
