@@ -37,6 +37,11 @@ namespace blackboard::app
 
     float main_window_resolution() const;
 
+    renderer::Api get_renderer_api() const
+    {
+      return m_renderer_api;
+    }
+
     bool running{true};
     std::unique_ptr<Window> main_window;
 

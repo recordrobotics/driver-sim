@@ -77,6 +77,55 @@ std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> javaProcess;
 
 std::future<void> javaLogEnforceFuture;
 
+blackboard::renderer::Api getRendererApiFromString(const std::string &api)
+{
+  if (api == "metal")
+  {
+    return blackboard::renderer::Api::METAL;
+  }
+  else if (api == "d3d11")
+  {
+    return blackboard::renderer::Api::D3D11;
+  }
+  else if (api == "d3d12")
+  {
+    return blackboard::renderer::Api::D3D12;
+  }
+  else if (api == "vulkan")
+  {
+    return blackboard::renderer::Api::VULKAN;
+  }
+  else if (api == "opengl")
+  {
+    return blackboard::renderer::Api::OPENGL;
+  }
+  else
+  {
+    return blackboard::renderer::Api::AUTO;
+  }
+}
+
+std::string rendererApiToString(blackboard::renderer::Api api)
+{
+  switch (api)
+  {
+  case blackboard::renderer::Api::METAL:
+    return "Metal";
+  case blackboard::renderer::Api::D3D11:
+    return "Direct3D 11";
+  case blackboard::renderer::Api::D3D12:
+    return "Direct3D 12";
+  case blackboard::renderer::Api::VULKAN:
+    return "Vulkan";
+  case blackboard::renderer::Api::OPENGL:
+    return "OpenGL";
+  case blackboard::renderer::Api::WEBGL:
+    return "WebGL";
+  default:
+    return "Unknown";
+  }
+}
+
 void initApp()
 {
   settings::loadSettings();
@@ -441,29 +490,33 @@ void drawUI()
   ImGui::End();
 }
 
+void drawFPS()
+{
+  ImGuiIO &io = ImGui::GetIO();
+  const ImGuiViewport *viewport{ImGui::GetMainViewport()};
+  ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10, viewport->WorkPos.y + 10), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+
+  const static ImGuiWindowFlags window_flags{
+      ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize};
+
+  ImGui::Begin("FPS", nullptr, window_flags);
+  ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#ffffffc4"));
+  ImGui::Text("%.1f FPS", io.Framerate);
+  ImGui::Text(rendererApiToString(app_ptr->get_renderer_api()).c_str());
+  ImGui::PopStyleColor();
+  ImGui::End();
+}
+
 void app_update()
 {
   if (pageTransition.getCurrentPage() == PAGE_3D_FIELD)
   {
     field::render(*app_ptr->main_window);
   }
+
   drawUI();
-
-  {
-    ImGuiIO &io = ImGui::GetIO();
-    const ImGuiViewport *viewport{ImGui::GetMainViewport()};
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10, viewport->WorkPos.y + 10), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-
-    const static ImGuiWindowFlags window_flags{
-        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize};
-
-    ImGui::Begin("FPS", nullptr, window_flags);
-    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#ffffffc4"));
-    ImGui::Text("%.1f FPS", io.Framerate);
-    ImGui::PopStyleColor();
-    ImGui::End();
-  }
+  drawFPS();
 }
 
 void app_cleanup()
@@ -473,34 +526,6 @@ void app_cleanup()
   field::cleanup();
   settings::saveSettings();
   javaLogEnforceFuture.wait();
-}
-
-blackboard::renderer::Api getRendererApiFromString(const std::string &api)
-{
-  if (api == "metal")
-  {
-    return blackboard::renderer::Api::METAL;
-  }
-  else if (api == "d3d11")
-  {
-    return blackboard::renderer::Api::D3D11;
-  }
-  else if (api == "d3d12")
-  {
-    return blackboard::renderer::Api::D3D12;
-  }
-  else if (api == "vulkan")
-  {
-    return blackboard::renderer::Api::VULKAN;
-  }
-  else if (api == "opengl")
-  {
-    return blackboard::renderer::Api::OPENGL;
-  }
-  else
-  {
-    return blackboard::renderer::Api::AUTO;
-  }
 }
 
 #ifdef _WIN32
