@@ -76,12 +76,10 @@ vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, 
 
 // all vectors in view space
 // all colors expected to be in linear space
-vec4 pbr(vec3 albedo, vec3 emission, vec3 position, vec3 normal, float alpha, float emissionStrength, float metallic, float roughness) {
+vec4 pbr(vec3 albedo, vec3 emission, vec3 position, vec3 normal, float alpha, float emissionStrength, float metallic, float roughness, float indirectAO, float directAO) {
     if(alpha == 0.0) {
         return vec4_splat(0.0);
     }
-
-    float ao = 1.0;
 
     vec3 N = normalize(normal);
     vec3 V = normalize(-position);
@@ -94,9 +92,9 @@ vec4 pbr(vec3 albedo, vec3 emission, vec3 position, vec3 normal, float alpha, fl
     for(int i = 0; i < LIGHT_COUNT; i++)
         Lo += computeLight(u_lightPos[i].xyz, u_lightColor[i].rgb, u_lightColor[i].a, position, N, V, albedo, metallic, roughness, F0);
 
-    vec3 ambient = vec3_splat(0.03) * albedo * ao;
+    vec3 ambient = vec3_splat(0.3) * albedo * indirectAO;
 
-    vec3 color = ambient + Lo + emission * emissionStrength;
+    vec3 color = ambient + Lo * directAO + emission * emissionStrength;
 
     return vec4(color, alpha);
 }

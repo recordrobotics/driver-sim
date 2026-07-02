@@ -352,6 +352,7 @@ inline std::array<float, 4> SRGBToLinear(const std::array<float, 4> &srgb)
 bgfx::UniformHandle u_baseColor;
 bgfx::UniformHandle u_emissionColor;
 bgfx::UniformHandle u_skyColor;
+bgfx::UniformHandle u_gtaoIntensity;
 bgfx::UniformHandle u_info;
 bgfx::UniformHandle u_previousModelViewProj;
 bgfx::UniformHandle u_previousView;
@@ -482,6 +483,9 @@ float gtaoDepthMipSamplingOffset = 3.30f;
 float gtaoFinalValuePower = 2.2f;
 float gtaoDenoiseBlurBeta = 1.2f;
 
+float gtaoIntensity = 1.0f;
+float gtaoDirectIntensity = 1.0f;
+
 float fieldModelMatrix[16];
 
 WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
@@ -540,6 +544,14 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create uniform: u_skyColor");
         throw std::runtime_error("Failed to create uniform: u_skyColor");
+    }
+
+    u_gtaoIntensity = bgfx::createUniform("u_gtaoIntensity", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_gtaoIntensity))
+    {
+        logger->error("Failed to create uniform: u_gtaoIntensity");
+        throw std::runtime_error("Failed to create uniform: u_gtaoIntensity");
     }
 
     u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4, 2);
@@ -2125,29 +2137,38 @@ void field::render(const blackboard::app::Window &window)
     ImGui::Checkbox("Enable Motion Blur", &settings::enableMotionBlur);
     ImGui::Checkbox("Enable TAA", &settings::enableTAA);
     ImGui::Checkbox("Enable Bloom", &settings::enableBloom);
+    ImGui::Checkbox("Enable GTAO", &settings::enableGTAO);
 
     ImGui::Separator();
 
-    ImGui::Text("Motion Blur Settings");
-    int tileSize = MB_TILE_SIZE;
-    ImGui::SliderInt("Tile Size", &tileSize, 8, 128);
-    MB_TILE_SIZE = static_cast<uint8_t>(tileSize);
-    int sampleCount = MB_SAMPLE_COUNT;
-    ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
-    MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
+    if(settings::enableMotionBlur)
+    {
+        ImGui::Text("Motion Blur Settings");
+        int tileSize = MB_TILE_SIZE;
+        ImGui::SliderInt("Tile Size", &tileSize, 8, 128);
+        MB_TILE_SIZE = static_cast<uint8_t>(tileSize);
+        int sampleCount = MB_SAMPLE_COUNT;
+        ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
+        MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
 
-    ImGui::Separator();
+        ImGui::Separator();
+    }
+
+    ImGui::Text("Tonemapping Settings");
     ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
-
     ImGui::Separator();
 
-    ImGui::Text("GTAO Settings");
+    if(settings::enableGTAO)
+    {
+        ImGui::Text("GTAO Settings");
 
-    ImGui::SliderFloat("Effect Radius", &gtaoEffectRadius, 0.01f, 3.0f);
-    ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
-    ImGui::SliderFloat("Effect Falloff Range", &gtaoEffectFalloffRange, 0.0f, 1.0f);
+        ImGui::SliderFloat("Effect Radius", &gtaoEffectRadius, 0.01f, 3.0f);
+        ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
+        ImGui::SliderFloat("Intensity", &gtaoIntensity, 0.0f, 3.0f);
+        ImGui::SliderFloat("Direct Intensity", &gtaoDirectIntensity, 0.0f, 3.0f);
 
-    ImGui::Separator();
+        ImGui::Separator();
+    }
 
     if (ImGui::BeginCombo("Debug View", DEBUG_VIEW_NAMES[static_cast<int>(debugView)].c_str()))
     {
@@ -2517,55 +2538,57 @@ void field::render(const blackboard::app::Window &window)
     int yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
     // GTAO
-
-    // force unbind gbuffer view fbo
-    encoder->touch(VIEW_GTAO);
-
-    float XeGTAOData[12] = {
-        gtaoEffectRadius,
-        gtaoRadiusMultiplier,
-        gtaoEffectFalloffRange,
-        float(gtaoNoiseIndex) + 0.5f,
-    
-        gtaoSampleDistributionPower,
-        gtaoThinOccluderCompensation,
-        2.0f / (proj[0] * float(m_width)),
-        -2.0f / (proj[5] * float(m_height)),
-
-        gtaoDepthMipSamplingOffset,
-        gtaoFinalValuePower,
-        gtaoDenoiseBlurBeta,
-        0.0f
-    };
-
-    if (!freezeTemporalEffects)
+    if(settings::enableGTAO)
     {
-        gtaoNoiseIndex = (gtaoNoiseIndex + 1) % 64;
+        // force unbind gbuffer view fbo
+        encoder->touch(VIEW_GTAO);
+
+        float XeGTAOData[12] = {
+            gtaoEffectRadius,
+            gtaoRadiusMultiplier,
+            gtaoEffectFalloffRange,
+            float(gtaoNoiseIndex) + 0.5f,
+        
+            gtaoSampleDistributionPower,
+            gtaoThinOccluderCompensation,
+            2.0f / (proj[0] * float(m_width)),
+            -2.0f / (proj[5] * float(m_height)),
+
+            gtaoDepthMipSamplingOffset,
+            gtaoFinalValuePower,
+            gtaoDenoiseBlurBeta,
+            0.0f
+        };
+
+        if (!freezeTemporalEffects)
+        {
+            gtaoNoiseIndex = (gtaoNoiseIndex + 1) % 64;
+        }
+
+        encoder->setUniform(u_XeGTAOData, XeGTAOData, 3);
+
+        encoder->setTexture(0, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        for (int i = 0; i < XE_GTAO_DEPTH_MIP_LEVELS; ++i)
+        {
+            encoder->setImage(i + 1, gGTAOWorkingDepth.handle, i, bgfx::Access::Write);
+        }
+        encoder->dispatch(VIEW_GTAO, XeGTAO_PrefilterDepths16x16Program, xGroups, yGroups);
+
+        encoder->setTexture(0, s_depth, gGTAOWorkingDepth.handle, 0, 1, 0, XE_GTAO_DEPTH_MIP_LEVELS, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setImage(1, gbufNormal.handle, 0, bgfx::Access::Read);
+        encoder->setImage(2, gGTAOHilbertLut.handle, 0, bgfx::Access::Read);
+        encoder->setImage(3, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Write);
+        encoder->setImage(4, gGTAOWorkingEdges.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_GTAO, XeGTAO_MainPassProgram, xGroups, yGroups);
+
+        xGroups = (int)floorf(((float)m_width - 1) / 32 + 1); // denoise computes 2 horizontal pixels at a time
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+        encoder->setTexture(0, s_workingAOTerm, gGTAOWorkingAOTerm.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setTexture(1, s_workingEdges, gGTAOWorkingEdges.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setImage(2, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_GTAO, XeGTAO_DenoiseProgram, xGroups, yGroups);
     }
-
-    encoder->setUniform(u_XeGTAOData, XeGTAOData, 3);
-
-    encoder->setTexture(0, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-    for (int i = 0; i < XE_GTAO_DEPTH_MIP_LEVELS; ++i)
-    {
-        encoder->setImage(i + 1, gGTAOWorkingDepth.handle, i, bgfx::Access::Write);
-    }
-    encoder->dispatch(VIEW_GTAO, XeGTAO_PrefilterDepths16x16Program, xGroups, yGroups);
-
-    encoder->setTexture(0, s_depth, gGTAOWorkingDepth.handle, 0, 1, 0, XE_GTAO_DEPTH_MIP_LEVELS, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-    encoder->setImage(1, gbufNormal.handle, 0, bgfx::Access::Read);
-    encoder->setImage(2, gGTAOHilbertLut.handle, 0, bgfx::Access::Read);
-    encoder->setImage(3, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Write);
-    encoder->setImage(4, gGTAOWorkingEdges.handle, 0, bgfx::Access::Write);
-    encoder->dispatch(VIEW_GTAO, XeGTAO_MainPassProgram, xGroups, yGroups);
-
-    xGroups = (int)floorf(((float)m_width - 1) / 32 + 1); // denoise computes 2 horizontal pixels at a time
-    yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
-
-    encoder->setTexture(0, s_workingAOTerm, gGTAOWorkingAOTerm.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-    encoder->setTexture(1, s_workingEdges, gGTAOWorkingEdges.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-    encoder->setImage(2, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Write);
-    encoder->dispatch(VIEW_GTAO, XeGTAO_DenoiseProgram, xGroups, yGroups);
 
     // Post processing
 
@@ -2575,15 +2598,25 @@ void field::render(const blackboard::app::Window &window)
     yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
     // OIT Composition
+
+    float gtaoIntensityField[4] = {
+        settings::enableGTAO ? gtaoIntensity : 0.0f,
+        settings::enableGTAO ? (gtaoIntensity * gtaoDirectIntensity) : 0.0f,
+        0.0f,
+        0.0f
+    };
+
     encoder->setUniform(u_skyColor, skyColor.data());
+    encoder->setUniform(u_gtaoIntensity, gtaoIntensityField);
     encoder->setImage(0, gAccumTex.handle, 0, bgfx::Access::Read);
     encoder->setImage(1, gRevealTex.handle, 0, bgfx::Access::Read);
     encoder->setImage(2, gbufAlbedo.handle, 0, bgfx::Access::Read);
     encoder->setImage(3, gbufEmission.handle, 0, bgfx::Access::Read);
     encoder->setImage(4, gbufNormal.handle, 0, bgfx::Access::Read);
     encoder->setImage(5, gbufPBRData.handle, 0, bgfx::Access::Read);
-    encoder->setTexture(6, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-    encoder->setImage(7, gOutputColor.handle, 0, bgfx::Access::Write);
+    encoder->setImage(6, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Read);
+    encoder->setTexture(7, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+    encoder->setImage(8, gOutputColor.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity
@@ -2951,6 +2984,8 @@ void field::cleanup()
         bgfx::destroy(u_emissionColor);
     if (bgfx::isValid(u_skyColor))
         bgfx::destroy(u_skyColor);
+    if (bgfx::isValid(u_gtaoIntensity))
+        bgfx::destroy(u_gtaoIntensity);
     if (bgfx::isValid(u_info))
         bgfx::destroy(u_info);
     if (bgfx::isValid(u_previousModelViewProj))

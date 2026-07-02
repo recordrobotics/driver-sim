@@ -1,7 +1,8 @@
 #include <bgfx_compute.sh>
-#include "../common/pbr.sh"
+#include "pbr.sh"
 #include "../common/color.sh"
 #include "../common/packing.sh"
+#include "../gtao/common.sh"
 
 IMAGE2D_RO(s_accum, rgba16f, 0);
 IMAGE2D_RO(s_reveal, r16f, 1);
@@ -9,13 +10,20 @@ IMAGE2D_RO(s_albedo, rgba8, 2);
 IMAGE2D_RO(s_emission, rgba16f, 3);
 UIMAGE2D_RO(s_normal, r32ui, 4);
 IMAGE2D_RO(s_pbrData, rgba8, 5);
-SAMPLER2D(s_depth, 6);
-IMAGE2D_WO(s_output, rgba16f, 7);
+UIMAGE2D_RO(s_finalAOTerm, r32ui, 6);
+SAMPLER2D(s_depth, 7);
+IMAGE2D_WO(s_output, rgba16f, 8);
 
 uniform vec4 u_jitter;
 
 // linear space
 uniform vec4 u_skyColor;
+
+/*
+    float indirectIntensity
+    float directIntensity
+*/
+uniform vec4 u_gtaoIntensity;
 
 NUM_THREADS(16, 16, 1)
 void main()
@@ -46,6 +54,19 @@ void main()
 
         vec4 pbrData = imageLoad(s_pbrData, uvi);
 
+        float indirectAO = 1.0;
+        float directAO = 1.0;
+
+        if(u_gtaoIntensity.x > 0.0 || u_gtaoIntensity.y > 0.0) {
+            // no filtering allowed as it could be packed bent normal
+            uint aoPacked = imageLoad(s_finalAOTerm, uvi).x;
+            float aoVisibility = 1.0;
+            vec3 bentNormal = normal;
+            XeGTAO_DecodeVisibilityBentNormal( aoPacked, aoVisibility, bentNormal );
+
+            indirectAO = mix(1.0, aoVisibility, u_gtaoIntensity.x);
+            directAO = mix(1.0, aoVisibility, u_gtaoIntensity.y);
+        }
         
         vec3 current_ndc = vec3(uvn * 2.0 - 1.0, depth);
         current_ndc.y *= -1.0;
@@ -54,7 +75,7 @@ void main()
         vec4 view_position = mul(u_invProj, vec4(current_ndc, 1.0));
         view_position.xyz /= view_position.w;
 
-        pbr_col = pbr(albedo.rgb, emission.rgb, view_position.xyz, normal, albedo.a, emission.a, pbrData.y, pbrData.z);
+        pbr_col = pbr(albedo.rgb, emission.rgb, view_position.xyz, normal, albedo.a, emission.a, pbrData.y, pbrData.z, indirectAO, directAO);
     } else {
         pbr_col = vec4_splat(0.0);
     }

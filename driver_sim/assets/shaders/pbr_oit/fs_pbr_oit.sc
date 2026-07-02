@@ -2,7 +2,7 @@ $input v_viewPosition, v_viewNormal, v_currentPosition, v_previousPosition, v_wo
 
 #include <bgfx_shader.sh>
 #include "../common/utils.sh"
-#include "../common/pbr.sh"
+#include "pbr.sh"
 
 uniform vec4 u_baseColor;
 uniform vec4 u_emissionColor;
@@ -14,7 +14,7 @@ float w(float z, float a) {
 
 void main()
 {
-    vec4 color = pbr(u_baseColor.rgb, u_emissionColor.rgb, v_viewPosition, v_viewNormal, u_baseColor.a, u_emissionColor.a, u_pbrData.y, u_pbrData.z);
+    vec4 color = pbr(u_baseColor.rgb, u_emissionColor.rgb, v_viewPosition, v_viewNormal, u_baseColor.a, u_emissionColor.a, u_pbrData.y, u_pbrData.z, 1.0, 1.0);
 
     color.rgb *= color.a;
 

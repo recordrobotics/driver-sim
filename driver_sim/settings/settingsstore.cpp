@@ -35,6 +35,7 @@ namespace settings
     bool enableTAA = true;
     bool enableMotionBlur = true;
     bool enableBloom = true;
+    bool enableGTAO = true;
     bool writeObjectMotionVectors = true;
 
     bool showSelectPage = true;
@@ -70,6 +71,7 @@ namespace settings
         enableTAA = true;
         enableMotionBlur = true;
         enableBloom = true;
+        enableGTAO = true;
         writeObjectMotionVectors = true;
 
         showSelectPage = true;
@@ -186,6 +188,7 @@ namespace settings
             enableTAA = j.value("enableTAA", enableTAA);
             enableMotionBlur = j.value("enableMotionBlur", enableMotionBlur);
             enableBloom = j.value("enableBloom", enableBloom);
+            enableGTAO = j.value("enableGTAO", enableGTAO);
             writeObjectMotionVectors = j.value("writeObjectMotionVectors", writeObjectMotionVectors);
 
             showSelectPage = j.value("showSelectPage", showSelectPage);
@@ -223,6 +226,7 @@ namespace settings
         j["enableTAA"] = enableTAA;
         j["enableMotionBlur"] = enableMotionBlur;
         j["enableBloom"] = enableBloom;
+        j["enableGTAO"] = enableGTAO;
         j["writeObjectMotionVectors"] = writeObjectMotionVectors;
 
         j["showSelectPage"] = showSelectPage;
