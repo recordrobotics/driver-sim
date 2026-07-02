@@ -7,9 +7,9 @@ IMAGE2D_RO(s_accum, rgba16f, 0);
 IMAGE2D_RO(s_reveal, r16f, 1);
 IMAGE2D_RO(s_albedo, rgba8, 2);
 IMAGE2D_RO(s_emission, rgba16f, 3);
-IMAGE2D_RO(s_normal, r32ui, 4);
+UIMAGE2D_RO(s_normal, r32ui, 4);
 IMAGE2D_RO(s_pbrData, rgba8, 5);
-IMAGE2D_RO(s_depth, r32f, 6);
+SAMPLER2D(s_depth, 6);
 IMAGE2D_WO(s_output, rgba16f, 7);
 
 uniform vec4 u_jitter;
@@ -29,8 +29,10 @@ void main()
 
     vec4 accum = imageLoad(s_accum, uvi);
     float reveal = imageLoad(s_reveal, uvi).r;
-    
-    float depth = imageLoad(s_depth, uvi).r;
+
+    vec2 uvn = vec2(uvi + vec2_splat(0.5)) / render_size;
+
+    float depth = texture2DLod(s_depth, uvn, 0).r;
 
     vec4 pbr_col;
 
@@ -44,7 +46,6 @@ void main()
 
         vec4 pbrData = imageLoad(s_pbrData, uvi);
 
-        vec2 uvn = vec2(uvi + vec2_splat(0.5)) / render_size;
         
         vec3 current_ndc = vec3(uvn * 2.0 - 1.0, depth);
         current_ndc.y *= -1.0;

@@ -66,29 +66,29 @@ uniform vec4 u_XeGTAOData[3];
 NUM_THREADS(8, 8, 1)
 void main()
 {
-  uvec2 render_size = uvec2(textureSize(s_depth, 0));
+  ivec2 render_size = ivec2(textureSize(s_depth, 0));
 
   float consts_effectRadius = u_XeGTAOData[0].x;
   float consts_radiusMultiplier = u_XeGTAOData[0].y;
   float consts_effectFalloffRange = u_XeGTAOData[0].z;
 
   // MIP 0
-  const uvec2 baseCoord = uvec2(gl_GlobalInvocationID.xy);
-  const uvec2 pixCoord = baseCoord * 2;
+  const ivec2 baseCoord = ivec2(gl_GlobalInvocationID.xy);
+  const ivec2 pixCoord = baseCoord * 2;
   vec4 depths4 = textureGatherOffset( s_depth, vec2(pixCoord) / vec2(render_size), ivec2(1,1), 0 );
   float depth0 = XeGTAO_ClampDepth( ScreenSpaceToViewSpaceDepth( depths4.w, CAMERA_NEAR ) );
   float depth1 = XeGTAO_ClampDepth( ScreenSpaceToViewSpaceDepth( depths4.z, CAMERA_NEAR ) );
   float depth2 = XeGTAO_ClampDepth( ScreenSpaceToViewSpaceDepth( depths4.x, CAMERA_NEAR ) );
   float depth3 = XeGTAO_ClampDepth( ScreenSpaceToViewSpaceDepth( depths4.y, CAMERA_NEAR ) );
 
-  imageStore( s_depthMip0, pixCoord + uvec2(0, 0), depth0 );
-  imageStore( s_depthMip0, pixCoord + uvec2(1, 0), depth1 );
-  imageStore( s_depthMip0, pixCoord + uvec2(0, 1), depth2 );
-  imageStore( s_depthMip0, pixCoord + uvec2(1, 1), depth3 );
+  imageStore( s_depthMip0, pixCoord + ivec2(0, 0), vec4_splat(depth0) );
+  imageStore( s_depthMip0, pixCoord + ivec2(1, 0), vec4_splat(depth1) );
+  imageStore( s_depthMip0, pixCoord + ivec2(0, 1), vec4_splat(depth2) );
+  imageStore( s_depthMip0, pixCoord + ivec2(1, 1), vec4_splat(depth3) );
 
   // MIP 1
   float dm1 = XeGTAO_DepthMIPFilter( depth0, depth1, depth2, depth3, consts_effectRadius, consts_radiusMultiplier, consts_effectFalloffRange );
-  imageStore( s_depthMip1, baseCoord, dm1 );
+  imageStore( s_depthMip1, baseCoord, vec4_splat(dm1) );
   g_scratchDepths[ gl_LocalInvocationID.x ][ gl_LocalInvocationID.y ] = dm1;
 
   memoryBarrierShared();
@@ -104,7 +104,7 @@ void main()
       float inBR = g_scratchDepths[gl_LocalInvocationID.x+1][gl_LocalInvocationID.y+1];
 
       float dm2 = XeGTAO_DepthMIPFilter( inTL, inTR, inBL, inBR, consts_effectRadius, consts_radiusMultiplier, consts_effectFalloffRange );
-      imageStore( s_depthMip2, baseCoord / 2, dm2 );
+      imageStore( s_depthMip2, ivec2(uvec2(baseCoord) / 2), vec4_splat(dm2) );
       g_scratchDepths[ gl_LocalInvocationID.x ][ gl_LocalInvocationID.y ] = dm2;
   }
 
@@ -121,7 +121,7 @@ void main()
       float inBR = g_scratchDepths[gl_LocalInvocationID.x+2][gl_LocalInvocationID.y+2];
 
       float dm3 = XeGTAO_DepthMIPFilter( inTL, inTR, inBL, inBR, consts_effectRadius, consts_radiusMultiplier, consts_effectFalloffRange );
-      imageStore( s_depthMip3, baseCoord / 4, dm3 );
+      imageStore( s_depthMip3, ivec2(uvec2(baseCoord) / 4), vec4_splat(dm3) );
       g_scratchDepths[ gl_LocalInvocationID.x ][ gl_LocalInvocationID.y ] = dm3;
   }
 
@@ -138,7 +138,7 @@ void main()
       float inBR = g_scratchDepths[gl_LocalInvocationID.x+4][gl_LocalInvocationID.y+4];
 
       float dm4 = XeGTAO_DepthMIPFilter( inTL, inTR, inBL, inBR, consts_effectRadius, consts_radiusMultiplier, consts_effectFalloffRange );
-      imageStore( s_depthMip4, baseCoord / 8, dm4 );
+      imageStore( s_depthMip4, ivec2(uvec2(baseCoord) / 8), vec4_splat(dm4) );
       //g_scratchDepths[ gl_LocalInvocationID.x ][ gl_LocalInvocationID.y ] = dm4;
   }
 }

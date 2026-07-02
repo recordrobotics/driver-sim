@@ -79,10 +79,10 @@ vec2 jitter_tile(uint frame, vec2 uvi, vec2 tile_render_size)
 NUM_THREADS(16, 16, 1)
 void main()
 {
-    uvec2 render_size = uvec2(textureSize(s_color, 0));
+    ivec2 render_size = ivec2(textureSize(s_color, 0));
 	vec2 tile_render_size_v = vec2(textureSize(s_neighbormax, 0));
     ivec2 tile_render_size = ivec2(tile_render_size_v);
-    uvec2 uvi = uvec2(gl_GlobalInvocationID.xy);
+    ivec2 uvi = ivec2(gl_GlobalInvocationID.xy);
     if ((uvi.x >= render_size.x) || (uvi.y >= render_size.y)) 
 	{
 		return;
@@ -98,7 +98,7 @@ void main()
 
     vec2 x = (vec2(uvi) + vec2_splat(0.5)) / vec2(render_size);
 
-    vec4 vnzw =  texture2DLod(s_neighbormax, x + vec2_splat(tile_size / 2) / vec2(render_size) + jitter_tile(frame, uvi, tile_render_size_v), 0.0) * vec4(render_size / 2., 1, 1) * motion_blur_intensity;
+    vec4 vnzw =  texture2DLod(s_neighbormax, x + vec2_splat(tile_size / 2) / vec2(render_size) + jitter_tile(frame, vec2(uvi), tile_render_size_v), 0.0) * vec4(render_size / 2., 1, 1) * motion_blur_intensity;
 
 	vec2 vn = vnzw.xy;
 
@@ -106,7 +106,7 @@ void main()
 
 	vec4 base_color = texture2DLod(s_color, x, 0.0);
 
-	vec4 vxzw = texture2DLod(s_velocity, x, 0.0) * vec4(render_size / 2., 1, 1) * motion_blur_intensity;
+	vec4 vxzw = texture2DLod(s_velocity, x, 0.0) * vec4(vec2(render_size) / 2., 1, 1) * motion_blur_intensity;
 
 	if(vn_length < 0.5)
 	{
@@ -122,7 +122,7 @@ void main()
 
 	vec2 wx = safenorm(vx);
 	
-	float j = interleaved_gradient_noise(frame, uvi) * 2. - 1.;
+	float j = interleaved_gradient_noise(frame, vec2(uvi)) * 2. - 1.;
 
 	float zx = vxzw.w;
 
@@ -152,7 +152,7 @@ void main()
 
 		float wa = abs(dot(wx, wd));
 		
-		vec4 vyzw = texture2DLod(s_velocity, y, 0.0) * vec4(render_size / 2, 1, 1) * motion_blur_intensity;
+		vec4 vyzw = texture2DLod(s_velocity, y, 0.0) * vec4(render_size / 2., 1, 1) * motion_blur_intensity;
 		
 		vec2 vy = vyzw.xy - dz * t; 
 	

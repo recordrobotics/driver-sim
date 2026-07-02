@@ -21,7 +21,7 @@ SHARED float sm_r[TILE_PIXEL_COUNT];
 SHARED float sm_g[TILE_PIXEL_COUNT];
 SHARED float sm_b[TILE_PIXEL_COUNT];
 
-void store_lds(int idx, vec4 c)
+void store_lds(uint idx, vec4 c)
 {
     sm_r[idx] = c.r;
     sm_g[idx] = c.g;

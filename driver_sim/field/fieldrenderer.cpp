@@ -507,6 +507,59 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform for bump texture.");
     }
 
+    u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_baseColor))
+    {
+        logger->error("Failed to create uniform: u_baseColor");
+        throw std::runtime_error("Failed to create uniform: u_baseColor");
+    }
+
+    u_emissionColor = bgfx::createUniform("u_emissionColor", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_emissionColor))
+    {
+        logger->error("Failed to create uniform: u_emissionColor");
+        throw std::runtime_error("Failed to create uniform: u_emissionColor");
+    }
+
+    u_skyColor = bgfx::createUniform("u_skyColor", bgfx::UniformType::Vec4);
+
+    if (!bgfx::isValid(u_skyColor))
+    {
+        logger->error("Failed to create uniform: u_skyColor");
+        throw std::runtime_error("Failed to create uniform: u_skyColor");
+    }
+
+    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4, 2);
+
+    if (!bgfx::isValid(u_info))
+    {
+        logger->error("Failed to create uniform: u_info");
+        throw std::runtime_error("Failed to create uniform: u_info");
+    }
+
+    u_pbrData = bgfx::createUniform("u_pbrData", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_pbrData))
+    {
+        logger->error("Failed to create uniform: u_pbrData");
+        throw std::runtime_error("Failed to create uniform: u_pbrData");
+    }
+
+    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, LIGHT_COUNT);
+    if (!bgfx::isValid(u_lightPos))
+    {
+        logger->error("Failed to create uniform: u_lightPos");
+        throw std::runtime_error("Failed to create uniform: u_lightPos");
+    }
+
+    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, LIGHT_COUNT);
+    if (!bgfx::isValid(u_lightColor))
+    {
+        logger->error("Failed to create uniform: u_lightColor");
+        throw std::runtime_error("Failed to create uniform: u_lightColor");
+    }
+
     const auto type = bgfx::getRendererType();
 
     programPBR =
@@ -588,59 +641,6 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create OIT composition program.");
     }
 
-    u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
-
-    if (!bgfx::isValid(u_baseColor))
-    {
-        logger->error("Failed to create uniform: u_baseColor");
-        throw std::runtime_error("Failed to create uniform: u_baseColor");
-    }
-
-    u_emissionColor = bgfx::createUniform("u_emissionColor", bgfx::UniformType::Vec4);
-
-    if (!bgfx::isValid(u_emissionColor))
-    {
-        logger->error("Failed to create uniform: u_emissionColor");
-        throw std::runtime_error("Failed to create uniform: u_emissionColor");
-    }
-
-    u_skyColor = bgfx::createUniform("u_skyColor", bgfx::UniformType::Vec4);
-
-    if (!bgfx::isValid(u_skyColor))
-    {
-        logger->error("Failed to create uniform: u_skyColor");
-        throw std::runtime_error("Failed to create uniform: u_skyColor");
-    }
-
-    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4, 2);
-
-    if (!bgfx::isValid(u_info))
-    {
-        logger->error("Failed to create uniform: u_info");
-        throw std::runtime_error("Failed to create uniform: u_info");
-    }
-
-    u_pbrData = bgfx::createUniform("u_pbrData", bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(u_pbrData))
-    {
-        logger->error("Failed to create uniform: u_pbrData");
-        throw std::runtime_error("Failed to create uniform: u_pbrData");
-    }
-
-    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, LIGHT_COUNT);
-    if (!bgfx::isValid(u_lightPos))
-    {
-        logger->error("Failed to create uniform: u_lightPos");
-        throw std::runtime_error("Failed to create uniform: u_lightPos");
-    }
-
-    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, LIGHT_COUNT);
-    if (!bgfx::isValid(u_lightColor))
-    {
-        logger->error("Failed to create uniform: u_lightColor");
-        throw std::runtime_error("Failed to create uniform: u_lightColor");
-    }
-
     TEXTURE(
         gAccumTex,
         width, height,
@@ -697,6 +697,20 @@ void initTonemap()
 {
     const auto type = bgfx::getRendererType();
 
+    s_lut = bgfx::createUniform("s_lut", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_lut))
+    {
+        logger->error("Failed to create uniform: s_lut");
+        throw std::runtime_error("Failed to create uniform: s_lut");
+    }
+
+    u_lutParams = bgfx::createUniform("u_lutParams", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_lutParams))
+    {
+        logger->error("Failed to create uniform: u_lutParams");
+        throw std::runtime_error("Failed to create uniform: u_lutParams");
+    }
+
     exposureProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_exposure"), true);
 
@@ -714,20 +728,6 @@ void initTonemap()
     {
         logger->error("Failed to create tonemap program.");
         throw std::runtime_error("Failed to create tonemap program.");
-    }
-
-    s_lut = bgfx::createUniform("s_lut", bgfx::UniformType::Sampler);
-    if (!bgfx::isValid(s_lut))
-    {
-        logger->error("Failed to create uniform: s_lut");
-        throw std::runtime_error("Failed to create uniform: s_lut");
-    }
-
-    u_lutParams = bgfx::createUniform("u_lutParams", bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(u_lutParams))
-    {
-        logger->error("Failed to create uniform: u_lutParams");
-        throw std::runtime_error("Failed to create uniform: u_lutParams");
     }
 
     TEXTURE_EMBEDDED(
@@ -749,6 +749,13 @@ void initTAA(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform for TAA history texture.");
     }
 
+    u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_jitter))
+    {
+        logger->error("Failed to create uniform: u_jitter");
+        throw std::runtime_error("Failed to create uniform: u_jitter");
+    }
+
     taaResolveProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
 
@@ -756,13 +763,6 @@ void initTAA(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create TAA resolve program.");
         throw std::runtime_error("Failed to create TAA resolve program.");
-    }
-
-    u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(u_jitter))
-    {
-        logger->error("Failed to create uniform: u_jitter");
-        throw std::runtime_error("Failed to create uniform: u_jitter");
     }
 
     TEXTURE(
@@ -850,7 +850,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::D24S8,
+        bgfx::TextureFormat::D32,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     FRAMEBUFFER(
@@ -866,6 +866,41 @@ void initMotionBlur(uint16_t width, uint16_t height)
     s_mbTileMax = bgfx::createUniform("s_tilemax", bgfx::UniformType::Sampler);
     s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
     s_mbTileVariance = bgfx::createUniform("s_tilevariance", bgfx::UniformType::Sampler);
+
+    u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousModelViewProj))
+    {
+        logger->error("Failed to create uniform: u_previousModelViewProj");
+        throw std::runtime_error("Failed to create uniform: u_previousModelViewProj");
+    }
+
+    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousView))
+    {
+        logger->error("Failed to create uniform: u_previousView");
+        throw std::runtime_error("Failed to create uniform: u_previousView");
+    }
+
+    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousProj))
+    {
+        logger->error("Failed to create uniform: u_previousProj");
+        throw std::runtime_error("Failed to create uniform: u_previousProj");
+    }
+
+    u_mbVelocityData = bgfx::createUniform("u_mbVelocityData", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_mbVelocityData))
+    {
+        logger->error("Failed to create uniform: u_mbVelocityData");
+        throw std::runtime_error("Failed to create uniform: u_mbVelocityData");
+    }
+
+    u_mbBlurData = bgfx::createUniform("u_mbBlurData", bgfx::UniformType::Vec4, 2);
+    if (!bgfx::isValid(u_mbBlurData))
+    {
+        logger->error("Failed to create uniform: u_mbBlurData");
+        throw std::runtime_error("Failed to create uniform: u_mbBlurData");
+    }
 
     mbVelocityProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
@@ -913,41 +948,6 @@ void initMotionBlur(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create motion blur experimental blur program.");
         throw std::runtime_error("Failed to create motion blur experimental blur program.");
-    }
-
-    u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
-    if (!bgfx::isValid(u_previousModelViewProj))
-    {
-        logger->error("Failed to create uniform: u_previousModelViewProj");
-        throw std::runtime_error("Failed to create uniform: u_previousModelViewProj");
-    }
-
-    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
-    if (!bgfx::isValid(u_previousView))
-    {
-        logger->error("Failed to create uniform: u_previousView");
-        throw std::runtime_error("Failed to create uniform: u_previousView");
-    }
-
-    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformType::Mat4);
-    if (!bgfx::isValid(u_previousProj))
-    {
-        logger->error("Failed to create uniform: u_previousProj");
-        throw std::runtime_error("Failed to create uniform: u_previousProj");
-    }
-
-    u_mbVelocityData = bgfx::createUniform("u_mbVelocityData", bgfx::UniformType::Vec4, 3);
-    if (!bgfx::isValid(u_mbVelocityData))
-    {
-        logger->error("Failed to create uniform: u_mbVelocityData");
-        throw std::runtime_error("Failed to create uniform: u_mbVelocityData");
-    }
-
-    u_mbBlurData = bgfx::createUniform("u_mbBlurData", bgfx::UniformType::Vec4, 2);
-    if (!bgfx::isValid(u_mbBlurData))
-    {
-        logger->error("Failed to create uniform: u_mbBlurData");
-        throw std::runtime_error("Failed to create uniform: u_mbBlurData");
     }
 
     TEXTURE(
@@ -1017,22 +1017,6 @@ void initBloom(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
-    bloomDownscaleProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_downscale"), true);
-    if (!bgfx::isValid(bloomDownscaleProgram))
-    {
-        logger->error("Failed to create bloom downscale program.");
-        throw std::runtime_error("Failed to create bloom downscale program.");
-    }
-
-    bloomUpscaleProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_upscale"), true);
-    if (!bgfx::isValid(bloomUpscaleProgram))
-    {
-        logger->error("Failed to create bloom upscale program.");
-        throw std::runtime_error("Failed to create bloom upscale program.");
-    }
-
     s_bloomDirt = bgfx::createUniform("s_bloomDirt", bgfx::UniformType::Sampler);
     if (!bgfx::isValid(s_bloomDirt))
     {
@@ -1057,6 +1041,22 @@ void initBloom(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create uniform: u_bloomIntensity");
         throw std::runtime_error("Failed to create uniform: u_bloomIntensity");
+    }
+
+    bloomDownscaleProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_downscale"), true);
+    if (!bgfx::isValid(bloomDownscaleProgram))
+    {
+        logger->error("Failed to create bloom downscale program.");
+        throw std::runtime_error("Failed to create bloom downscale program.");
+    }
+
+    bloomUpscaleProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_upscale"), true);
+    if (!bgfx::isValid(bloomUpscaleProgram))
+    {
+        logger->error("Failed to create bloom upscale program.");
+        throw std::runtime_error("Failed to create bloom upscale program.");
     }
 
     TEXTURE_EMBEDDED(
@@ -1099,6 +1099,13 @@ void initGTAO(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
+    u_XeGTAOData = bgfx::createUniform("u_XeGTAOData", bgfx::UniformType::Vec4, 3);
+    if (!bgfx::isValid(u_XeGTAOData))
+    {
+        logger->error("Failed to create uniform: u_XeGTAOData");
+        throw std::runtime_error("Failed to create uniform: u_XeGTAOData");
+    }
+
     XeGTAO_PrefilterDepths16x16Program =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_PrefilterDepths16x16"), true);
     if (!bgfx::isValid(XeGTAO_PrefilterDepths16x16Program))
@@ -1129,13 +1136,6 @@ void initGTAO(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create XeGTAO Debug Visibility program.");
         throw std::runtime_error("Failed to create XeGTAO Debug Visibility program.");
-    }
-
-    u_XeGTAOData = bgfx::createUniform("u_XeGTAOData", bgfx::UniformType::Vec4, 3);
-    if (!bgfx::isValid(u_XeGTAOData))
-    {
-        logger->error("Failed to create uniform: u_XeGTAOData");
-        throw std::runtime_error("Failed to create uniform: u_XeGTAOData");
     }
 
     TEXTURE(
@@ -1754,10 +1754,10 @@ void field::init(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create debug normals program.");
     }
 
+    initTAA(window.width, window.height); // init first to define uniforms
     initGBuffer(window.width, window.height);
     initPBROIT(window.width, window.height);
     initTonemap();
-    initTAA(window.width, window.height);
     initMotionBlur(window.width, window.height);
     initBloom(window.width, window.height);
     initGTAO(window.width, window.height);
@@ -2530,7 +2530,7 @@ void field::render(const blackboard::app::Window &window)
     encoder->setImage(3, gbufEmission.handle, 0, bgfx::Access::Read);
     encoder->setImage(4, gbufNormal.handle, 0, bgfx::Access::Read);
     encoder->setImage(5, gbufPBRData.handle, 0, bgfx::Access::Read);
-    encoder->setImage(6, gbufDepth.handle, 0, bgfx::Access::Read);
+    encoder->setTexture(6, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     encoder->setImage(7, gOutputColor.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
@@ -2652,7 +2652,7 @@ void field::render(const blackboard::app::Window &window)
         else
         {
             encoder->setImage(0, gFullVelocity.handle, 0, bgfx::Access::Read);
-            encoder->setImage(1, gbufDepth.handle, 0, bgfx::Access::Read);
+            encoder->setTexture(1, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
             encoder->setImage(2, gOutputColor.handle, 0, bgfx::Access::Read);
             encoder->setTexture(3, s_taaHistory, taaUseBuffer1 ? gTAABuffer0.handle : gTAABuffer1.handle);
             encoder->setImage(4, taaOutput.handle, 0, bgfx::Access::Write);

@@ -2,7 +2,7 @@
 
 #include "../common/packing.sh"
 
-IMAGE2D_RO(s_normal, r32ui, 0);
+UIMAGE2D_RO(s_normal, r32ui, 0);
 IMAGE2D_WO(dest, rgba16f, 1);
 
 NUM_THREADS(16, 16, 1)

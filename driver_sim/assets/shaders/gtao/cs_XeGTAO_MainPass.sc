@@ -8,9 +8,9 @@
 #define XE_GTAO_PI_HALF             (1.5707963267948966192313216916398)
 
 SAMPLER2D(s_depth, 0);
-IMAGE2D_RO(s_normal, r32ui, 1);
-IMAGE2D_RO(s_hilbertLut, r16ui, 2);
-IMAGE2D_WO(s_workingAOTerm, r32ui, 3);
+UIMAGE2D_RO(s_normal, r32ui, 1);
+UIMAGE2D_RO(s_hilbertLut, r16ui, 2);
+UIMAGE2D_WO(s_workingAOTerm, r32ui, 3);
 IMAGE2D_WO(s_workingEdges, r32f, 4);
 
 #define XE_GTAO_COMPUTE_BENT_NORMALS 1
@@ -113,16 +113,16 @@ uniform vec4 u_XeGTAOData[3];
 NUM_THREADS(16, 16, 1)
 void main()
 {
-    uvec2 render_size = uvec2(imageSize(s_workingAOTerm));
+    ivec2 render_size = ivec2(imageSize(s_workingAOTerm));
 
-    const uvec2 pixCoord = uvec2(gl_GlobalInvocationID.xy);
+    const ivec2 pixCoord = ivec2(gl_GlobalInvocationID.xy);
     const uint sliceCount = 3;
     const uint stepsPerSlice = 3;
 
-    uint index = imageLoad(s_hilbertLut, pixCoord % 64 ).x;
+    uint index = imageLoad(s_hilbertLut, ivec2(uvec2(pixCoord) % 64) ).x;
     index += 288*(uint(u_XeGTAOData[0].w)%64); // why 288? tried out a few and that's the best so far (with XE_HILBERT_LEVEL 6U) - but there's probably better :)
     // R2 sequence - see http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
-    const vec2 localNoise = vec2( frac( 0.5 + index * vec2(0.75487766624669276005, 0.5698402909980532659114) ) );
+    const vec2 localNoise = vec2( fract( 0.5 + index * vec2(0.75487766624669276005, 0.5698402909980532659114) ) );
 
     uint packedInput = imageLoad(s_normal, pixCoord).x;
     vec3 unpackedOutput = R11G11B10_UNORM_to_FLOAT3( packedInput );
@@ -130,7 +130,7 @@ void main()
 
     // XeGTAO_MainPass
 
-    vec2 normalizedScreenPos = vec2(pixCoord + vec2_splat(0.5)) / vec2(render_size);
+    vec2 normalizedScreenPos = (vec2(pixCoord) + vec2_splat(0.5)) / vec2(render_size);
 
     vec4 valuesUL   = textureGather(s_depth, vec2(pixCoord) / vec2(render_size), 0);
     vec4 valuesBR   = textureGatherOffset(s_depth, vec2(pixCoord) / vec2(render_size), ivec2( 1, 1 ), 0);
@@ -145,7 +145,7 @@ void main()
     const float pixBZ = valuesBR.x;
 
     vec4 edgesLRTB  = XeGTAO_CalculateEdges( viewspaceZ, pixLZ, pixRZ, pixTZ, pixBZ );
-    imageStore( s_workingEdges, pixCoord, XeGTAO_PackEdges(edgesLRTB) );
+    imageStore( s_workingEdges, pixCoord, vec4_splat(XeGTAO_PackEdges(edgesLRTB)) );
 
     // Move center pixel slightly towards camera to avoid imprecision artifacts due to depth buffer imprecision; offset depends on depth texture format used
     viewspaceZ *= 0.99999;     // this is good for FP32 depth buffer
@@ -170,7 +170,7 @@ void main()
 
     float visibility = 0;
 #ifdef XE_GTAO_COMPUTE_BENT_NORMALS
-    vec3 bentNormal = 0;
+    vec3 bentNormal = vec3_splat(0);
 #else
     vec3 bentNormal = viewspaceNormal;
 #endif
@@ -186,7 +186,7 @@ void main()
         // approx viewspace pixel size at pixCoord; approximation of NDCToViewspace( normalizedScreenPos.xy + consts.ViewportPixelSize.xy, pixCenterPos.z ).xy - pixCenterPos.xy;
         const vec2 pixelDirRBViewspaceSizeAtCenterZ = viewspaceZ.xx * vec2(u_XeGTAOData[1].z, u_XeGTAOData[1].w);
 
-        float screenspaceRadius   = effectRadius / (float)pixelDirRBViewspaceSizeAtCenterZ.x;
+        float screenspaceRadius   = effectRadius / pixelDirRBViewspaceSizeAtCenterZ.x;
 
         // fade out for small screen radii 
         visibility += saturate((10 - screenspaceRadius)/100)*0.5;
@@ -198,9 +198,9 @@ void main()
             visibility = 1.0;
             visibility = saturate( visibility / XE_GTAO_OCCLUSION_TERM_SCALE );
         #ifdef XE_GTAO_COMPUTE_BENT_NORMALS
-            imageStore( s_workingAOTerm, pixCoord, XeGTAO_EncodeVisibilityBentNormal( visibility, viewspaceNormal ) );
+            imageStore( s_workingAOTerm, pixCoord, uvec4_splat(XeGTAO_EncodeVisibilityBentNormal( visibility, viewspaceNormal )) );
         #else
-            imageStore( s_workingAOTerm, pixCoord, uint(visibility * 255.0 + 0.5) );
+            imageStore( s_workingAOTerm, pixCoord, uvec4_splat(uint(visibility * 255.0 + 0.5)) );
         #endif
             return;
         }
@@ -267,13 +267,13 @@ void main()
                 float s = float(step+stepNoise) / float(stepsPerSlice); // + 1e-6f);
 
                 // additional distribution modifier
-                s       = (float)pow( s, (float)sampleDistributionPower );
+                s       = pow( s, sampleDistributionPower );
 
                 // avoid sampling center pixel
                 s       += minS;
 
                 // approx lines 21-22 from the paper, unrolled
-                float2 sampleOffset = s * omega;
+                vec2 sampleOffset = s * omega;
 
                 float sampleOffsetLength = length( sampleOffset );
 
@@ -318,18 +318,18 @@ void main()
                 float shc1 = dot(sampleHorizonVec1, viewVec);
 
                 // discard unwanted samples
-                shc0 = lerp( lowHorizonCos0, shc0, weight0 ); // this would be more correct but too expensive: cos(lerp( acos(lowHorizonCos0), acos(shc0), weight0 ));
-                shc1 = lerp( lowHorizonCos1, shc1, weight1 ); // this would be more correct but too expensive: cos(lerp( acos(lowHorizonCos1), acos(shc1), weight1 ));
+                shc0 = mix( lowHorizonCos0, shc0, weight0 ); // this would be more correct but too expensive: cos(mix( acos(lowHorizonCos0), acos(shc0), weight0 ));
+                shc1 = mix( lowHorizonCos1, shc1, weight1 ); // this would be more correct but too expensive: cos(mix( acos(lowHorizonCos1), acos(shc1), weight1 ));
 
                 // thickness heuristic - see "4.3 Implementation details, Height-field assumption considerations"
 #if 0   // (disabled, not used) this should match the paper
                 float newhorizonCos0 = max( horizonCos0, shc0 );
                 float newhorizonCos1 = max( horizonCos1, shc1 );
-                horizonCos0 = (horizonCos0 > shc0)?( lerp( newhorizonCos0, shc0, thinOccluderCompensation ) ):( newhorizonCos0 );
-                horizonCos1 = (horizonCos1 > shc1)?( lerp( newhorizonCos1, shc1, thinOccluderCompensation ) ):( newhorizonCos1 );
+                horizonCos0 = (horizonCos0 > shc0)?( mix( newhorizonCos0, shc0, thinOccluderCompensation ) ):( newhorizonCos0 );
+                horizonCos1 = (horizonCos1 > shc1)?( mix( newhorizonCos1, shc1, thinOccluderCompensation ) ):( newhorizonCos1 );
 #elif 0 // (disabled, not used) this is slightly different from the paper but cheaper and provides very similar results
-                horizonCos0 = lerp( max( horizonCos0, shc0 ), shc0, thinOccluderCompensation );
-                horizonCos1 = lerp( max( horizonCos1, shc1 ), shc1, thinOccluderCompensation );
+                horizonCos0 = mix( max( horizonCos0, shc0 ), shc0, thinOccluderCompensation );
+                horizonCos1 = mix( max( horizonCos1, shc1 ), shc1, thinOccluderCompensation );
 #else   // this is a version where thicknessHeuristic is completely disabled
                 horizonCos0 = max( horizonCos0, shc0 );
                 horizonCos1 = max( horizonCos1, shc1 );
@@ -338,7 +338,7 @@ void main()
             }
 
 #if 1       // I can't figure out the slight overdarkening on high slopes, so I'm adding this fudge - in the training set, 0.05 is close (PSNR 21.34) to disabled (PSNR 21.45)
-            projectedNormalVecLength = lerp( projectedNormalVecLength, 1, 0.05 );
+            projectedNormalVecLength = mix( projectedNormalVecLength, 1.0, 0.05 );
 #endif
 
             // line ~27, unrolled
@@ -358,7 +358,7 @@ void main()
             float t0 = (6*sin(h0-n)-sin(3*h0-n)+6*sin(h1-n)-sin(3*h1-n)+16*sin(n)-3*(sin(h0+n)+sin(h1+n)))/12;
             float t1 = (-cos(3 * h0-n)-cos(3 * h1-n) +8 * cos(n)-3 * (cos(h0+n) +cos(h1+n)))/12;
             vec3 localBentNormal = vec3( directionVec.x * t0, directionVec.y * t0, -t1 );
-            localBentNormal = (vec3)mul( XeGTAO_RotFromToMatrix( vec3(0,0,-1), viewVec ), localBentNormal ) * projectedNormalVecLength;
+            localBentNormal = mul( XeGTAO_RotFromToMatrix( vec3(0,0,-1), viewVec ), localBentNormal ) * projectedNormalVecLength;
             bentNormal += localBentNormal;
 #endif
         }
@@ -373,8 +373,8 @@ void main()
 
     visibility = saturate( visibility / XE_GTAO_OCCLUSION_TERM_SCALE );
 #ifdef XE_GTAO_COMPUTE_BENT_NORMALS
-    imageStore( s_workingAOTerm, pixCoord, XeGTAO_EncodeVisibilityBentNormal( visibility, bentNormal ) );
+    imageStore( s_workingAOTerm, pixCoord, uvec4_splat(XeGTAO_EncodeVisibilityBentNormal( visibility, bentNormal )) );
 #else
-    imageStore( s_workingAOTerm, pixCoord, uint(visibility * 255.0 + 0.5) );
+    imageStore( s_workingAOTerm, pixCoord, uvec4_splat(uint(visibility * 255.0 + 0.5)) );
 #endif
 }

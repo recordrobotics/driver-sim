@@ -1,7 +1,7 @@
 #include <bgfx_compute.sh>
 
 IMAGE2D_RO(s_velocity, rg16f, 0);
-IMAGE2D_RO(s_depth, r32f, 1);
+SAMPLER2D(s_depth, 1);
 IMAGE2D_RO(s_taaCurrent, rgba16f, 2);
 SAMPLER2D(s_taaHistory, 3);
 IMAGE2D_WO(s_taaOutput, rgba16f, 4);
@@ -130,9 +130,9 @@ void main()
         for (int y = -1; y <= 1; y++)
         {
             ivec2 pixelPosition = pixel + ivec2(x, y);
-            pixelPosition = clamp(pixelPosition, 0, ivec2(u_viewRect.zw) - 1);  
+            pixelPosition = clamp(pixelPosition, ivec2(0, 0), ivec2(u_viewRect.zw) - 1);  
     
-            vec3 neighbor = max(0, imageLoad(s_taaCurrent, pixelPosition).rgb);
+            vec3 neighbor = max(vec3_splat(0.0), imageLoad(s_taaCurrent, pixelPosition).rgb);
             float subSampleDistance = length(vec2(x, y));
             float subSampleWeight = Mitchell(subSampleDistance);
     
@@ -145,7 +145,7 @@ void main()
             m1 += neighbor;
             m2 += neighbor * neighbor;
     
-            float currentDepth = imageLoad(s_depth, pixelPosition).r;
+            float currentDepth = texture2DLod(s_depth, vec2(pixelPosition) / u_viewRect.zw, 0).r;
             if (currentDepth > closestDepth)
             {
                 closestDepth = currentDepth;
