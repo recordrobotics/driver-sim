@@ -51,17 +51,26 @@ SHARED float g_scratchDepths[8][8];
   float effectRadius
   float radiusMultiplier
   float effectFalloffRange
+  uint noiseIndex
+
+  float SampleDistributionPower
+  float ThinOccluderCompensation
+  float NDCToViewMul_x_PixelSize.x
+  float NDCToViewMul_x_PixelSize.y
+
+  float DepthMIPSamplingOffset
+  float FinalValuePower
 */
-uniform vec4 u_XeGTAOData;
+uniform vec4 u_XeGTAOData[3];
 
 NUM_THREADS(8, 8, 1)
 void main()
 {
   uvec2 render_size = uvec2(textureSize(s_depth, 0));
 
-  float consts_effectRadius = u_XeGTAOData.x;
-  float consts_radiusMultiplier = u_XeGTAOData.y;
-  float consts_effectFalloffRange = u_XeGTAOData.z;
+  float consts_effectRadius = u_XeGTAOData[0].x;
+  float consts_radiusMultiplier = u_XeGTAOData[0].y;
+  float consts_effectFalloffRange = u_XeGTAOData[0].z;
 
   // MIP 0
   const uvec2 baseCoord = uvec2(gl_GlobalInvocationID.xy);

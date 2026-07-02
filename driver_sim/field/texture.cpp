@@ -24,7 +24,7 @@ inline constexpr uint8_t calcNumMips(bool _hasMips, uint16_t _width, uint16_t _h
     return 1;
 }
 
-Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags)
+Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags, const bgfx::Memory* _mem)
     : name(name), width(static_cast<uint16_t>(floorf(viewWidth * widthFraction))), height(static_cast<uint16_t>(floorf(viewHeight * heightFraction))), widthFraction(widthFraction), heightFraction(heightFraction), hasMips(hasMips), numLayers(numLayers), format(format), flags(flags), hasResized(false)
 {
     handle = bgfx::createTexture2D(
@@ -32,7 +32,8 @@ Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, floa
         hasMips,
         numLayers,
         format,
-        flags);
+        flags,
+        _mem);
 
     if (!bgfx::isValid(handle))
     {

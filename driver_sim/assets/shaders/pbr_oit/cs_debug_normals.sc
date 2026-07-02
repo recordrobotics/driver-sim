@@ -1,6 +1,6 @@
 #include <bgfx_compute.sh>
 
-#include "packing.sh"
+#include "../common/packing.sh"
 
 IMAGE2D_RO(s_normal, r32ui, 0);
 IMAGE2D_WO(dest, rgba16f, 1);

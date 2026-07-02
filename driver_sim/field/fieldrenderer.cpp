@@ -18,6 +18,8 @@
 
 #include <blackboard_app/logger.h>
 
+#include <cassert>
+
 #include "texture.h"
 
 #include "fieldrenderer.h"
@@ -127,6 +129,9 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(cs_bloom_upscale),
 
         BGFX_EMBEDDED_SHADER(cs_XeGTAO_PrefilterDepths16x16),
+        BGFX_EMBEDDED_SHADER(cs_XeGTAO_MainPass),
+        BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugNormals),
+        BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugVisibility),
 
         BGFX_EMBEDDED_SHADER_END()};
 
@@ -223,6 +228,9 @@ enum class DebugView
     GTAOWorkingDepth2,
     GTAOWorkingDepth3,
     GTAOWorkingDepth4,
+    GTAOWorkingAOTermNormals,
+    GTAOWorkingAOTermVisibility,
+    GTAOWorkingEdges,
     Count
 };
 
@@ -245,7 +253,10 @@ static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBU
     "GTAO Working Depth 1",
     "GTAO Working Depth 2",
     "GTAO Working Depth 3",
-    "GTAO Working Depth 4"};
+    "GTAO Working Depth 4",
+    "GTAO Working AO Term Normals",
+    "GTAO Working AO Term Visibility",
+    "GTAO Working Edges"};
 
 struct Vec3Padded
 {
@@ -383,6 +394,9 @@ bgfx::ProgramHandle bloomDownscaleProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle bloomUpscaleProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle XeGTAO_PrefilterDepths16x16Program = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle XeGTAO_MainPassProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle XeGTAO_debugNormalsProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle XeGTAO_debugVisibilityProgram = BGFX_INVALID_HANDLE;
 
 Texture gAccumTex;
 Texture gRevealTex;
@@ -408,6 +422,9 @@ Texture gMBVelocity;
 Texture gMBOutputColor;
 
 Texture gGTAOWorkingDepth;
+Texture gGTAOWorkingAOTerm;
+Texture gGTAOWorkingEdges;
+Texture gGTAOHilbertLut;
 
 Texture bloomDirtMask;
 
@@ -449,6 +466,10 @@ float tonemappingExposure = -2.0f;
 float gtaoEffectRadius = 0.5f;
 float gtaoRadiusMultiplier = 1.457f;
 float gtaoEffectFalloffRange = 0.615f;
+float gtaoSampleDistributionPower = 2.0f;
+float gtaoThinOccluderCompensation = 0.0f;
+float gtaoDepthMipSamplingOffset = 3.30f;
+float gtaoFinalValuePower = 2.2f;
 
 float fieldModelMatrix[16];
 
@@ -591,7 +612,7 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_skyColor");
     }
 
-    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4);
+    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4, 2);
 
     if (!bgfx::isValid(u_info))
     {
@@ -1046,6 +1067,34 @@ void initBloom(uint16_t width, uint16_t height)
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
+// From https://www.shadertoy.com/view/3tB3z3 - except we're using R2 here
+#define XE_HILBERT_LEVEL    6U
+#define XE_HILBERT_WIDTH    ( (1U << XE_HILBERT_LEVEL) )
+#define XE_HILBERT_AREA     ( XE_HILBERT_WIDTH * XE_HILBERT_WIDTH )
+inline uint32_t HilbertIndex( uint32_t posX, uint32_t posY )
+{   
+    uint32_t index = 0U;
+    for( uint32_t curLevel = XE_HILBERT_WIDTH/2U; curLevel > 0U; curLevel /= 2U )
+    {
+        uint32_t regionX = ( posX & curLevel ) > 0U;
+        uint32_t regionY = ( posY & curLevel ) > 0U;
+        index += curLevel * curLevel * ( (3U * regionX) ^ regionY);
+        if( regionY == 0U )
+        {
+            if( regionX == 1U )
+            {
+                posX = uint32_t( (XE_HILBERT_WIDTH - 1U) ) - posX;
+                posY = uint32_t( (XE_HILBERT_WIDTH - 1U) ) - posY;
+            }
+
+            uint32_t temp = posX;
+            posX = posY;
+            posY = temp;
+        }
+    }
+    return index;
+}
+
 void initGTAO(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
@@ -1058,7 +1107,31 @@ void initGTAO(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create XeGTAO Prefilter Depths 16x16 program.");
     }
 
-    u_XeGTAOData = bgfx::createUniform("u_XeGTAOData", bgfx::UniformType::Vec4, 1);
+    XeGTAO_MainPassProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_MainPass"), true);
+    if (!bgfx::isValid(XeGTAO_MainPassProgram))
+    {
+        logger->error("Failed to create XeGTAO Main Pass program.");
+        throw std::runtime_error("Failed to create XeGTAO Main Pass program.");
+    }
+
+    XeGTAO_debugNormalsProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_debugNormals"), true);
+    if (!bgfx::isValid(XeGTAO_debugNormalsProgram))
+    {
+        logger->error("Failed to create XeGTAO Debug Normals program.");
+        throw std::runtime_error("Failed to create XeGTAO Debug Normals program.");
+    }
+
+    XeGTAO_debugVisibilityProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_debugVisibility"), true);
+    if (!bgfx::isValid(XeGTAO_debugVisibilityProgram))
+    {
+        logger->error("Failed to create XeGTAO Debug Visibility program.");
+        throw std::runtime_error("Failed to create XeGTAO Debug Visibility program.");
+    }
+
+    u_XeGTAOData = bgfx::createUniform("u_XeGTAOData", bgfx::UniformType::Vec4, 3);
     if (!bgfx::isValid(u_XeGTAOData))
     {
         logger->error("Failed to create uniform: u_XeGTAOData");
@@ -1074,6 +1147,51 @@ void initGTAO(uint16_t width, uint16_t height)
         bgfx::TextureFormat::R32F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
     gGTAOWorkingDepth.mipCount = XE_GTAO_DEPTH_MIP_LEVELS;
+
+    TEXTURE(
+        gGTAOWorkingAOTerm,
+        width, height,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::R32U,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+
+    TEXTURE(
+        gGTAOWorkingEdges,
+        width, height,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::R32F,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+
+    // Hilbert look-up texture! It's a 64 x 64 uint16 texture generated using HilbertIndex
+    {
+        uint16_t * data = new uint16_t[64*64];
+        for( int x = 0; x < 64; x++ )
+        {
+            for( int y = 0; y < 64; y++ )
+            {
+                uint32_t r2index = HilbertIndex( x, y );
+                assert( r2index < 65536 );
+                data[ x + 64*y ] = (uint16_t)r2index;
+            }
+        }
+
+        TEXTURE_MEMORY(
+            gGTAOHilbertLut,
+            64, 64,
+            1.0f, 1.0f,
+            false,
+            1,
+            bgfx::TextureFormat::R16U,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
+            bgfx::copy(data, 64*64*sizeof(uint16_t))
+            );
+
+        delete[] data;
+    }
 }
 
 inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
@@ -1669,10 +1787,19 @@ void field::startNTClient()
 }
 
 // assumes reverse z, infinite far
-void updateInfo(bgfx::Encoder *encoder, float cameraNear)
+void updateInfo(bgfx::Encoder *encoder, float cameraNear, float proj[16])
 {
-    float info[4] = {cameraNear, 0.0f, 0.0f, 0.0f};
-    encoder->setUniform(u_info, info);
+    float info[8] = {
+        cameraNear,
+        2.0f / proj[0],
+        -2.0f / proj[5],
+        -1.0f / proj[0],
+        1.0f / proj[5],
+        0.0f,
+        0.0f,
+        0.0f
+    };
+    encoder->setUniform(u_info, info, 2);
 }
 
 void screenSpaceQuad(bool _originBottomLeft, bgfx::Encoder *encoder, float _width = 1.0f, float _height = 1.0f)
@@ -1738,9 +1865,11 @@ bool firstFrame = true;
 
 bool firstTAAFrame = true;
 bool taaUseBuffer1 = false;
-int jitterIndex = 0;
+uint8_t jitterIndex = 0;
 
-int mbIndex = 0;
+uint8_t mbIndex = 0;
+
+uint8_t gtaoNoiseIndex = 0;
 
 float Halton(uint32_t i, uint32_t b)
 {
@@ -1785,6 +1914,8 @@ void ensureTextures(uint16_t width, uint16_t height)
     gMBVelocity.beginFrame();
 
     gGTAOWorkingDepth.beginFrame();
+    gGTAOWorkingAOTerm.beginFrame();
+    gGTAOWorkingEdges.beginFrame();
 
     gAccumTex.ensure(width, height);
     gRevealTex.ensure(width, height);
@@ -1825,6 +1956,8 @@ void ensureTextures(uint16_t width, uint16_t height)
 
     gGTAOWorkingDepth.ensure(width, height);
     gGTAOWorkingDepth.mipCount = XE_GTAO_DEPTH_MIP_LEVELS;
+    gGTAOWorkingAOTerm.ensure(width, height);
+    gGTAOWorkingEdges.ensure(width, height);
 }
 
 void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
@@ -2211,7 +2344,7 @@ void field::render(const blackboard::app::Window &window)
 
     bgfx::Encoder *encoder = bgfx::begin();
 
-    updateInfo(encoder, 0.1f);
+    updateInfo(encoder, 0.1f, proj);
 
     if (!freezeTemporalEffects)
     {
@@ -2344,12 +2477,29 @@ void field::render(const blackboard::app::Window &window)
     // force unbind gbuffer view fbo
     encoder->touch(VIEW_GTAO);
 
-    float XeGTAOData[4] = {
+    float XeGTAOData[12] = {
         gtaoEffectRadius,
         gtaoRadiusMultiplier,
-        gtaoEffectFalloffRange};
+        gtaoEffectFalloffRange,
+        float(gtaoNoiseIndex) + 0.5f,
+    
+        gtaoSampleDistributionPower,
+        gtaoThinOccluderCompensation,
+        2.0f / (proj[0] * float(m_width)),
+        -2.0f / (proj[5] * float(m_height)),
 
-    encoder->setUniform(u_XeGTAOData, &XeGTAOData, 1);
+        gtaoDepthMipSamplingOffset,
+        gtaoFinalValuePower,
+        0.0f,
+        0.0f
+    };
+
+    if (!freezeTemporalEffects)
+    {
+        gtaoNoiseIndex = (gtaoNoiseIndex + 1) % 64;
+    }
+
+    encoder->setUniform(u_XeGTAOData, XeGTAOData, 3);
 
     encoder->setTexture(0, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     for (int i = 0; i < XE_GTAO_DEPTH_MIP_LEVELS; ++i)
@@ -2357,6 +2507,13 @@ void field::render(const blackboard::app::Window &window)
         encoder->setImage(i + 1, gGTAOWorkingDepth.handle, i, bgfx::Access::Write);
     }
     encoder->dispatch(VIEW_GTAO, XeGTAO_PrefilterDepths16x16Program, xGroups, yGroups);
+
+    encoder->setTexture(0, s_depth, gGTAOWorkingDepth.handle, 0, 1, 0, XE_GTAO_DEPTH_MIP_LEVELS, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+    encoder->setImage(1, gbufNormal.handle, 0, bgfx::Access::Read);
+    encoder->setImage(2, gGTAOHilbertLut.handle, 0, bgfx::Access::Read);
+    encoder->setImage(3, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Write);
+    encoder->setImage(4, gGTAOWorkingEdges.handle, 0, bgfx::Access::Write);
+    encoder->dispatch(VIEW_GTAO, XeGTAO_MainPassProgram, xGroups, yGroups);
 
     // Post processing
 
@@ -2630,6 +2787,31 @@ void field::render(const blackboard::app::Window &window)
     case DebugView::GTAOWorkingDepth4:
         encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 4, 1);
         break;
+    case DebugView::GTAOWorkingAOTermNormals:
+        // Unpack and store normals in gOutputColor
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+        encoder->setImage(0, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_BLIT, XeGTAO_debugNormalsProgram, xGroups, yGroups);
+
+        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        break;
+    case DebugView::GTAOWorkingAOTermVisibility:
+        // Unpack and store normals in gOutputColor
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+        encoder->setImage(0, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_BLIT, XeGTAO_debugVisibilityProgram, xGroups, yGroups);
+
+        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        break;
+    case DebugView::GTAOWorkingEdges:
+        encoder->setTexture(0, s_tex, gGTAOWorkingEdges.handle);
+        break;
     default:
         encoder->setTexture(0, s_tex, gOutputColor.handle);
         break;
@@ -2774,6 +2956,12 @@ void field::cleanup()
         bgfx::destroy(bloomUpscaleProgram);
     if (bgfx::isValid(XeGTAO_PrefilterDepths16x16Program))
         bgfx::destroy(XeGTAO_PrefilterDepths16x16Program);
+    if (bgfx::isValid(XeGTAO_MainPassProgram))
+        bgfx::destroy(XeGTAO_MainPassProgram);
+    if (bgfx::isValid(XeGTAO_debugNormalsProgram))
+        bgfx::destroy(XeGTAO_debugNormalsProgram);
+    if (bgfx::isValid(XeGTAO_debugVisibilityProgram))
+        bgfx::destroy(XeGTAO_debugVisibilityProgram);
 
     gAccumTex.destroy();
     gRevealTex.destroy();
@@ -2804,6 +2992,9 @@ void field::cleanup()
     gMBVelocity.destroy();
 
     gGTAOWorkingDepth.destroy();
+    gGTAOWorkingAOTerm.destroy();
+    gGTAOWorkingEdges.destroy();
+    gGTAOHilbertLut.destroy();
 
     bloomDirtMask.destroy();
 

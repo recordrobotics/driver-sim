@@ -30,7 +30,7 @@ typedef struct Texture
     {
     }
 
-    Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags);
+    Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags, const bgfx::Memory* _mem = NULL);
 
     Texture(std::string name, void *image_data, int image_data_size, bimg::TextureFormat::Enum imageFormat, bgfx::TextureFormat::Enum format, uint64_t _flags);
 
@@ -68,6 +68,8 @@ typedef struct FrameBuffer
 
 #define TEXTURE(out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags) \
     out_var = Texture(#out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags);
+#define TEXTURE_MEMORY(out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags, mem) \
+    out_var = Texture(#out_var, width, height, widthFraction, heightFraction, hasMips, numLayers, format, flags, mem);
 #define TEXTURE_EMBEDDED(out_var, image, imageFormat, format, flags) \
     out_var = Texture(#out_var, (void *)image##_bytes, sizeof(image##_bytes), imageFormat, format, flags);
 #define FRAMEBUFFER(out_var, ...) \
