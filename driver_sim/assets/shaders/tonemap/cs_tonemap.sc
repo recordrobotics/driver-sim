@@ -1,11 +1,9 @@
 // https://github.com/Unity-Technologies/Graphics/blob/master/com.unity.postprocessing/PostProcessing/Shaders/Colors.hlsl
 
-$input v_texcoord0
-
-#include <bgfx_shader.sh>
+#include <bgfx_compute.sh>
 #include "../common/color.sh"
 
-SAMPLER2D(s_tex, 0);
+IMAGE2D_RW(s_image, rgba16f, 0);
 SAMPLER2D(s_lut, 1);
 
 // x = 1 / lut_width
@@ -26,19 +24,25 @@ vec3 applyLUT2D(vec3 uvw, vec3 scaleOffset)
     uvw.xy = uvw.xy * scaleOffset.z * scaleOffset.xy + scaleOffset.xy * 0.5;
     uvw.x += shift * scaleOffset.y;
     uvw.xyz = mix(
-        texture2D(s_lut, vec2(uvw.x, 1.0 - uvw.y)).rgb,
-        texture2D(s_lut, vec2(uvw.x + scaleOffset.y, 1.0 - uvw.y)).rgb,
+        texture2DLod(s_lut, vec2(uvw.x, 1.0 - uvw.y), 0).rgb,
+        texture2DLod(s_lut, vec2(uvw.x + scaleOffset.y, 1.0 - uvw.y), 0).rgb,
         uvw.z - shift
     );
     return uvw;
 }
 
+NUM_THREADS(16, 16, 1)
 void main()
 {
-    vec3 linearColor = texture2D(s_tex, v_texcoord0).rgb;
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+
+    if (any(greaterThanEqual(pixel, ivec2(u_viewRect.zw))))
+        return;
+
+    vec3 linearColor = imageLoad(s_image, pixel).rgb;
 
     vec3 logc = saturate(LinearToLogC(linearColor));
-    vec3 lutOutput = applyLUT2D(logc, u_lutParams.xyz);
+    vec3 lutLinear = applyLUT2D(logc, u_lutParams.xyz);
 
-    gl_FragColor = vec4(LinearToSRGB(lutOutput), 1.0);
+    imageStore(s_image, pixel, vec4(lutLinear, 1.0));
 }

@@ -29,9 +29,9 @@
 #include <essl/vs_pass.sc.bin.h>
 #include <spirv/vs_pass.sc.bin.h>
 
-#include <glsl/fs_tonemap.sc.bin.h>
-#include <essl/fs_tonemap.sc.bin.h>
-#include <spirv/fs_tonemap.sc.bin.h>
+#include <glsl/fs_present.sc.bin.h>
+#include <essl/fs_present.sc.bin.h>
+#include <spirv/fs_present.sc.bin.h>
 
 #include <glsl/cs_blit.sc.bin.h>
 #include <essl/cs_blit.sc.bin.h>
@@ -40,6 +40,10 @@
 #include <glsl/cs_debug_normals.sc.bin.h>
 #include <essl/cs_debug_normals.sc.bin.h>
 #include <spirv/cs_debug_normals.sc.bin.h>
+
+#include <glsl/cs_tonemap.sc.bin.h>
+#include <essl/cs_tonemap.sc.bin.h>
+#include <spirv/cs_tonemap.sc.bin.h>
 
 #include <glsl/cs_exposure.sc.bin.h>
 #include <essl/cs_exposure.sc.bin.h>
@@ -114,10 +118,11 @@
 #include <dxbc/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
 #include <dxbc/vs_pass.sc.bin.h>
-#include <dxbc/fs_tonemap.sc.bin.h>
+#include <dxbc/fs_present.sc.bin.h>
 
 #include <dxbc/cs_blit.sc.bin.h>
 #include <dxbc/cs_debug_normals.sc.bin.h>
+#include <dxbc/cs_tonemap.sc.bin.h>
 #include <dxbc/cs_exposure.sc.bin.h>
 #include <dxbc/cs_oit_comp.sc.bin.h>
 #include <dxbc/cs_taa_resolve.sc.bin.h>
@@ -147,10 +152,11 @@
 #include <dxil/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
 #include <dxil/vs_pass.sc.bin.h>
-#include <dxil/fs_tonemap.sc.bin.h>
+#include <dxil/fs_present.sc.bin.h>
 
 #include <dxil/cs_blit.sc.bin.h>
 #include <dxil/cs_debug_normals.sc.bin.h>
+#include <dxil/cs_tonemap.sc.bin.h>
 #include <dxil/cs_exposure.sc.bin.h>
 #include <dxil/cs_oit_comp.sc.bin.h>
 #include <dxil/cs_taa_resolve.sc.bin.h>
@@ -180,10 +186,11 @@
 #include <metal/fs_pbr_oit_depth_post_pass.sc.bin.h>
 
 #include <metal/vs_pass.sc.bin.h>
-#include <metal/fs_tonemap.sc.bin.h>
+#include <metal/fs_present.sc.bin.h>
 
 #include <metal/cs_blit.sc.bin.h>
 #include <metal/cs_debug_normals.sc.bin.h>
+#include <metal/cs_tonemap.sc.bin.h>
 #include <metal/cs_exposure.sc.bin.h>
 #include <metal/cs_oit_comp.sc.bin.h>
 #include <metal/cs_taa_resolve.sc.bin.h>

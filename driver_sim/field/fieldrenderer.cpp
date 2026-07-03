@@ -111,10 +111,11 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
 
         BGFX_EMBEDDED_SHADER(vs_pass),
-        BGFX_EMBEDDED_SHADER(fs_tonemap),
+        BGFX_EMBEDDED_SHADER(fs_present),
 
         BGFX_EMBEDDED_SHADER(cs_blit),
         BGFX_EMBEDDED_SHADER(cs_debug_normals),
+        BGFX_EMBEDDED_SHADER(cs_tonemap),
         BGFX_EMBEDDED_SHADER(cs_exposure),
         BGFX_EMBEDDED_SHADER(cs_oit_comp),
         BGFX_EMBEDDED_SHADER(cs_taa_resolve),
@@ -385,6 +386,7 @@ bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle tonemapProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle exposureProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle presentProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle debugNormalsProgram = BGFX_INVALID_HANDLE;
 
 bgfx::ProgramHandle taaResolveProgram = BGFX_INVALID_HANDLE;
@@ -745,8 +747,7 @@ void initTonemap()
     }
 
     tonemapProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tonemap"), true);
+       bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_tonemap"), true);
 
     if (!bgfx::isValid(tonemapProgram))
     {
@@ -1800,6 +1801,17 @@ void field::init(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create blit program.");
     }
 
+    presentProgram =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_present"), true);
+
+    if (!bgfx::isValid(presentProgram))
+    {
+        logger->error("Failed to create present program.");
+        throw std::runtime_error("Failed to create present program.");
+    }
+
+
     debugNormalsProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_debug_normals"), true);
 
@@ -2753,6 +2765,8 @@ void field::render(const blackboard::app::Window &window)
     }
 
     // Exposure
+    xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+    yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
     float lutParams[4] = {1.0f / static_cast<float>(tonemappingLut.width), 1.0f / static_cast<float>(tonemappingLut.height), static_cast<float>(tonemappingLut.height - 1), powf(2.0f, tonemappingExposure)};
     encoder->setUniform(u_lutParams, lutParams);
     encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::ReadWrite);
@@ -2808,7 +2822,15 @@ void field::render(const blackboard::app::Window &window)
         }
     }
 
-    // Blit and tonemap
+    // Tonemap
+    xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+    yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+    encoder->setUniform(u_lutParams, lutParams);
+    encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::ReadWrite);
+    encoder->setTexture(1, s_lut, tonemappingLut.handle);
+    encoder->dispatch(VIEW_POSTPROCESS, tonemapProgram, xGroups, yGroups);
+
+    // Blit and present
 
     switch (debugView)
     {
@@ -2925,12 +2947,10 @@ void field::render(const blackboard::app::Window &window)
         encoder->setTexture(0, s_tex, gOutputColor.handle);
         break;
     }
-    encoder->setTexture(1, s_lut, tonemappingLut.handle);
+
     encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
-
     screenSpaceQuad(!bgfx::getCaps()->originBottomLeft, encoder);
-
-    encoder->submit(VIEW_BLIT, tonemapProgram);
+    encoder->submit(VIEW_BLIT, presentProgram);
 
     bgfx::end(encoder);
 
@@ -3041,12 +3061,14 @@ void field::cleanup()
         bgfx::destroy(oitCompProgram);
     if (bgfx::isValid(tonemapProgram))
         bgfx::destroy(tonemapProgram);
-    if (bgfx::isValid(blitProgram))
-        bgfx::destroy(blitProgram);
-    if (bgfx::isValid(debugNormalsProgram))
-        bgfx::destroy(debugNormalsProgram);
     if (bgfx::isValid(exposureProgram))
         bgfx::destroy(exposureProgram);
+    if (bgfx::isValid(blitProgram))
+        bgfx::destroy(blitProgram);
+    if (bgfx::isValid(presentProgram))
+        bgfx::destroy(presentProgram);
+    if (bgfx::isValid(debugNormalsProgram))
+        bgfx::destroy(debugNormalsProgram);
     if (bgfx::isValid(taaResolveProgram))
         bgfx::destroy(taaResolveProgram);
     if (bgfx::isValid(mbVelocityProgram))
