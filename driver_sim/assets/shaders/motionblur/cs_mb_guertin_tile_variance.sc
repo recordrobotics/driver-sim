@@ -4,7 +4,7 @@
 #define FLT_MIN 1.175494351e-38
 
 SAMPLER2D(s_tilemax, 0);
-IMAGE2D_WO(s_tilevariance, rgba16f, 1);
+IMAGE2D_WO(s_tilevariance, r16f, 1);
 
 NUM_THREADS(16, 16, 1)
 void main()

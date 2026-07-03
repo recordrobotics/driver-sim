@@ -699,7 +699,7 @@ void initPBROIT(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         true,
         1,
-        bgfx::TextureFormat::RGBA16F,
+        bgfx::TextureFormat::RG11B10F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     gOutputColor.mipCount = calculateBloomMipmapLevels(gOutputColor.width, gOutputColor.height);
@@ -796,7 +796,7 @@ void initTAA(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA16F,
+        bgfx::TextureFormat::RG11B10F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -805,7 +805,7 @@ void initTAA(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA16F,
+        bgfx::TextureFormat::RG11B10F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
@@ -830,7 +830,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA16F,
+        bgfx::TextureFormat::RG11B10F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     TEXTURE(
@@ -1016,7 +1016,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         1.0f / MB_TILE_SIZE,
         false,
         1,
-        bgfx::TextureFormat::RGBA16F,
+        bgfx::TextureFormat::R16F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(
@@ -1025,7 +1025,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::RGBA16F,
+        bgfx::TextureFormat::RG11B10F,
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     TEXTURE(

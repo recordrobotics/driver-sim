@@ -47,7 +47,7 @@ void main()
 
     if(depth > 0) {
         vec4 albedo = imageLoad(s_albedo, uvi);
-        vec4 emission = imageLoad(s_emission, uvi);
+        vec3 emission = imageLoad(s_emission, uvi).rgb;
 
         uint packedInput = imageLoad(s_normal, uvi).x;
         vec3 unpackedOutput = R11G11B10_UNORM_to_FLOAT3( packedInput );
@@ -77,7 +77,7 @@ void main()
         vec4 view_position = mul(u_invProj, vec4(current_ndc, 1.0));
         view_position.xyz /= view_position.w;
 
-        pbr_col = pbr(albedo.rgb, emission.rgb, view_position.xyz, normal, albedo.a, emission.a, pbrData.y, pbrData.z, indirectAO, directAO);
+        pbr_col = pbr(albedo.rgb, emission.rgb, view_position.xyz, normal, albedo.a, pbrData.y, pbrData.z, indirectAO, directAO);
     } else {
         pbr_col = vec4_splat(0.0);
     }

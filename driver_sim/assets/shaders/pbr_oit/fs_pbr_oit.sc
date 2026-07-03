@@ -14,7 +14,7 @@ float w(float z, float a) {
 
 void main()
 {
-    vec4 color = pbr(u_baseColor.rgb, u_emissionColor.rgb, v_viewPosition, v_viewNormal, u_baseColor.a, u_emissionColor.a, u_pbrData.y, u_pbrData.z, 1.0, 1.0);
+    vec4 color = pbr(u_baseColor.rgb, u_emissionColor.rgb * u_emissionColor.a, v_viewPosition, v_viewNormal, u_baseColor.a, u_pbrData.y, u_pbrData.z, 1.0, 1.0);
 
     color.rgb *= color.a;
 

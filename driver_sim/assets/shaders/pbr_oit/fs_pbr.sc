@@ -17,7 +17,7 @@ void main()
     uint packedOutput = FLOAT3_to_R11G11B10_UNORM( unpackedInput );
 
 	gl_FragData[0] = u_baseColor;
-	gl_FragData[1] = u_emissionColor;
+	gl_FragData[1] = vec4(u_emissionColor.rgb * u_emissionColor.a, 1.0);
 	gl_FragData[2] = packedOutput;
 	gl_FragData[3] = u_pbrData;
 
