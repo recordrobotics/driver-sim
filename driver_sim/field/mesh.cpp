@@ -160,6 +160,8 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                         v.y = worldPos.y();
                         v.z = worldPos.z();
                         v.normal = 0;
+                        v.u = 0.0f;
+                        v.v = 0.0f;
                         mesh.vertices.push_back(v);
                     });
 
@@ -176,7 +178,21 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                             mesh.vertices[baseVertex + index].normal = encodeNormalRgba8(worldNorm, 0.0f);
                         });
                 }
-                    
+
+                auto texcoordIt = primitive.findAttribute("TEXCOORD_0");
+                if (texcoordIt != primitive.attributes.end())
+                {
+                    auto &texcoordAccessor = asset.accessors[texcoordIt->accessorIndex];
+                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec2>(
+                        asset,
+                        texcoordAccessor,
+                        [&](fastgltf::math::fvec2 texcoord, std::size_t index)
+                        {
+                            mesh.vertices[baseVertex + index].u = texcoord.x();
+                            mesh.vertices[baseVertex + index].v = texcoord.y();
+                        });
+                }
+
                 fastgltf::iterateAccessor<uint32_t>(
                     asset,
                     indicesAccessor,
@@ -191,16 +207,21 @@ void Mesh::createBuffersForMeshes(std::vector<Mesh> &meshes)
 {
     for (auto &mesh : meshes)
     {
-        if (!mesh.createBuffers())
-        {
-            logger->error("Failed to create buffers for mesh with material: type={}, baseColor=({}, {}, {}, {})",
-                          mesh.material.type,
-                          mesh.material.baseColor[0],
-                          mesh.material.baseColor[1],
-                          mesh.material.baseColor[2],
-                          mesh.material.baseColor[3]);
-            throw std::runtime_error("Failed to create buffers for mesh.");
-        }
+        Mesh::createBuffersForMeshes(mesh);
+    }
+}
+
+void Mesh::createBuffersForMeshes(Mesh &mesh)
+{
+    if (!mesh.createBuffers())
+    {
+        logger->error("Failed to create buffers for mesh with material: type={}, baseColor=({}, {}, {}, {})",
+                        mesh.material.type,
+                        mesh.material.baseColor[0],
+                        mesh.material.baseColor[1],
+                        mesh.material.baseColor[2],
+                        mesh.material.baseColor[3]);
+        throw std::runtime_error("Failed to create buffers for mesh.");
     }
 }
 
@@ -320,5 +341,82 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
         inFile.read(reinterpret_cast<char *>(mesh.indices.data()), indexCount * sizeof(uint32_t));
 
         meshesOut.push_back(std::move(mesh));
+    }
+}
+
+void Mesh::addCube(Mesh& mesh,
+                   float cx, float cy, float cz,
+                   float w, float h, float d,
+                    bool projectedUVs)
+{
+    const float hx = w * 0.5f;
+    const float hy = h * 0.5f;
+    const float hz = d * 0.5f;
+
+    struct Face {
+        fastgltf::math::fvec3 n;
+        fastgltf::math::fvec3 v0, v1, v2, v3;
+    };
+
+    Face faces[6] = {
+        // -X
+        {{-1,0,0}, {-hx,-hy,-hz}, {-hx,-hy,hz}, {-hx,hy,hz}, {-hx,hy,-hz}},
+        // +X
+        {{ 1,0,0}, { hx,-hy,hz}, { hx,-hy,-hz}, { hx,hy,-hz}, { hx,hy,hz}},
+        // -Y
+        {{0,-1,0}, {-hx,-hy,-hz}, { hx,-hy,-hz}, { hx,-hy,hz}, {-hx,-hy,hz}},
+        // +Y
+        {{0, 1,0}, {-hx,hy,hz}, { hx,hy,hz}, { hx,hy,-hz}, {-hx,hy,-hz}},
+        // -Z
+        {{0,0,-1}, { hx,-hy,-hz}, {-hx,-hy,-hz}, {-hx,hy,-hz}, { hx,hy,-hz}},
+        // +Z
+        {{0,0, 1}, {-hx,-hy,hz}, { hx,-hy,hz}, { hx,hy,hz}, {-hx,hy,hz}},
+    };
+
+    uint32_t startIndex = (uint32_t)mesh.vertices.size();
+
+    mesh.vertices.reserve(mesh.vertices.size() + 24);
+    mesh.indices.reserve(mesh.indices.size() + 36);
+
+    for (int f = 0; f < 6; ++f)
+    {
+        auto& face = faces[f];
+
+        const fastgltf::math::fvec3 corners[4] = {
+            face.v0, face.v1, face.v2, face.v3
+        };
+
+        MeshVertex v[4];
+
+        for (int i = 0; i < 4; ++i)
+        {
+            v[i].x = cx + corners[i].x();
+            v[i].y = cy + corners[i].y();
+            v[i].z = cz + corners[i].z();
+
+            v[i].normal = encodeNormalRgba8(face.n, 0.0f);
+
+            if(projectedUVs)
+            {
+                // Projected UVs from +X face
+                v[i].u = corners[i].y() / h + 0.5f;
+                v[i].v = -corners[i].z() / d + 0.5f;
+            }
+            else
+            {
+                v[i].u = (i == 1 || i == 2) ? 1.0f : 0.0f;
+                v[i].v = (i >= 2) ? 1.0f : 0.0f;
+            }
+
+            mesh.vertices.push_back(v[i]);
+        }
+
+        uint32_t base = startIndex + f * 4;
+
+        // two triangles per face
+        mesh.indices.insert(mesh.indices.end(), {
+            base + 0, base + 1, base + 2,
+            base + 0, base + 2, base + 3
+        });
     }
 }

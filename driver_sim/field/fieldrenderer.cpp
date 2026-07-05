@@ -48,6 +48,7 @@
 
 #include <carpet_base_color.jpg.h>
 #include <carpet_bump.jpg.h>
+#include <apriltag-36h11.png.h>
 
 #if GAME_YEAR == 2026
 #include "seasonspecific/rebuilt2026/fmsui.h"
@@ -109,8 +110,10 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
     {
         BGFX_EMBEDDED_SHADER(vs_pbr),
         BGFX_EMBEDDED_SHADER(vs_pbr_instanced),
+        BGFX_EMBEDDED_SHADER(vs_pbr_apriltag),
         BGFX_EMBEDDED_SHADER(fs_pbr),
         BGFX_EMBEDDED_SHADER(fs_pbr_textured),
+        BGFX_EMBEDDED_SHADER(fs_pbr_apriltag),
         BGFX_EMBEDDED_SHADER(fs_pbr_oit),
         BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
 
@@ -383,6 +386,7 @@ bgfx::UniformHandle u_XeGTAOData;
 bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRTextured = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRInstanced = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programPBRApriltag = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitDepthPostPass = BGFX_INVALID_HANDLE;
@@ -445,6 +449,7 @@ Texture bloomDirtMask;
 
 Texture carpetBaseColor;
 Texture carpetBump;
+Texture apriltagTexture;
 
 Texture tonemappingLut;
 
@@ -470,6 +475,7 @@ bgfx::UniformHandle s_lut;
 
 bgfx::UniformHandle s_baseColor;
 bgfx::UniformHandle s_bump;
+bgfx::UniformHandle s_apriltags;
 
 bgfx::UniformHandle s_workingAOTerm;
 bgfx::UniformHandle s_workingEdges;
@@ -500,6 +506,18 @@ WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
 float fieldWidthMeters = 1.0f;
 float fieldHeightMeters = 1.0f;
 
+struct AprilTagInstanceData
+{
+    std::array<float, 16> modelMatrix{};
+
+    float& id() { return modelMatrix[15]; }
+    const float& id() const { return modelMatrix[15]; }
+};
+
+std::vector<AprilTagInstanceData> aprilTags;
+
+Mesh aprilTagMesh{};
+
 std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
 
@@ -528,6 +546,13 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create uniform for bump texture.");
         throw std::runtime_error("Failed to create uniform for bump texture.");
+    }
+
+    s_apriltags = bgfx::createUniform("s_apriltags", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_apriltags))
+    {
+        logger->error("Failed to create uniform for apriltag texture.");
+        throw std::runtime_error("Failed to create uniform for apriltag texture.");
     }
 
     u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
@@ -621,6 +646,16 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create PBR instanced rendering program.");
         throw std::runtime_error("Failed to create PBR instanced rendering program.");
+    }
+
+    programPBRApriltag =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_apriltag"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_apriltag"), true);
+
+    if (!bgfx::isValid(programPBRApriltag))
+    {
+        logger->error("Failed to create PBR apriltag rendering program.");
+        throw std::runtime_error("Failed to create PBR apriltag rendering program.");
     }
 
     programOit =
@@ -722,6 +757,23 @@ void initPBROIT(uint16_t width, uint16_t height)
         bimg::TextureFormat::BGRA8,
         bgfx::TextureFormat::BGRA8,
         0);
+
+    TEXTURE_EMBEDDED(
+        apriltagTexture,
+        apriltag_36h11_png,
+        bimg::TextureFormat::R8,
+        bgfx::TextureFormat::R8,
+        0);
+
+    aprilTagMesh.material.texture = "apriltags";
+    aprilTagMesh.material.baseColor = {1.0f, 1.0f, 1.0f, 1.0f};
+    aprilTagMesh.material.roughness = 0.7f;
+    float apriltag36h11ScaleRatio = 10.0f / 8.0f;
+    Mesh::addCube(
+        aprilTagMesh,
+        -0.01f / 2, 0.0f, 0.0f,
+        0.01f, apriltag36h11ScaleRatio, apriltag36h11ScaleRatio,
+        true /* apriltag texture is projected for the purposes of pose estimation */);
 }
 
 void initTonemap()
@@ -1648,25 +1700,70 @@ void loadFieldModel()
 
         std::unordered_map<std::string, std::string> tags;
 
-        for (const auto &gamePiece : j["gamePieces"])
+        if(j.contains("gamePieces"))
         {
-            std::string name = gamePiece["name"];
-            auto position = gamePiece["position"];
-            float rotationMatrix[16];
-            performRotationStack(rotationMatrix, gamePiece["rotations"].get<std::vector<ModelRotationConfig>>());
-            float translationMatrix[16];
-            bx::mtxTranslate(translationMatrix, position[0].get<float>(), position[1].get<float>(), position[2].get<float>());
-            float modelMatrix[16];
-            bx::mtxMul(modelMatrix, rotationMatrix, translationMatrix);
-
-            gamePieces.push_back({
-                .name = name,
-                .modelMatrix = std::to_array(modelMatrix),
-            });
-
-            for (const auto &stagedObject : gamePiece["stagedObjects"].get<std::vector<std::string>>())
+            for (const auto &gamePiece : j["gamePieces"])
             {
-                tags[stagedObject] = name;
+                std::string name = gamePiece["name"];
+                auto position = gamePiece["position"];
+                float rotationMatrix[16];
+                performRotationStack(rotationMatrix, gamePiece["rotations"].get<std::vector<ModelRotationConfig>>());
+                float translationMatrix[16];
+                bx::mtxTranslate(translationMatrix, position[0].get<float>(), position[1].get<float>(), position[2].get<float>());
+                float modelMatrix[16];
+                bx::mtxMul(modelMatrix, rotationMatrix, translationMatrix);
+
+                gamePieces.push_back({
+                    .name = name,
+                    .modelMatrix = std::to_array(modelMatrix),
+                });
+
+                for (const auto &stagedObject : gamePiece["stagedObjects"].get<std::vector<std::string>>())
+                {
+                    tags[stagedObject] = name;
+                }
+            }
+        }
+
+        if(j.contains("aprilTags"))
+        {
+            for (const auto &aprilTag : j["aprilTags"])
+            {
+                // Format as "FAMILY-SIZEin" where "FAMILY" is "36h11" or "16h5" and "SIZE" is the length of the black section
+                std::string variant = aprilTag["variant"];
+                std::string family = variant.substr(0, variant.find('-'));
+                std::string size = variant.substr(variant.find('-') + 1, variant.find("in") - variant.find('-') - 1);
+
+                if(family != "36h11")
+                {
+                    logger->warn("AprilTag family {} is not supported. Only 36h11 is supported.", family);
+                    continue;
+                }
+
+                float tagSizeInches = std::stof(size);
+                float tagSizeMeters = tagSizeInches * INCHES_TO_METERS;
+                
+                float scaleMtx[16];
+                bx::mtxScale(scaleMtx, 1.0f, tagSizeMeters, tagSizeMeters);
+                float rotationMtx[16];
+                performRotationStack(rotationMtx, aprilTag["rotations"].get<std::vector<ModelRotationConfig>>());
+                const auto &position = aprilTag["position"].get<std::vector<float>>();
+                float translationMtx[16];
+                bx::mtxTranslate(translationMtx, position[0], position[1], position[2]);
+                std::array<float, 16> tmp;
+                bx::mtxMul(tmp.data(), scaleMtx, rotationMtx);
+                std::array<float, 16> aprilTagModelMatrix;
+                bx::mtxMul(aprilTagModelMatrix.data(), tmp.data(), translationMtx);
+
+                uint32_t id = aprilTag["id"].get<uint32_t>();
+
+                AprilTagInstanceData data = {
+                    .modelMatrix = aprilTagModelMatrix,
+                };
+
+                data.id() = static_cast<float>(id) + 0.5f;
+
+                aprilTags.push_back(data);
             }
         }
 
@@ -2144,6 +2241,10 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
         encoder->setTexture(0, s_baseColor, carpetBaseColor.handle);
         encoder->setTexture(1, s_bump, carpetBump.handle);
     }
+    else if (mesh.material.texture == "apriltags")
+    {
+        encoder->setTexture(0, s_apriltags, apriltagTexture.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+    }
 }
 
 template <std::ranges::input_range R>
@@ -2199,6 +2300,21 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes
             encoder->submit(VIEW_GBUFFER, programPBRInstanced);
         }
     }
+}
+
+void drawAprilTags(bgfx::Encoder *encoder)
+{
+    // figure out how big of a buffer is available
+    uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(aprilTags.size(), sizeof(AprilTagInstanceData));
+
+    bgfx::InstanceDataBuffer idb;
+    bgfx::allocInstanceDataBuffer(&idb, instanceCount, sizeof(AprilTagInstanceData));
+
+    std::memcpy(idb.data, aprilTags.data(), instanceCount * sizeof(AprilTagInstanceData));
+
+    setupMesh(encoder, aprilTagMesh, false);
+    encoder->setInstanceDataBuffer(&idb);
+    encoder->submit(VIEW_GBUFFER, programPBRApriltag);
 }
 
 bool createdFieldMeshBuffers = false;
@@ -2322,7 +2438,7 @@ void field::render(const blackboard::app::Window &window)
         }
 
         Mesh::createBuffersForMeshes(fieldMeshes);
-
+        Mesh::createBuffersForMeshes(aprilTagMesh);
         fmsUI->postProcessField(fieldMeshes);
 
         createdFieldMeshBuffers = true;
@@ -2641,6 +2757,8 @@ void field::render(const blackboard::app::Window &window)
         drawMeshes(encoder, fieldMeshes | std::views::filter([&drawnGamePieces](const Mesh &mesh)
                                                              { return std::find(drawnGamePieces.begin(), drawnGamePieces.end(), mesh.tag) == drawnGamePieces.end(); /* only draw meshes that haven't been drawn by game pieces */ }),
                    fieldModelMatrix);
+
+        drawAprilTags(encoder);
     }
 
     if (createdRobotMeshBuffers)
@@ -3125,6 +3243,8 @@ void field::cleanup()
         }
     }
 
+    aprilTagMesh.destroy();
+
     if (bgfx::isValid(u_baseColor))
         bgfx::destroy(u_baseColor);
     if (bgfx::isValid(u_emissionColor))
@@ -3174,6 +3294,8 @@ void field::cleanup()
         bgfx::destroy(programPBRTextured);
     if (bgfx::isValid(programPBRInstanced))
         bgfx::destroy(programPBRInstanced);
+    if (bgfx::isValid(programPBRApriltag))
+        bgfx::destroy(programPBRApriltag);
     if (bgfx::isValid(programOit))
         bgfx::destroy(programOit);
     if (bgfx::isValid(programOitInstanced))
@@ -3263,6 +3385,7 @@ void field::cleanup()
 
     carpetBaseColor.destroy();
     carpetBump.destroy();
+    apriltagTexture.destroy();
 
     if (bgfx::isValid(s_tex))
         bgfx::destroy(s_tex);
@@ -3293,6 +3416,8 @@ void field::cleanup()
         bgfx::destroy(s_baseColor);
     if (bgfx::isValid(s_bump))
         bgfx::destroy(s_bump);
+    if (bgfx::isValid(s_apriltags))
+        bgfx::destroy(s_apriltags);
 
     if(bgfx::isValid(s_workingAOTerm))
         bgfx::destroy(s_workingAOTerm);

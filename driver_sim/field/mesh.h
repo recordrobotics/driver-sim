@@ -17,7 +17,7 @@
 #endif
 
 constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 6; // increment to force reload cache
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 7; // increment to force reload cache
 
 enum class MaterialType
 {
@@ -157,6 +157,7 @@ typedef struct MeshVertex
 {
     float x, y, z;
     uint32_t normal;
+    float u, v;
 
     static bgfx::VertexLayout layout;
 
@@ -165,6 +166,7 @@ typedef struct MeshVertex
         layout.begin()
             .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
             .add(bgfx::Attrib::Normal, 4, bgfx::AttribType::Uint8, true, true)
+            .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
             .end();
     }
 } MeshVertex;
@@ -229,6 +231,20 @@ typedef struct Mesh
     static void fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path);
     static void toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path);
     static void createBuffersForMeshes(std::vector<Mesh> &meshes);
+    static void createBuffersForMeshes(Mesh &mesh);
+
+    /**
+     * Adds a cube mesh to the specified mesh.
+     * @param mesh The mesh to add the cube to.
+     * @param cx The x-coordinate of the cube's center.
+     * @param cy The y-coordinate of the cube's center.
+     * @param cz The z-coordinate of the cube's center.
+     * @param width The width of the cube.
+     * @param height The height of the cube.
+     * @param depth The depth of the cube.
+     * @param projectedUVs Whether to use projected UV coordinates from the +x face (useful if world space orientation of the uvs matters).
+     */
+    static void addCube(Mesh& mesh, float cx, float cy, float cz, float width, float height, float depth, bool projectedUVs = false);
 
     static inline Material *getTaggedMaterial(std::vector<Mesh> &meshes, const std::string_view &tag)
     {
