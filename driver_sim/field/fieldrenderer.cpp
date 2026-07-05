@@ -171,20 +171,6 @@ static ModelRotationAxis axisFromString(const std::string &s)
     throw std::runtime_error("Invalid rotation axis in config: " + s);
 }
 
-namespace nlohmann
-{
-    template <>
-    struct adl_serializer<ModelRotationConfig>
-    {
-        static ModelRotationConfig from_json(const json &j)
-        {
-            return {
-                axisFromString(j.at("axis").get<std::string>()),
-                j.at("degrees").get<float>()};
-        }
-    };
-}
-
 enum class WPILibCoordinateSystem
 {
     WallBlue,
@@ -208,13 +194,15 @@ enum class CameraView
     Field,
     Robot,
     RobotRelative,
+    DriverStation,
     Count
 };
 
 static const std::array<std::string, static_cast<size_t>(CameraView::Count)> CAMERA_VIEW_NAMES = {
     "Field",
     "Robot",
-    "Robot Relative"};
+    "Robot Relative",
+    "Driver Station"};
 
 enum class DebugView
 {
@@ -337,6 +325,31 @@ static constexpr uint16_t VIEW_BLIT = 5;
 static constexpr uint8_t LIGHT_COUNT = 6;
 
 static constexpr uint8_t XE_GTAO_DEPTH_MIP_LEVELS = 5;
+
+static constexpr float DRIVER_STATION_CAMERA_HEIGHT = 64 * INCHES_TO_METERS;
+
+namespace nlohmann
+{
+    template <>
+    struct adl_serializer<ModelRotationConfig>
+    {
+        static ModelRotationConfig from_json(const json &j)
+        {
+            return {
+                axisFromString(j.at("axis").get<std::string>()),
+                j.at("degrees").get<float>()};
+        }
+    };
+
+    template <>
+    struct adl_serializer<bx::Vec3>
+    {
+        static bx::Vec3 from_json(const json &j)
+        {
+            return {j.at(0).get<float>(), j.at(1).get<float>(), DRIVER_STATION_CAMERA_HEIGHT};
+        }
+    };
+}
 
 // from https://github.com/Unity-Technologies/Graphics/blob/master/com.unity.postprocessing/PostProcessing/Shaders/Colors.hlsl
 inline float PositivePow(float base, float power)
@@ -517,6 +530,10 @@ struct AprilTagInstanceData
 std::vector<AprilTagInstanceData> aprilTags;
 
 Mesh aprilTagMesh{};
+
+std::vector<bx::Vec3> driverStationCameraPositions;
+bx::Vec3 driverStationCameraTarget{0.0f, 0.0f, 0.5f};
+bx::Vec3 lastDriverStationCameraTarget{0.0f, 0.0f, 0.5f};
 
 std::future<void> fieldModelLoadingFuture;
 std::future<void> robotModelLoadingFuture;
@@ -1767,6 +1784,11 @@ void loadFieldModel()
             }
         }
 
+        if(j.contains("driverStations"))
+        {
+            driverStationCameraPositions = j["driverStations"].get<std::vector<bx::Vec3>>();
+        }
+
 #if GAME_YEAR == 2026
         Rebuilt2026::addHubLedTags(tags);
 #endif
@@ -2615,13 +2637,42 @@ void field::render(const blackboard::app::Window &window)
             }
         }
     }
-
-    updateOrbitCameraFromInput();
-    const bx::Vec3 at = orbitCamera.target;
-    const bx::Vec3 eye = getOrbitEye();
-
+    
     uint16_t m_width = window.width;
     uint16_t m_height = window.height;
+
+    float view[16];
+    
+    if(cameraView == CameraView::DriverStation && robots.size() > 0 && robots.back().allianceStationSub.Exists())
+    {
+        int allianceStation = robots.back().allianceStationSub.GetAtomic().value;
+        int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation - 4; // 6 elements ordered [B1, B2, B3, R1, R2, R3]
+        const bx::Vec3 at = bx::add(robots.back().dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
+        const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
+
+        const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
+        lastDriverStationCameraTarget = at;
+
+        float cameraDistance = bx::distance(eye, at);
+        float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
+        if(targetDistance > 0.2f)
+        {
+            driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, bx::length(velocity)));
+        }
+
+        bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+    } else {
+        updateOrbitCameraFromInput();
+        const bx::Vec3 at = orbitCamera.target;
+        const bx::Vec3 eye = getOrbitEye();
+
+        driverStationCameraTarget = at;
+        lastDriverStationCameraTarget = at;
+
+        float lookAt[16];
+        bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+        bx::mtxMul(view, orbitCamera.originTransform, lookAt);
+    }
 
     ensureTextures(m_width, m_height);
 
@@ -2640,11 +2691,6 @@ void field::render(const blackboard::app::Window &window)
         jitterX = 0.0f;
         jitterY = 0.0f;
     }
-
-    float lookAt[16];
-    bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
-    float view[16];
-    bx::mtxMul(view, orbitCamera.originTransform, lookAt);
 
     float proj[16];
     bx::mtxProjInf(proj, 60.0f, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
