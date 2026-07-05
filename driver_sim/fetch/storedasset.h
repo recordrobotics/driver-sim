@@ -47,6 +47,7 @@ protected:
 
     std::string readSha256(const std::filesystem::path &path);
 
+    void deleteOldFiles(const std::filesystem::path &rootFolder);
     void extractZip(const std::filesystem::path &zipPath, const std::filesystem::path &extractTo);
     void cleanupExtractedFiles();
 
@@ -62,5 +63,5 @@ public:
     std::string getError();
     bool isQuickLoaded() const { return quickLoaded; }
 
-    std::vector<std::string> cleanReplaceFolders; // folders to completely rewrite from zip instead of keeping unrelated files
+    std::vector<std::string> keepPaths; // folders/files to keep when deleting old files
 };

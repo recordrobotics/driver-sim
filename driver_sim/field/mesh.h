@@ -17,7 +17,7 @@
 #endif
 
 constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 5; // increment to force reload cache
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 6; // increment to force reload cache
 
 enum class MaterialType
 {
@@ -81,7 +81,7 @@ typedef struct Material
         writesObjectMotionVectors = false;
 
         // cad export pbrData is wrong, base it off the node name instead
-        if(nodeName.find("FE-" STR(GAME_YEAR) "-01") != std::string::npos)
+        if (nodeName.find("FE-" STR(GAME_YEAR) "-01") != std::string::npos)
         {
             // playing field carpet floor is rough
             metallic = 0.0f;
@@ -91,7 +91,9 @@ typedef struct Material
             baseColor[2] = 0.9f;
             baseColor[3] = 1.0f;
             texture = "carpet"; // carpet texture
-        } else {
+        }
+        else
+        {
             metallic = 0.0f;
             roughness = 0.4f;
             texture = "";
@@ -227,4 +229,16 @@ typedef struct Mesh
     static void fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path);
     static void toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path);
     static void createBuffersForMeshes(std::vector<Mesh> &meshes);
+
+    static inline Material *getTaggedMaterial(std::vector<Mesh> &meshes, const std::string_view &tag)
+    {
+        for (auto &mesh : meshes)
+        {
+            if (mesh.tag == tag)
+            {
+                return &mesh.material;
+            }
+        }
+        return nullptr;
+    }
 } Mesh;

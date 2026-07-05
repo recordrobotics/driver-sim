@@ -13,10 +13,12 @@
 #include <cmath>
 #include <unordered_map>
 #include <random>
+#include <optional>
 
 #include <nlohmann/json.hpp>
 
 #include <blackboard_app/logger.h>
+#include <blackboard_app/gui.h>
 
 #include <cassert>
 
@@ -31,6 +33,8 @@
 #include <networktables/NetworkTableInstance.h>
 #include <networktables/StructTopic.h>
 #include <networktables/StructArrayTopic.h>
+#include <networktables/BooleanTopic.h>
+#include <networktables/IntegerTopic.h>
 
 #include <wpi/struct/Struct.h>
 
@@ -318,6 +322,7 @@ static constexpr MBVelocityComponent MB_CAMERA_MOVEMENT_COMPONENT = {1.0f, 0.0f,
 static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {20.0f, 0.0f, 10.0f};
 
 using namespace blackboard::logger;
+using blackboard::gui::string_hex_to_rgba_float_array;
 
 static constexpr uint16_t VIEW_GBUFFER = 0;
 static constexpr uint16_t VIEW_GTAO = 1;
@@ -469,7 +474,7 @@ bgfx::UniformHandle s_bump;
 bgfx::UniformHandle s_workingAOTerm;
 bgfx::UniformHandle s_workingEdges;
 
-float bloomThreshold = 5.2f;
+float bloomThreshold = 2.0f;
 float bloomKnee = 0.1f;
 float bloomIntensity = 1.0f;
 float bloomDirtIntensity = 1.1f;
@@ -1415,6 +1420,20 @@ typedef struct RobotData
 
     nt::StructArrayTopic<frc::Pose3d> componentPosesTopic;
     nt::StructArraySubscriber<frc::Pose3d> componentPosesSub;
+
+    nt::BooleanTopic rslStateTopic;
+    nt::BooleanSubscriber rslStateSub;
+
+    nt::IntegerTopic allianceStationTopic;
+    nt::IntegerSubscriber allianceStationSub;
+
+    Material *rslMaterial = nullptr;
+    Material *bumperMaterial = nullptr;
+
+    float rslOnEmissionStrength = 0.0f;
+    std::array<float, 4> bumperModelColor;
+    std::optional<std::array<float, 4>> bumperBlueColor;
+    std::optional<std::array<float, 4>> bumperRedColor;
 } RobotData;
 
 typedef struct GamePieceData
@@ -1587,7 +1606,7 @@ void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::s
     }
 
     logger->info("Loading {0} meshes from GLTF model.", directory + name);
-    fastgltf::Parser parser;
+    fastgltf::Parser parser(fastgltf::Extensions::KHR_materials_emissive_strength);
     Mesh::fromGltfModel(meshes, parser.loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory, fastgltf::Options::LoadGLBBuffers | fastgltf::Options::DontRequireValidAssetMember).get(), tags);
 
     if (settings::cacheModels)
@@ -1725,7 +1744,61 @@ void loadRobotModel()
         robots.push_back({.modelMatrix = std::to_array(robotModelMatrix),
                           .components = components});
 
-        loadAndCacheMeshes(robots.back().meshes, robotDirectory, "model", {});
+        std::vector<std::string> rslNodeNames = j.value("rsl", std::vector<std::string>());
+
+        std::vector<std::string> bumperNodeNames;
+        if (j.contains("bumper"))
+        {
+            const auto &bumperObject = j["bumper"];
+            if (bumperObject.contains("name"))
+            {
+                bumperNodeNames = bumperObject["name"].get<std::vector<std::string>>();
+            }
+            else
+            {
+                logger->warn("Bumper object exists but does not contain a name field.");
+            }
+
+            if (bumperObject.contains("redColor"))
+            {
+                std::string redColorHex = bumperObject["redColor"].get<std::string>();
+                if (redColorHex.size() == 9 && redColorHex[0] == '#')
+                {
+                    robots.back().bumperRedColor = string_hex_to_rgba_float_array(redColorHex);
+                }
+                else
+                {
+                    logger->warn("Bumper redColor field is not in the correct format: {}", redColorHex);
+                }
+            }
+
+            if (bumperObject.contains("blueColor"))
+            {
+                std::string blueColorHex = bumperObject["blueColor"].get<std::string>();
+                if (blueColorHex.size() == 9 && blueColorHex[0] == '#')
+                {
+                    robots.back().bumperBlueColor = string_hex_to_rgba_float_array(blueColorHex);
+                }
+                else
+                {
+                    logger->warn("Bumper blueColor field is not in the correct format: {}", blueColorHex);
+                }
+            }
+        }
+
+        std::unordered_map<std::string, std::string> tags;
+
+        for (const auto &rslNodeName : rslNodeNames)
+        {
+            tags[rslNodeName] = "rsl";
+        }
+
+        for (const auto &bumperNodeName : bumperNodeNames)
+        {
+            tags[bumperNodeName] = "bumper";
+        }
+
+        loadAndCacheMeshes(robots.back().meshes, robotDirectory, "model", tags);
         for (auto &mesh : robots.back().meshes)
         {
             mesh.material.writesObjectMotionVectors = true;
@@ -2167,6 +2240,13 @@ void field::render(const blackboard::app::Window &window)
         ImGui::Separator();
     }
 
+    if(settings::enableBloom)
+    {
+        ImGui::Text("Bloom Settings");
+        ImGui::SliderFloat("Threshold", &bloomThreshold, 0.0f, 8.0f);
+        ImGui::Separator();
+    }
+
     ImGui::Text("Tonemapping Settings");
     ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
     ImGui::Separator();
@@ -2257,6 +2337,12 @@ void field::render(const blackboard::app::Window &window)
             robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::ntPeriodic});
             robot.componentPosesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/MechanismPoses");
             robot.componentPosesSub = robot.componentPosesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+
+            robot.rslStateTopic = ntInst.GetBooleanTopic("/AdvantageKit/SystemStats/RSLState");
+            robot.rslStateSub = robot.rslStateTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+
+            robot.allianceStationTopic = ntInst.GetIntegerTopic("/AdvantageKit/DriverStation/AllianceStation");
+            robot.allianceStationSub = robot.allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
         }
 
         Mesh::createBuffersForMeshes(robots.back().meshes);
@@ -2264,6 +2350,21 @@ void field::render(const blackboard::app::Window &window)
         {
             Mesh::createBuffersForMeshes(robots.back().components[i].meshes);
         }
+
+        robots.back().rslMaterial = Mesh::getTaggedMaterial(robots.back().meshes, "rsl");
+        if(robots.back().rslMaterial != nullptr)
+        {
+            robots.back().rslOnEmissionStrength = robots.back().rslMaterial->emissionColor[3];
+        }
+
+        robots.back().bumperMaterial = Mesh::getTaggedMaterial(robots.back().meshes, "bumper");
+        if(robots.back().bumperMaterial != nullptr)
+        {
+            robots.back().bumperModelColor = robots.back().bumperMaterial->baseColor;
+        }
+
+        logger->info("Post-processed robot meshes for materials: rsl={}, bumper={}", (robots.back().rslMaterial != nullptr), (robots.back().bumperMaterial != nullptr));
+
         createdRobotMeshBuffers = true;
     }
 
@@ -2302,6 +2403,30 @@ void field::render(const blackboard::app::Window &window)
                 }
 
                 robot.components[i].dynamicData.lastDataUpdate = currentDataUpdateIndex;
+            }
+
+            // Update RSL state
+            if(robot.rslStateSub.Exists() && robot.rslMaterial != nullptr)
+            {
+                robot.rslMaterial->emissionColor[3] = robot.rslStateSub.GetAtomic().value ? robot.rslOnEmissionStrength : 0.0f;
+            }
+
+            // Update bumper color
+            if(robot.allianceStationSub.Exists() && robot.bumperMaterial != nullptr)
+            {
+                int allianceStation = robot.allianceStationSub.GetAtomic().value;
+                if((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && robot.bumperRedColor.has_value()) // Red
+                {
+                    robot.bumperMaterial->baseColor = robot.bumperRedColor.value();
+                }
+                else if((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && robot.bumperBlueColor.has_value()) // Blue
+                {
+                    robot.bumperMaterial->baseColor = robot.bumperBlueColor.value();
+                }
+                else
+                {
+                    robot.bumperMaterial->baseColor = robot.bumperModelColor;
+                }
             }
         }
         else

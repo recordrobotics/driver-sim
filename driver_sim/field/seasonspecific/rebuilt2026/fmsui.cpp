@@ -10,6 +10,7 @@
 #include <rebuilt2026/fuelblue.png.h>
 #include <rebuilt2026/fuelred.png.h>
 
+#include "../../mesh.h"
 #include "hublights.h"
 
 using namespace blackboard::logger;
@@ -359,7 +360,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 
 void Rebuilt2026FMSUI::postProcessField(std::vector<Mesh> &fieldMeshes)
 {
-    hubRedLightMaterial = Rebuilt2026::getTaggedMaterial(fieldMeshes, Rebuilt2026::redHubLedTag);
-    hubBlueLightMaterial = Rebuilt2026::getTaggedMaterial(fieldMeshes, Rebuilt2026::blueHubLedTag);
+    hubRedLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::redHubLedTag);
+    hubBlueLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::blueHubLedTag);
     logger->info("Post-processed field meshes for hub light materials: red={}, blue={}", (hubRedLightMaterial != nullptr), (hubBlueLightMaterial != nullptr));
 }

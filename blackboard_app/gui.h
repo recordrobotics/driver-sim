@@ -5,6 +5,7 @@
 
 #include <string>
 #include <cstdint>
+#include <array>
 
 namespace blackboard::gui
 {
@@ -61,6 +62,19 @@ namespace blackboard::gui
 
     // Input format: #RRGGBBAA
     constexpr ImVec4 string_hex_to_rgba_float(std::string_view color)
+    {
+        if (color.size() != 9 || color[0] != '#')
+            throw "expected #RRGGBBAA";
+
+        return {
+            hex_byte(color[1], color[2]) / 255.0f,
+            hex_byte(color[3], color[4]) / 255.0f,
+            hex_byte(color[5], color[6]) / 255.0f,
+            hex_byte(color[7], color[8]) / 255.0f};
+    }
+    
+    // Input format: #RRGGBBAA
+    constexpr std::array<float, 4> string_hex_to_rgba_float_array(std::string_view color)
     {
         if (color.size() != 9 || color[0] != '#')
             throw "expected #RRGGBBAA";

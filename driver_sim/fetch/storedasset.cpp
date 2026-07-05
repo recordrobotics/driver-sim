@@ -49,6 +49,69 @@ bool isFilenameSafe(const std::string &name)
     return true;
 }
 
+void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
+{
+    logger->info("Deleting old files in {}", rootFolder.string());
+    std::vector<fs::path> pathsToDelete;
+    for (const auto &entry : fs::recursive_directory_iterator(rootFolder))
+    {
+        if (entry.is_regular_file() || entry.is_directory())
+        {
+            fs::path relativePath = fs::relative(entry.path(), rootFolder);
+            std::string relativePathStr = relativePath.string();
+
+            // Check if the path is in keepPaths or is a subpath of folder in keepPaths
+            bool shouldKeep = false;
+            for (const auto &keepPath : keepPaths)
+            {
+                if (relativePathStr == keepPath || relativePathStr.starts_with(keepPath + "/") || relativePathStr.starts_with(keepPath + "\\"))
+                {
+                    shouldKeep = true;
+                    break;
+                }
+            }
+
+            if (!shouldKeep)
+            {
+                pathsToDelete.push_back(entry.path());
+            }
+        }
+    }
+
+    std::sort(pathsToDelete.begin(), pathsToDelete.end(), [](const fs::path &a, const fs::path &b) {
+        return a.string().size() > b.string().size(); // Sort by path length descending
+    });
+
+    std::error_code ec;
+    for (const auto &path : pathsToDelete)
+    {
+        if (fs::is_directory(path, ec))
+        {
+            fs::remove(path, ec);
+            if (ec)
+            {
+                logger->error("Failed to remove directory {}: {}", path.string(), ec.message());
+            }
+            else
+            {
+                logger->trace("Removed directory: {}", path.string());
+            }
+        }
+        else
+        {
+            fs::remove(path, ec);
+            if (ec)
+            {
+                logger->error("Failed to remove file {}: {}", path.string(), ec.message());
+            }
+            else
+            {
+                logger->trace("Removed file: {}", path.string());
+            }
+        }
+    }
+}
+
 void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
 {
     logger->info("Extracting zip file {} to {}", zipPath.string(), extractTo.string());
@@ -95,15 +158,6 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
         if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
         {
             logger->trace("Creating directory: {}", outputPath.string());
-            if (fs::exists(outputPath) && fs::is_directory(outputPath))
-            {
-                fs::path dirName = outputPath.has_filename() ? outputPath.filename() : outputPath.parent_path().filename();
-                if (std::find(cleanReplaceFolders.begin(), cleanReplaceFolders.end(), dirName.string()) != cleanReplaceFolders.end())
-                {
-                    logger->trace("Cleaning directory: {}", outputPath.string());
-                    fs::remove_all(outputPath);
-                }
-            }
             fs::create_directories(outputPath);
             continue;
         }
@@ -187,6 +241,7 @@ void StoredAsset::verifyOrDownload()
             if(state == AssetState::Extracting) {
                 if(stoken.stop_requested()) return;
 
+                deleteOldFiles(localExtractPath);
                 extractZip(localTempZipPath, localExtractPath);
                 cleanupExtractedFiles();
 
