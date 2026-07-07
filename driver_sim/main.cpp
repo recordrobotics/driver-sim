@@ -162,7 +162,7 @@ void initApp()
   javaAsset = std::make_unique<RemoteStoredAsset>("jdk", "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5", prefPath, "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/eclipse?project=jdk");
   dashboardAsset = std::make_unique<RemoteStoredAsset>("elastic", "6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7", prefPath, "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/Elastic-Windows_portable.zip");
   fieldAsset = std::make_unique<RemoteStoredAsset>("field", "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31", prefPath, "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip");
-  robotAsset = std::make_unique<RemoteStoredAsset>("robot", "8ba14fb5d1aad2c446176cb1d0c51d0ae1095249d508a7a35daf4e7b7a86976c", prefPath, "https://hamster1.ddns.net/robot-8ba14fb5d1aad2c446176cb1d0c51d0ae1095249d508a7a35daf4e7b7a86976c.zip");
+  robotAsset = std::make_unique<RemoteStoredAsset>("robot", "cfc5e4027e34a8759468ec1971b73b5f6991afb3b21d663fd3b693226073bec9", prefPath, "https://hamster1.ddns.net/robot-cfc5e4027e34a8759468ec1971b73b5f6991afb3b21d663fd3b693226073bec9.zip");
   jniAsset = std::make_unique<RemoteStoredAsset>("jni", "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5", prefPath, "https://hamster1.ddns.net/jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip");
   robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "3babad75fa55fcbfccb580d705b1897183130ccec3f4d83ccc7e92f691280602", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
 
