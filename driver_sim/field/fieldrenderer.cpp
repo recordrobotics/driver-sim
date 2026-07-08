@@ -35,6 +35,7 @@
 #include <networktables/StructArrayTopic.h>
 #include <networktables/BooleanTopic.h>
 #include <networktables/IntegerTopic.h>
+#include <networktables/StringArrayTopic.h>
 
 #include <wpi/struct/Struct.h>
 
@@ -49,6 +50,8 @@
 #include <carpet_base_color.jpg.h>
 #include <carpet_bump.jpg.h>
 #include <apriltag-36h11.png.h>
+
+#include <ledmask.png.h>
 
 #if GAME_YEAR == 2026
 #include "seasonspecific/rebuilt2026/fmsui.h"
@@ -110,8 +113,10 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
     {
         BGFX_EMBEDDED_SHADER(vs_pbr),
         BGFX_EMBEDDED_SHADER(vs_pbr_instanced),
+        BGFX_EMBEDDED_SHADER(vs_pbr_led),
         BGFX_EMBEDDED_SHADER(vs_pbr_apriltag),
         BGFX_EMBEDDED_SHADER(fs_pbr),
+        BGFX_EMBEDDED_SHADER(fs_pbr_led),
         BGFX_EMBEDDED_SHADER(fs_pbr_textured),
         BGFX_EMBEDDED_SHADER(fs_pbr_apriltag),
         BGFX_EMBEDDED_SHADER(fs_pbr_oit),
@@ -376,11 +381,12 @@ bgfx::UniformHandle u_emissionColor;
 bgfx::UniformHandle u_skyColor;
 bgfx::UniformHandle u_gtaoIntensity;
 bgfx::UniformHandle u_info;
-bgfx::UniformHandle u_previousModelViewProj;
+bgfx::UniformHandle u_previousViewProj;
 bgfx::UniformHandle u_previousView;
 bgfx::UniformHandle u_previousProj;
 bgfx::UniformHandle u_jitter;
 bgfx::UniformHandle u_pbrData;
+bgfx::UniformHandle u_ledData;
 
 bgfx::UniformHandle u_lightPos;
 bgfx::UniformHandle u_lightColor;
@@ -399,6 +405,7 @@ bgfx::UniformHandle u_XeGTAOData;
 bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRTextured = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRInstanced = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programPBRLed = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRApriltag = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitInstanced = BGFX_INVALID_HANDLE;
@@ -463,6 +470,7 @@ Texture bloomDirtMask;
 Texture carpetBaseColor;
 Texture carpetBump;
 Texture apriltagTexture;
+Texture ledMaskTexture;
 
 Texture tonemappingLut;
 
@@ -489,6 +497,8 @@ bgfx::UniformHandle s_lut;
 bgfx::UniformHandle s_baseColor;
 bgfx::UniformHandle s_bump;
 bgfx::UniformHandle s_apriltags;
+bgfx::UniformHandle s_ledMask;
+bgfx::UniformHandle s_ledColors;
 
 bgfx::UniformHandle s_workingAOTerm;
 bgfx::UniformHandle s_workingEdges;
@@ -513,7 +523,7 @@ float gtaoIntensity = 1.0f;
 float gtaoDirectIntensity = 1.0f;
 float gtaoBentNormalIntensity = 0.7f; // 0.7 looks a bit better than 1.0 with metallic materials
 
-float fieldModelMatrix[16];
+float fieldModelMatrix[2][16];
 
 WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
 float fieldWidthMeters = 1.0f;
@@ -572,6 +582,20 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform for apriltag texture.");
     }
 
+    s_ledMask = bgfx::createUniform("s_ledMask", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_ledMask))
+    {
+        logger->error("Failed to create uniform for led mask texture.");
+        throw std::runtime_error("Failed to create uniform for led mask texture.");
+    }
+
+    s_ledColors = bgfx::createUniform("s_ledColors", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_ledColors))
+    {
+        logger->error("Failed to create uniform for led colors texture.");
+        throw std::runtime_error("Failed to create uniform for led colors texture.");
+    }
+
     u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
 
     if (!bgfx::isValid(u_baseColor))
@@ -619,6 +643,13 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_pbrData");
     }
 
+    u_ledData = bgfx::createUniform("u_ledData", bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_ledData))
+    {
+        logger->error("Failed to create uniform: u_ledData");
+        throw std::runtime_error("Failed to create uniform: u_ledData");
+    }
+
     u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, LIGHT_COUNT);
     if (!bgfx::isValid(u_lightPos))
     {
@@ -663,6 +694,16 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create PBR instanced rendering program.");
         throw std::runtime_error("Failed to create PBR instanced rendering program.");
+    }
+
+    programPBRLed =
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_led"),
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_led"), true);
+
+    if (!bgfx::isValid(programPBRLed))
+    {
+        logger->error("Failed to create PBR led rendering program.");
+        throw std::runtime_error("Failed to create PBR led rendering program.");
     }
 
     programPBRApriltag =
@@ -791,6 +832,13 @@ void initPBROIT(uint16_t width, uint16_t height)
         -0.01f / 2, 0.0f, 0.0f,
         0.01f, apriltag36h11ScaleRatio, apriltag36h11ScaleRatio,
         true /* apriltag texture is projected for the purposes of pose estimation */);
+
+    TEXTURE_EMBEDDED(
+        ledMaskTexture,
+        ledmask_png,
+        bimg::TextureFormat::R8,
+        bgfx::TextureFormat::R8,
+        0);
 }
 
 void initTonemap()
@@ -965,13 +1013,6 @@ void initMotionBlur(uint16_t width, uint16_t height)
     s_mbTileMax = bgfx::createUniform("s_tilemax", bgfx::UniformType::Sampler);
     s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
     s_mbTileVariance = bgfx::createUniform("s_tilevariance", bgfx::UniformType::Sampler);
-
-    u_previousModelViewProj = bgfx::createUniform("u_previousModelViewProj", bgfx::UniformType::Mat4);
-    if (!bgfx::isValid(u_previousModelViewProj))
-    {
-        logger->error("Failed to create uniform: u_previousModelViewProj");
-        throw std::runtime_error("Failed to create uniform: u_previousModelViewProj");
-    }
 
     u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
     if (!bgfx::isValid(u_previousView))
@@ -1342,46 +1383,83 @@ inline constexpr bx::Quaternion rotation3dToQuaternionInverse(const frc::Rotatio
             static_cast<float>(frcQuat.W())};
 }
 
+static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
+{
+    switch (coordinateSystem)
+    {
+    case WPILibCoordinateSystem::WallBlue:
+        return frc::Pose3d(
+            units::meter_t{fieldWidthMeters} / 2.0 - pose.X(),
+            units::meter_t{fieldHeightMeters} / 2.0 - pose.Y(),
+            pose.Z(),
+            frc::Rotation3d(units::degree_t{0.0}, units::degree_t{0.0}, units::degree_t{180.0}).RotateBy(-pose.Rotation()));
+    case WPILibCoordinateSystem::CenterRed:
+        return pose;
+    default:
+        throw std::runtime_error("Invalid coordinate system");
+    }
+}
+
+/**
+ * 
+ */
 typedef struct Transform
 {
-    float matrix[16];
+    // partial TRS matrix, row major
+    float mRow0[4];
+    float mRow1[4];
+    float mRow2[4];
 
     Transform()
     {
-        bx::mtxIdentity(matrix);
-    }
-
-    Transform(float *modelMatrix, bx::Vec3 position, bx::Quaternion rotation)
-    {
-        float rotationMatrix[16];
-        bx::mtxFromQuaternion(rotationMatrix, rotation);
-        float translationMatrix[16];
-        bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
-        float relativeMatrix[16];
-        bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
-        bx::mtxMul(matrix, modelMatrix, relativeMatrix);
+        std::memset(this, 0, sizeof(Transform));
     }
 
     Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position, bx::Quaternion rotation)
     {
+        float matrix[16];
         float rotationMatrix[16];
         bx::mtxFromQuaternion(rotationMatrix, rotation);
         float translationMatrix[16];
         bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
-        float relativeMatrix[16];
-        bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
-        float finalMatrix[16];
-        bx::mtxMul(finalMatrix, modelMatrix, relativeMatrix);
-        bx::mtxMul(matrix, finalMatrix, parentMatrix);
+        if(modelMatrix == nullptr && parentMatrix == nullptr)
+        {
+            bx::mtxMul(matrix, rotationMatrix, translationMatrix);
+        }
+        else
+        {
+            float relativeMatrix[16];
+            bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
+            if(modelMatrix == nullptr)
+            {
+                bx::mtxMul(matrix, relativeMatrix, parentMatrix);
+            }
+            else if(parentMatrix == nullptr)
+            {
+                bx::mtxMul(matrix, modelMatrix, relativeMatrix);
+            }
+            else
+            {
+                float finalMatrix[16];
+                bx::mtxMul(finalMatrix, modelMatrix, relativeMatrix);
+                bx::mtxMul(matrix, finalMatrix, parentMatrix);
+            }
+        }
+
+        float transpose[16];
+        bx::mtxTranspose(transpose, matrix);
+        std::memcpy(this, transpose, sizeof(Transform));
     }
 
-    Transform(bx::Vec3 position, bx::Quaternion rotation)
+    void toMatrix(float *outMatrix) const
     {
-        float rotationMatrix[16];
-        bx::mtxFromQuaternion(rotationMatrix, rotation);
-        float translationMatrix[16];
-        bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
-        bx::mtxMul(matrix, rotationMatrix, translationMatrix);
+        float transpose[16];
+        std::memcpy(transpose, this, sizeof(Transform));
+        transpose[12] = 0.0f;
+        transpose[13] = 0.0f;
+        transpose[14] = 0.0f;
+        transpose[15] = 1.0f;
+        bx::mtxTranspose(outMatrix, transpose);
     }
 } Transform;
 
@@ -1441,21 +1519,11 @@ typedef struct DynamicObjectData
             lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
         }
 
-        if (parentMatrix == nullptr)
-        {
-            instanceData.transform = {
-                modelMatrix,
-                lastPosition,
-                lastRotation};
-        }
-        else
-        {
-            instanceData.transform = {
-                modelMatrix,
-                parentMatrix,
-                lastPosition,
-                lastRotation};
-        }
+        instanceData.transform = {
+            modelMatrix,
+            parentMatrix,
+            lastPosition,
+            lastRotation};
 
         if (lastDataUpdate == -1)
         {
@@ -1471,18 +1539,49 @@ typedef struct DynamicObjectData
 
 typedef struct RobotComponentData
 {
-    DynamicObjectData dynamicData;
     std::array<float, 16> modelMatrix;
     std::vector<Mesh> meshes;
 } RobotComponentData;
 
-typedef struct RobotData
+typedef struct RobotModel
 {
-    DynamicObjectData dynamicData;
     std::array<float, 16> modelMatrix;
     std::vector<Mesh> meshes;
 
     std::vector<RobotComponentData> components;
+
+    float rslOnEmissionStrength = 0.0f;
+    std::array<float, 4> bumperModelColor;
+    std::optional<std::array<float, 4>> bumperBlueColor;
+    std::optional<std::array<float, 4>> bumperRedColor;
+
+    float ledCount = 0.0f;
+    float ledAspectRatio = 1.0f;
+
+    // NT-dependent materials use per-instance robot data
+    // Meshes with these materials can't be instanced
+    Material* rslMaterial = nullptr;
+    Material* bumperMaterial = nullptr;
+    Material* ledMaterial = nullptr;
+
+    bool isInstanceable(const Material* material) const 
+    {
+        return material != rslMaterial && material != bumperMaterial && material != ledMaterial;
+    }
+
+    // Construct, specifying only model matrices from config file
+    RobotModel(std::array<float, 16> modelMatrix, std::vector<RobotComponentData> components)
+        : modelMatrix(modelMatrix), components(components)
+    {
+    }
+} RobotModel;
+
+typedef struct RobotData
+{
+    RobotModel* model;
+
+    DynamicObjectData dynamicData;
+    std::vector<DynamicObjectData> components;
 
     nt::StructTopic<frc::Pose3d> poseTopic;
     nt::StructSubscriber<frc::Pose3d> poseSub;
@@ -1496,13 +1595,155 @@ typedef struct RobotData
     nt::IntegerTopic allianceStationTopic;
     nt::IntegerSubscriber allianceStationSub;
 
-    Material *rslMaterial = nullptr;
-    Material *bumperMaterial = nullptr;
+    nt::StringArrayTopic ledColorsTopic;
+    nt::StringArraySubscriber ledColorsSub;
 
-    float rslOnEmissionStrength = 0.0f;
-    std::array<float, 4> bumperModelColor;
-    std::optional<std::array<float, 4>> bumperBlueColor;
-    std::optional<std::array<float, 4>> bumperRedColor;
+    std::array<float, 4> bumperBaseColor;
+    float rslEmissionStrength = 0.0f;
+
+    // RGB8 texture
+    Texture ledColorTexture;
+    uint8_t* ledColorData = nullptr;
+
+    RobotData(const RobotData &) = delete;
+    RobotData &operator=(const RobotData &) = delete;
+    RobotData(RobotData &&) noexcept = default;
+    RobotData &operator=(RobotData &&) noexcept = default;
+
+    RobotData(RobotModel* model)
+        : model(model), components(model->components.size()), bumperBaseColor(model->bumperModelColor)
+    {
+        uint16_t ledCount = static_cast<uint16_t>(floorf(model->ledCount));
+        ledColorData = new uint8_t[ledCount * 4];
+        TEXTURE(
+            ledColorTexture,
+            ledCount, 1,
+            1.0f, 1.0f,
+            false,
+            1,
+            bgfx::TextureFormat::RGBA8,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
+            );
+    }
+
+    ~RobotData()
+    {
+        delete[] ledColorData;
+    }
+
+    void update(int currentDataUpdateIndex, float deltaTime)
+    {
+        auto robotPose = poseSub.GetAtomic();
+        if (poseSub.Exists())
+        {
+            frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
+            dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+            dynamicData.rotation = rotation3dToQuaternion(localPose.Rotation());
+            dynamicData.update(model->modelMatrix.data(), deltaTime);
+            dynamicData.lastDataUpdate = currentDataUpdateIndex;
+
+            // Update component poses
+            auto componentPoses = componentPosesSub.GetAtomic();
+            
+            float robotOriginMtx[16];
+            float rotationMatrix[16];
+            bx::mtxFromQuaternion(rotationMatrix, dynamicData.lastRotation);
+            float translationMatrix[16];
+            bx::mtxTranslate(translationMatrix, dynamicData.lastPosition.x, dynamicData.lastPosition.y, dynamicData.lastPosition.z);
+            bx::mtxMul(robotOriginMtx, rotationMatrix, translationMatrix);
+
+            for (size_t i = 0; i < components.size(); ++i)
+            {
+                if (componentPosesSub.Exists() && i < componentPoses.value.size())
+                {
+                    // invert rotation to match advscope
+                    components[i].position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
+                    components[i].rotation = rotation3dToQuaternionInverse(componentPoses.value[i].Rotation());
+                    components[i].update(model->components[i].modelMatrix.data(), robotOriginMtx, deltaTime);
+                }
+                else
+                {
+                    components[i].position = {0.0f, 0.0f, 0.0f};
+                    components[i].rotation = rotation3dToQuaternion(frc::Rotation3d{});
+                    components[i].update(model->modelMatrix.data(), robotOriginMtx, deltaTime);
+                }
+
+                components[i].lastDataUpdate = currentDataUpdateIndex;
+            }
+
+            // Update RSL state
+            if(rslStateSub.Exists())
+            {
+                rslEmissionStrength = rslStateSub.GetAtomic().value ? model->rslOnEmissionStrength : 0.0f;
+            }
+
+            // Update bumper color
+            if(allianceStationSub.Exists())
+            {
+                int allianceStation = allianceStationSub.GetAtomic().value;
+                if((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && model->bumperRedColor.has_value()) // Red
+                {
+                    bumperBaseColor = model->bumperRedColor.value();
+                }
+                else if((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && model->bumperBlueColor.has_value()) // Blue
+                {
+                    bumperBaseColor = model->bumperBlueColor.value();
+                }
+                else
+                {
+                    bumperBaseColor = model->bumperModelColor;
+                }
+            }
+
+            // Update LED colors
+            if(ledColorsSub.Exists())
+            {
+                std::vector<std::string> ledColors = ledColorsSub.GetAtomic().value;
+                for(uint16_t i = 0; i < ledColorTexture.width; ++i)
+                {
+                    if(i < ledColors.size())
+                    {
+                        std::string colorStr = ledColors[i];
+                        if(colorStr.length() == 7 && colorStr[0] == '#')
+                        {
+                            uint8_t r = std::stoi(colorStr.substr(1, 2), nullptr, 16);
+                            uint8_t g = std::stoi(colorStr.substr(3, 2), nullptr, 16);
+                            uint8_t b = std::stoi(colorStr.substr(5, 2), nullptr, 16);
+                            ledColorData[i * 4 + 0] = r;
+                            ledColorData[i * 4 + 1] = g;
+                            ledColorData[i * 4 + 2] = b;
+                            ledColorData[i * 4 + 3] = 255;
+                        }
+                    }
+                    else
+                    {
+                        ledColorData[i * 4 + 0] = 0;
+                        ledColorData[i * 4 + 1] = 0;
+                        ledColorData[i * 4 + 2] = 0;
+                        ledColorData[i * 4 + 3] = 255;
+                    }
+                }
+            }
+            else
+            {
+                for(uint16_t i = 0; i < ledColorTexture.width; ++i)
+                {
+                    ledColorData[i * 4 + 0] = 0;
+                    ledColorData[i * 4 + 1] = 0;
+                    ledColorData[i * 4 + 2] = 0;
+                    ledColorData[i * 4 + 3] = 255;
+                }
+            }
+        }
+        else
+        {
+            dynamicData.lastDataUpdate = -1;
+            for (auto &component : components)
+            {
+                component.lastDataUpdate = -1;
+            }
+        }
+    }
 } RobotData;
 
 typedef struct GamePieceData
@@ -1517,9 +1758,49 @@ typedef struct GamePieceData
 
     nt::StructArrayTopic<Pose3dObject> poseObjectsTopic;
     nt::StructArraySubscriber<Pose3dObject> poseObjectsSub;
+
+    void update(int currentDataUpdateIndex, float deltaTime)
+    {
+        bool hasObjects = poseObjectsSub.Exists();
+        if (hasObjects || posesSub.Exists())
+        {
+            auto updateInstance = [&](DynamicObjectData &instance, const frc::Pose3d &pose)
+            {
+                auto localPose = transformPose3dToLocalCoordinates(pose);
+                instance.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+                instance.rotation = rotation3dToQuaternion(localPose.Rotation());
+                instance.update(modelMatrix.data(), deltaTime);
+                instance.lastDataUpdate = currentDataUpdateIndex;
+            };
+
+            if (hasObjects)
+            {
+                auto gamePiecePoseObjects = poseObjectsSub.GetAtomic();
+                for (size_t i = 0; i < gamePiecePoseObjects.value.size(); ++i)
+                {
+                    updateInstance(instances[gamePiecePoseObjects.value[i].identity], gamePiecePoseObjects.value[i].pose);
+                }
+            }
+            else
+            {
+                auto gamePiecePoses = posesSub.GetAtomic();
+                for (size_t i = 0; i < gamePiecePoses.value.size(); ++i)
+                {
+                    updateInstance(instances[i], gamePiecePoses.value[i]);
+                }
+            }
+            std::erase_if(instances, [currentDataUpdateIndex](const std::pair<int, DynamicObjectData> &pair)
+                          { return pair.second.lastDataUpdate != currentDataUpdateIndex; });
+        }
+        else
+        {
+            instances.clear();
+        }
+    }
 } GamePieceData;
 
-std::vector<RobotData> robots;
+std::vector<RobotModel> robotModels;
+std::unordered_map<RobotModel*, std::vector<RobotData>> robots;
 std::vector<GamePieceData> gamePieces;
 
 static std::function<void()> restartSimulationCallback;
@@ -1632,23 +1913,6 @@ static void performRotationStack(float out[16], const std::vector<ModelRotationC
     std::memcpy(out, result, sizeof(float) * 16);
 }
 
-static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
-{
-    switch (coordinateSystem)
-    {
-    case WPILibCoordinateSystem::WallBlue:
-        return frc::Pose3d(
-            units::meter_t{fieldWidthMeters} / 2.0 - pose.X(),
-            units::meter_t{fieldHeightMeters} / 2.0 - pose.Y(),
-            pose.Z(),
-            frc::Rotation3d(units::degree_t{0.0}, units::degree_t{0.0}, units::degree_t{180.0}).RotateBy(-pose.Rotation()));
-    case WPILibCoordinateSystem::CenterRed:
-        return pose;
-    default:
-        throw std::runtime_error("Invalid coordinate system");
-    }
-}
-
 /**
  * tags is a map of mesh-name:tag
  * meshes of the same material but different tags will stay separated and won't be merged.
@@ -1709,7 +1973,8 @@ void loadFieldModel()
 
         logger->info("Loaded field config file: {0}", configFile);
 
-        performRotationStack(fieldModelMatrix, j["rotations"].get<std::vector<ModelRotationConfig>>());
+        performRotationStack(fieldModelMatrix[0], j["rotations"].get<std::vector<ModelRotationConfig>>());
+        std::memcpy(fieldModelMatrix[1], fieldModelMatrix[0], sizeof(float) * 16);
 
         coordinateSystem = coordinateSystemFromString(j["coordinateSystem"].get<std::string>());
         fieldWidthMeters = j["widthInches"].get<float>() * INCHES_TO_METERS;
@@ -1860,8 +2125,7 @@ void loadRobotModel()
             });
         }
 
-        robots.push_back({.modelMatrix = std::to_array(robotModelMatrix),
-                          .components = components});
+        RobotModel& robotModel = robotModels.emplace_back(std::to_array(robotModelMatrix), components);
 
         std::vector<std::string> rslNodeNames = j.value("rsl", std::vector<std::string>());
 
@@ -1883,7 +2147,7 @@ void loadRobotModel()
                 std::string redColorHex = bumperObject["redColor"].get<std::string>();
                 if (redColorHex.size() == 9 && redColorHex[0] == '#')
                 {
-                    robots.back().bumperRedColor = string_hex_to_rgba_float_array(redColorHex);
+                    robotModel.bumperRedColor = string_hex_to_rgba_float_array(redColorHex);
                 }
                 else
                 {
@@ -1896,12 +2160,44 @@ void loadRobotModel()
                 std::string blueColorHex = bumperObject["blueColor"].get<std::string>();
                 if (blueColorHex.size() == 9 && blueColorHex[0] == '#')
                 {
-                    robots.back().bumperBlueColor = string_hex_to_rgba_float_array(blueColorHex);
+                    robotModel.bumperBlueColor = string_hex_to_rgba_float_array(blueColorHex);
                 }
                 else
                 {
                     logger->warn("Bumper blueColor field is not in the correct format: {}", blueColorHex);
                 }
+            }
+        }
+
+        std::vector<std::string> ledNodeNames;
+        if(j.contains("led"))
+        {
+            const auto &ledObject = j["led"];
+            if (ledObject.contains("name"))
+            {
+                ledNodeNames = ledObject["name"].get<std::vector<std::string>>();
+            }
+            else
+            {
+                logger->warn("LED object exists but does not contain a name field.");
+            }
+
+            if(ledObject.contains("count"))
+            {
+                robotModel.ledCount = ledObject["count"].get<float>();
+            }
+            else
+            {
+                logger->warn("LED object exists but does not contain a count field.");
+            }
+
+            if(ledObject.contains("aspectRatio"))
+            {
+                robotModel.ledAspectRatio = ledObject["aspectRatio"].get<float>();
+            }
+            else
+            {
+                logger->warn("LED object exists but does not contain an aspectRatio field.");
             }
         }
 
@@ -1917,15 +2213,20 @@ void loadRobotModel()
             tags[bumperNodeName] = "bumper";
         }
 
-        loadAndCacheMeshes(robots.back().meshes, robotDirectory, "model", tags);
-        for (auto &mesh : robots.back().meshes)
+        for (const auto &ledNodeName : ledNodeNames)
+        {
+            tags[ledNodeName] = "led";
+        }
+
+        loadAndCacheMeshes(robotModel.meshes, robotDirectory, "model", tags);
+        for (auto &mesh : robotModel.meshes)
         {
             mesh.material.writesObjectMotionVectors = true;
         }
         for (size_t i = 0; i < components.size(); i++)
         {
-            loadAndCacheMeshes(robots.back().components[i].meshes, robotDirectory, "model_" + std::to_string(i), {});
-            for (auto &mesh : robots.back().components[i].meshes)
+            loadAndCacheMeshes(robotModel.components[i].meshes, robotDirectory, "model_" + std::to_string(i), {});
+            for (auto &mesh : robotModel.components[i].meshes)
             {
                 mesh.material.writesObjectMotionVectors = true;
             }
@@ -1980,6 +2281,13 @@ void field::init(const blackboard::app::Window &window)
     {
         logger->error("Failed to create uniform for generic texture.");
         throw std::runtime_error("Failed to create uniform for generic texture.");
+    }
+
+    u_previousViewProj = bgfx::createUniform("u_previousViewProj", bgfx::UniformType::Mat4);
+    if (!bgfx::isValid(u_previousViewProj))
+    {
+        logger->error("Failed to create uniform: u_previousViewProj");
+        throw std::runtime_error("Failed to create uniform: u_previousViewProj");
     }
 
     const auto type = bgfx::getRendererType();
@@ -2221,7 +2529,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gGTAOFinalAOTerm.ensure(width, height);
 }
 
-void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
+void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh)
 {
     float pbrData[4] = {
         (mesh.material.writesObjectMotionVectors && settings::writeObjectMotionVectors) ? 1.0f : 0.0f,
@@ -2229,7 +2537,7 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
         mesh.material.roughness,
         0.0f};
 
-    if (!forceDepthTest && mesh.material.type == MaterialType::Transparent)
+    if (mesh.material.type == MaterialType::Transparent)
     {
         encoder->setState(
             BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_INDEPENDENT |
@@ -2255,7 +2563,7 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
 
     encoder->setUniform(u_baseColor, SRGBToLinear(mesh.material.baseColor).data());
     encoder->setUniform(u_emissionColor, SRGBToLinear(mesh.material.emissionColor).data());
-    encoder->setUniform(u_previousModelViewProj, previousViewProj);
+    encoder->setUniform(u_previousViewProj, previousViewProj);
     encoder->setUniform(u_pbrData, pbrData);
 
     if (mesh.material.texture == "carpet")
@@ -2267,24 +2575,22 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool forceDepthTest)
     {
         encoder->setTexture(0, s_apriltags, apriltagTexture.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     }
+    else if(mesh.material.texture == "led")
+    {
+        encoder->setTexture(0, s_ledMask, ledMaskTexture.handle, BGFX_SAMPLER_UVW_CLAMP);
+    }
 }
 
 template <std::ranges::input_range R>
-void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16])
+void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[2][16])
 {
     for (const auto &mesh : meshes)
     {
-        setupMesh(encoder, mesh, false);
-        encoder->setTransform(modelMatrix);
+        setupMesh(encoder, mesh);
+        encoder->setTransform(modelMatrix, 2);
         if (mesh.material.type == MaterialType::Transparent)
         {
             encoder->submit(VIEW_OIT, programOit);
-
-#if 0 // IF TRANSPARENT MOTION VECTORS AND DEPTH (transparent TAA)
-            setupMesh(encoder, mesh, true);
-            encoder->setTransform(modelMatrix);
-            encoder->submit(VIEW_OIT_DEPTH_POST_PASS, programOitDepthPostPass);
-#endif
         }
         else
         {
@@ -2293,29 +2599,102 @@ void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[16])
     }
 }
 
-void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes, const std::vector<InstanceData> &instances)
+template <std::ranges::forward_range R>
+void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel* robotModel, R &&meshes, const std::vector<std::pair<const InstanceData&, const RobotData&>>& instances)
+{
+    auto instanceableMeshes = meshes | std::views::filter([robotModel](const Mesh& mesh) {
+        return robotModel->isInstanceable(&mesh.material);
+    });
+
+    auto nonInstanceableMeshes = meshes | std::views::filter([robotModel](const Mesh& mesh) {
+        return !robotModel->isInstanceable(&mesh.material);
+    });
+
+    std::vector<InstanceData> instanceData;
+    instanceData.reserve(instances.size());
+    std::ranges::transform(instances, std::back_inserter(instanceData), [](const auto &pair) {
+        return pair.first;
+    });
+
+    drawMeshesInstanced(encoder, instanceableMeshes, instanceData);
+
+    if(std::ranges::distance(nonInstanceableMeshes) == 0)
+    {
+        return;
+    }
+
+    for (const auto &instance : instances)
+    {
+        if(robotModel->rslMaterial)
+        {
+            robotModel->rslMaterial->emissionColor[3] = instance.second.rslEmissionStrength;
+        }
+
+        if(robotModel->bumperMaterial)
+        {
+            robotModel->bumperMaterial->baseColor = instance.second.bumperBaseColor;
+        }
+
+        float matrices[2][16];
+        instance.first.transform.toMatrix(matrices[0]);
+        instance.first.previousTransform.toMatrix(matrices[1]);
+
+        for (auto &mesh : nonInstanceableMeshes)
+        {
+            setupMesh(encoder, mesh);
+            encoder->setTransform(matrices, 2);
+
+            if (mesh.material.type == MaterialType::Transparent)
+            {
+                encoder->submit(VIEW_OIT, programOit);
+            }
+            else if(mesh.material.texture == "led")
+            {
+                float ledData[4] = {
+                    robotModel->ledCount,
+                    robotModel->ledAspectRatio,
+                    0.0f,
+                    0.0f
+                };
+                encoder->setUniform(u_ledData, ledData);
+
+                bgfx::updateTexture2D(
+                    instance.second.ledColorTexture.handle,
+                    0,0,0,0,instance.second.ledColorTexture.width,instance.second.ledColorTexture.height,
+                    bgfx::copy(instance.second.ledColorData, static_cast<uint32_t>(instance.second.ledColorTexture.width * 4))
+                );
+
+                encoder->setTexture(1, s_ledColors, instance.second.ledColorTexture.handle, BGFX_SAMPLER_UVW_CLAMP);
+
+                encoder->submit(VIEW_GBUFFER, programPBRLed);
+            }
+            else
+            {
+                encoder->submit(VIEW_GBUFFER, programPBR);
+            }
+        }
+    }
+}
+
+template <std::ranges::input_range R>
+void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes, const std::vector<InstanceData>& instanceData)
 {
     // figure out how big of a buffer is available
-    uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(instances.size(), sizeof(InstanceData));
+    uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(instanceData.size(), sizeof(InstanceData));
 
     bgfx::InstanceDataBuffer idb;
     bgfx::allocInstanceDataBuffer(&idb, instanceCount, sizeof(InstanceData));
 
-    std::memcpy(idb.data, instances.data(), instanceCount * sizeof(InstanceData));
+    std::memcpy(idb.data, instanceData.data(), instanceCount * sizeof(InstanceData));
 
     for (const auto &mesh : meshes)
     {
-        setupMesh(encoder, mesh, false);
+        setupMesh(encoder, mesh);
+
         encoder->setInstanceDataBuffer(&idb);
         if (mesh.material.type == MaterialType::Transparent)
         {
             encoder->submit(VIEW_OIT, programOitInstanced);
-
-#if 0 // IF TRANSPARENT MOTION VECTORS AND DEPTH (transparent TAA)
-            setupMesh(encoder, mesh, true);
-            encoder->setInstanceDataBuffer(&idb);
-            encoder->submit(VIEW_OIT_DEPTH_POST_PASS, programOitDepthPostPassInstanced);
-#endif
         }
         else
         {
@@ -2324,8 +2703,64 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, const std::vector<Mesh> &meshes
     }
 }
 
+template <std::ranges::input_range R>
+void drawRobot(bgfx::Encoder *encoder, RobotModel* robotModel, R &&instances, const std::function<bool(const DynamicObjectData&)>& componentFilter)
+{
+    if(instances.empty())
+    {
+        return;
+    }
+
+    std::vector<std::pair<const InstanceData&, const RobotData&>> robotInstances;
+    robotInstances.reserve(std::ranges::distance(instances));
+    for (auto& robot : instances)
+    {
+        robotInstances.emplace_back(robot.dynamicData.instanceData, robot);
+    }
+
+    drawRobotMeshes(encoder, robotModel, robotModel->meshes, robotInstances);
+
+    std::map<size_t, std::vector<std::pair<const InstanceData&, const RobotData&>>> componentInstancesMap;
+
+    for(const auto& robot : instances)
+    {
+        for(size_t i = 0; i < robot.components.size(); ++i)
+        {
+            const auto& component = robot.components[i];
+            if(!componentFilter(component))
+            {
+                continue;
+            }
+
+            componentInstancesMap[i].emplace_back(component.instanceData, robot);
+        }
+    }
+
+    for(const auto& [index, componentInstances] : componentInstancesMap)
+    {
+        if(componentInstances.empty())
+        {
+            continue;
+        }
+        
+        if(index >= robotModel->components.size())
+        {
+            logger->warn("Component index {} is out of bounds for robot model with {} components.", index, robotModel->components.size());
+            continue;
+        }
+
+        const auto& component = robotModel->components[index];
+        drawRobotMeshes(encoder, robotModel, component.meshes, componentInstances);
+    }
+}
+
 void drawAprilTags(bgfx::Encoder *encoder)
 {
+    if(aprilTags.empty())
+    {
+        return;
+    }
+
     // figure out how big of a buffer is available
     uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(aprilTags.size(), sizeof(AprilTagInstanceData));
 
@@ -2334,7 +2769,7 @@ void drawAprilTags(bgfx::Encoder *encoder)
 
     std::memcpy(idb.data, aprilTags.data(), instanceCount * sizeof(AprilTagInstanceData));
 
-    setupMesh(encoder, aprilTagMesh, false);
+    setupMesh(encoder, aprilTagMesh);
     encoder->setInstanceDataBuffer(&idb);
     encoder->submit(VIEW_GBUFFER, programPBRApriltag);
 }
@@ -2342,6 +2777,25 @@ void drawAprilTags(bgfx::Encoder *encoder)
 bool createdFieldMeshBuffers = false;
 bool createdRobotMeshBuffers = false;
 int currentDataUpdateIndex = 0;
+
+void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic)
+{
+    RobotData& robot = robots[&robotModels[0]].emplace_back(&robotModels[0]);
+
+    robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>(poseTopic);
+    robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::ntPeriodic});
+    robot.componentPosesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>(componentPosesTopic);
+    robot.componentPosesSub = robot.componentPosesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+
+    robot.rslStateTopic = ntInst.GetBooleanTopic(rslStateTopic);
+    robot.rslStateSub = robot.rslStateTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+
+    robot.allianceStationTopic = ntInst.GetIntegerTopic(allianceStationTopic);
+    robot.allianceStationSub = robot.allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
+
+    robot.ledColorsTopic = ntInst.GetStringArrayTopic(ledColorsTopic);
+    robot.ledColorsSub = robot.ledColorsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+}
 
 std::array<float, 4> skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
 std::array<std::array<float, 4>, LIGHT_COUNT> lightColor = {
@@ -2469,39 +2923,53 @@ void field::render(const blackboard::app::Window &window)
     if (!createdRobotMeshBuffers && robotModelLoadingFuture.valid() &&
         robotModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
-        for (auto &robot : robots)
+        if(robotModels.size() > 0)
         {
-            robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/Robot");
-            robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::ntPeriodic});
-            robot.componentPosesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/MechanismPoses");
-            robot.componentPosesSub = robot.componentPosesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+            addRobot(
+                "/AdvantageKit/RealOutputs/RobotModel/Robot",
+                "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses",
+                "/AdvantageKit/SystemStats/RSLState",
+                "/AdvantageKit/DriverStation/AllianceStation",
+                "/AdvantageKit/RealOutputs/LedManager/HexStrings"
+            );
 
-            robot.rslStateTopic = ntInst.GetBooleanTopic("/AdvantageKit/SystemStats/RSLState");
-            robot.rslStateSub = robot.rslStateTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
-
-            robot.allianceStationTopic = ntInst.GetIntegerTopic("/AdvantageKit/DriverStation/AllianceStation");
-            robot.allianceStationSub = robot.allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
+            // addRobot(
+            //     "/AdvantageKit/RealOutputs/Odometry/Robot",
+            //     "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses",
+            //     "/AdvantageKit/SystemStats/RSLState",
+            //     "/AdvantageKit/DriverStation/AllianceStation",
+            //     "/AdvantageKit/RealOutputs/LedManager/HexStrings"
+            // );
         }
 
-        Mesh::createBuffersForMeshes(robots.back().meshes);
-        for (size_t i = 0; i < robots.back().components.size(); i++)
+        for(auto& model : robotModels)
         {
-            Mesh::createBuffersForMeshes(robots.back().components[i].meshes);
-        }
+            Mesh::createBuffersForMeshes(model.meshes);
+            for (size_t i = 0; i < model.components.size(); i++)
+            {
+                Mesh::createBuffersForMeshes(model.components[i].meshes);
+            }
 
-        robots.back().rslMaterial = Mesh::getTaggedMaterial(robots.back().meshes, "rsl");
-        if(robots.back().rslMaterial != nullptr)
-        {
-            robots.back().rslOnEmissionStrength = robots.back().rslMaterial->emissionColor[3];
-        }
+            model.rslMaterial = Mesh::getTaggedMaterial(model.meshes, "rsl");
+            if(model.rslMaterial != nullptr)
+            {
+                model.rslOnEmissionStrength = model.rslMaterial->emissionColor[3];
+            }
 
-        robots.back().bumperMaterial = Mesh::getTaggedMaterial(robots.back().meshes, "bumper");
-        if(robots.back().bumperMaterial != nullptr)
-        {
-            robots.back().bumperModelColor = robots.back().bumperMaterial->baseColor;
-        }
+            model.bumperMaterial = Mesh::getTaggedMaterial(model.meshes, "bumper");
+            if(model.bumperMaterial != nullptr)
+            {
+                model.bumperModelColor = model.bumperMaterial->baseColor;
+            }
 
-        logger->info("Post-processed robot meshes for materials: rsl={}, bumper={}", (robots.back().rslMaterial != nullptr), (robots.back().bumperMaterial != nullptr));
+            model.ledMaterial = Mesh::getTaggedMaterial(model.meshes, "led");
+            if(model.ledMaterial != nullptr)
+            {
+                model.ledMaterial->texture = "led";
+            }
+
+            logger->info("Post-processed robot meshes for materials: rsl={},bumper={},led={}", (model.rslMaterial != nullptr), (model.bumperMaterial != nullptr), (model.ledMaterial != nullptr));
+        }
 
         createdRobotMeshBuffers = true;
     }
@@ -2510,130 +2978,41 @@ void field::render(const blackboard::app::Window &window)
     curTime += deltaTime;
 
     // Dynamic objects
-    for (auto &robot : robots)
+    for (auto& [robotModel, instances] : robots)
     {
-        auto robotPose = robot.poseSub.GetAtomic();
-        if (robot.poseSub.Exists())
+        for (auto &robot : instances)
         {
-            frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
-            robot.dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-            robot.dynamicData.rotation = rotation3dToQuaternion(localPose.Rotation());
-            robot.dynamicData.update(robot.modelMatrix.data(), deltaTime);
-            robot.dynamicData.lastDataUpdate = currentDataUpdateIndex;
-
-            // Update component poses
-            auto componentPoses = robot.componentPosesSub.GetAtomic();
-            Transform robotOrigin{robot.dynamicData.lastPosition, robot.dynamicData.lastRotation};
-            for (size_t i = 0; i < robot.components.size(); ++i)
-            {
-                if (robot.componentPosesSub.Exists() && i < componentPoses.value.size())
-                {
-                    // invert rotation to match advscope
-                    robot.components[i].dynamicData.position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
-                    robot.components[i].dynamicData.rotation = rotation3dToQuaternionInverse(componentPoses.value[i].Rotation());
-                    robot.components[i].dynamicData.update(robot.components[i].modelMatrix.data(), robotOrigin.matrix, deltaTime);
-                }
-                else
-                {
-                    robot.components[i].dynamicData.position = {0.0f, 0.0f, 0.0f};
-                    robot.components[i].dynamicData.rotation = rotation3dToQuaternion(frc::Rotation3d{});
-                    robot.components[i].dynamicData.update(robot.modelMatrix.data(), robotOrigin.matrix, deltaTime);
-                }
-
-                robot.components[i].dynamicData.lastDataUpdate = currentDataUpdateIndex;
-            }
-
-            // Update RSL state
-            if(robot.rslStateSub.Exists() && robot.rslMaterial != nullptr)
-            {
-                robot.rslMaterial->emissionColor[3] = robot.rslStateSub.GetAtomic().value ? robot.rslOnEmissionStrength : 0.0f;
-            }
-
-            // Update bumper color
-            if(robot.allianceStationSub.Exists() && robot.bumperMaterial != nullptr)
-            {
-                int allianceStation = robot.allianceStationSub.GetAtomic().value;
-                if((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && robot.bumperRedColor.has_value()) // Red
-                {
-                    robot.bumperMaterial->baseColor = robot.bumperRedColor.value();
-                }
-                else if((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && robot.bumperBlueColor.has_value()) // Blue
-                {
-                    robot.bumperMaterial->baseColor = robot.bumperBlueColor.value();
-                }
-                else
-                {
-                    robot.bumperMaterial->baseColor = robot.bumperModelColor;
-                }
-            }
-        }
-        else
-        {
-            robot.dynamicData.lastDataUpdate = -1;
-            for (auto &component : robot.components)
-            {
-                component.dynamicData.lastDataUpdate = -1;
-            }
+            robot.update(currentDataUpdateIndex, deltaTime);
         }
     }
 
     for (auto &gamePiece : gamePieces)
     {
-        bool hasObjects = gamePiece.poseObjectsSub.Exists();
-        if (hasObjects || gamePiece.posesSub.Exists())
-        {
-            auto updateInstance = [&](DynamicObjectData &instance, const frc::Pose3d &pose)
-            {
-                auto localPose = transformPose3dToLocalCoordinates(pose);
-                instance.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-                instance.rotation = rotation3dToQuaternion(localPose.Rotation());
-                instance.update(gamePiece.modelMatrix.data(), deltaTime);
-                instance.lastDataUpdate = currentDataUpdateIndex;
-            };
-
-            if (hasObjects)
-            {
-                auto gamePiecePoseObjects = gamePiece.poseObjectsSub.GetAtomic();
-                for (size_t i = 0; i < gamePiecePoseObjects.value.size(); ++i)
-                {
-                    updateInstance(gamePiece.instances[gamePiecePoseObjects.value[i].identity], gamePiecePoseObjects.value[i].pose);
-                }
-            }
-            else
-            {
-                auto gamePiecePoses = gamePiece.posesSub.GetAtomic();
-                for (size_t i = 0; i < gamePiecePoses.value.size(); ++i)
-                {
-                    updateInstance(gamePiece.instances[i], gamePiecePoses.value[i]);
-                }
-            }
-            std::erase_if(gamePiece.instances, [](const std::pair<int, DynamicObjectData> &pair)
-                          { return pair.second.lastDataUpdate != currentDataUpdateIndex; });
-        }
-        else
-        {
-            gamePiece.instances.clear();
-        }
+        gamePiece.update(currentDataUpdateIndex, deltaTime);
     }
 
     if (cameraView == CameraView::Robot || cameraView == CameraView::RobotRelative)
     {
-        if (robots.size() > 0 && robots.back().dynamicData.lastDataUpdate == currentDataUpdateIndex)
+        if (robotModels.size() > 0)
         {
-            float translationMtx[16];
-            bx::mtxTranslate(translationMtx, robots.back().dynamicData.lastPosition.x, robots.back().dynamicData.lastPosition.y, robots.back().dynamicData.lastPosition.z);
-            if (cameraView == CameraView::RobotRelative)
+            auto& robotInstances = robots[&robotModels[0]];
+            if(robotInstances.size() > 0 && robotInstances.back().dynamicData.lastDataUpdate == currentDataUpdateIndex)
             {
-                // also apply rotation
-                float rotationMtx[16];
-                bx::mtxFromQuaternion(rotationMtx, robots.back().dynamicData.lastRotation);
-                float transformMtx[16];
-                bx::mtxMul(transformMtx, rotationMtx, translationMtx);
-                bx::mtxInverse(orbitCamera.originTransform, transformMtx);
-            }
-            else
-            {
-                bx::mtxInverse(orbitCamera.originTransform, translationMtx);
+                float translationMtx[16];
+                bx::mtxTranslate(translationMtx, robotInstances.back().dynamicData.lastPosition.x, robotInstances.back().dynamicData.lastPosition.y, robotInstances.back().dynamicData.lastPosition.z);
+                if (cameraView == CameraView::RobotRelative)
+                {
+                    // also apply rotation
+                    float rotationMtx[16];
+                    bx::mtxFromQuaternion(rotationMtx, robotInstances.back().dynamicData.lastRotation);
+                    float transformMtx[16];
+                    bx::mtxMul(transformMtx, rotationMtx, translationMtx);
+                    bx::mtxInverse(orbitCamera.originTransform, transformMtx);
+                }
+                else
+                {
+                    bx::mtxInverse(orbitCamera.originTransform, translationMtx);
+                }
             }
         }
     }
@@ -2643,24 +3022,39 @@ void field::render(const blackboard::app::Window &window)
 
     float view[16];
     
-    if(cameraView == CameraView::DriverStation && robots.size() > 0 && robots.back().allianceStationSub.Exists())
+    if(cameraView == CameraView::DriverStation && robotModels.size() > 0)
     {
-        int allianceStation = robots.back().allianceStationSub.GetAtomic().value;
-        int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation - 4; // 6 elements ordered [B1, B2, B3, R1, R2, R3]
-        const bx::Vec3 at = bx::add(robots.back().dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
-        const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
-
-        const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
-        lastDriverStationCameraTarget = at;
-
-        float cameraDistance = bx::distance(eye, at);
-        float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
-        if(targetDistance > 0.2f)
+        auto& robotInstances = robots[&robotModels[0]];
+        if(robotInstances.size() > 0 && robotInstances.back().allianceStationSub.Exists())
         {
-            driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, bx::length(velocity)));
-        }
+            int allianceStation = robotInstances.back().allianceStationSub.GetAtomic().value;
+            int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation - 4; // 6 elements ordered [B1, B2, B3, R1, R2, R3]
+            const bx::Vec3 at = bx::add(robotInstances.back().dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
+            const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
 
-        bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+            const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
+            lastDriverStationCameraTarget = at;
+
+            float cameraDistance = bx::distance(eye, at);
+            float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
+            if(targetDistance > 0.2f)
+            {
+                driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, bx::length(velocity)));
+            }
+
+            bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+        } else {
+            updateOrbitCameraFromInput();
+            const bx::Vec3 at = orbitCamera.target;
+            const bx::Vec3 eye = getOrbitEye();
+
+            driverStationCameraTarget = at;
+            lastDriverStationCameraTarget = at;
+
+            float lookAt[16];
+            bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+            bx::mtxMul(view, orbitCamera.originTransform, lookAt);
+        }
     } else {
         updateOrbitCameraFromInput();
         const bx::Vec3 at = orbitCamera.target;
@@ -2809,28 +3203,10 @@ void field::render(const blackboard::app::Window &window)
 
     if (createdRobotMeshBuffers)
     {
-        std::vector<InstanceData> instanceData;
-        auto filtered = robots | std::views::filter([](const RobotData &robot)
-                                                    { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; });
-        instanceData.reserve(std::ranges::distance(filtered));
-        std::ranges::transform(filtered, std::back_inserter(instanceData),
-                               [](const RobotData &robot)
-                               { return robot.dynamicData.instanceData; });
-        if (!instanceData.empty())
-        {
-            drawMeshesInstanced(encoder, robots.back().meshes, instanceData);
-        }
-
-        for (auto &component : robots.back().components)
-        {
-            if (component.dynamicData.lastDataUpdate != currentDataUpdateIndex)
-            {
-                continue;
-            }
-
-            std::vector<InstanceData> componentInstanceData = {
-                component.dynamicData.instanceData};
-            drawMeshesInstanced(encoder, component.meshes, componentInstanceData);
+        for (auto& [robotModel, instances] : robots) {
+            drawRobot(encoder, robotModel, instances | std::views::filter([](const RobotData &robot)
+                            { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; }),
+                            [](const DynamicObjectData& component) { return component.lastDataUpdate == currentDataUpdateIndex; });
         }
     }
 
@@ -2895,7 +3271,7 @@ void field::render(const blackboard::app::Window &window)
 
     // Post processing
 
-    encoder->setUniform(u_previousModelViewProj, previousViewProj);
+    encoder->setUniform(u_previousViewProj, previousViewProj);
 
     xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
@@ -3273,19 +3649,27 @@ void field::cleanup()
         }
     }
 
-    for (auto &robot : robots)
+    for (auto &model : robotModels)
     {
-        for (auto &mesh : robot.meshes)
+        for (auto &mesh : model.meshes)
         {
             mesh.destroy();
         }
 
-        for (auto &component : robot.components)
+        for (auto &component : model.components)
         {
             for (auto &mesh : component.meshes)
             {
                 mesh.destroy();
             }
+        }
+    }
+
+    for (auto& [robotModel, instances] : robots)
+    {
+        for (auto &robot : instances)
+        {
+            robot.ledColorTexture.destroy();
         }
     }
 
@@ -3301,8 +3685,8 @@ void field::cleanup()
         bgfx::destroy(u_gtaoIntensity);
     if (bgfx::isValid(u_info))
         bgfx::destroy(u_info);
-    if (bgfx::isValid(u_previousModelViewProj))
-        bgfx::destroy(u_previousModelViewProj);
+    if (bgfx::isValid(u_previousViewProj))
+        bgfx::destroy(u_previousViewProj);
     if (bgfx::isValid(u_previousView))
         bgfx::destroy(u_previousView);
     if (bgfx::isValid(u_previousProj))
@@ -3311,6 +3695,8 @@ void field::cleanup()
         bgfx::destroy(u_jitter);
     if (bgfx::isValid(u_pbrData))
         bgfx::destroy(u_pbrData);
+    if (bgfx::isValid(u_ledData))
+        bgfx::destroy(u_ledData);
     if (bgfx::isValid(u_lightPos))
         bgfx::destroy(u_lightPos);
     if (bgfx::isValid(u_lightColor))
@@ -3340,6 +3726,8 @@ void field::cleanup()
         bgfx::destroy(programPBRTextured);
     if (bgfx::isValid(programPBRInstanced))
         bgfx::destroy(programPBRInstanced);
+    if (bgfx::isValid(programPBRLed))
+        bgfx::destroy(programPBRLed);
     if (bgfx::isValid(programPBRApriltag))
         bgfx::destroy(programPBRApriltag);
     if (bgfx::isValid(programOit))
@@ -3432,6 +3820,7 @@ void field::cleanup()
     carpetBaseColor.destroy();
     carpetBump.destroy();
     apriltagTexture.destroy();
+    ledMaskTexture.destroy();
 
     if (bgfx::isValid(s_tex))
         bgfx::destroy(s_tex);
@@ -3464,6 +3853,10 @@ void field::cleanup()
         bgfx::destroy(s_bump);
     if (bgfx::isValid(s_apriltags))
         bgfx::destroy(s_apriltags);
+    if (bgfx::isValid(s_ledMask))
+        bgfx::destroy(s_ledMask);
+    if (bgfx::isValid(s_ledColors))
+        bgfx::destroy(s_ledColors);
 
     if(bgfx::isValid(s_workingAOTerm))
         bgfx::destroy(s_workingAOTerm);

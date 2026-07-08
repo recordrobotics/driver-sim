@@ -102,9 +102,28 @@ vec3 LogCToLinear(vec3 x)
 
 #define FLT_EPSILON     1.192092896e-07 // Smallest positive number, such that 1.0 + FLT_EPSILON != 1.0
 
+float PositivePow(float base, float power)
+{
+    return pow(max(abs(base), FLT_EPSILON), power);
+}
+
 vec3 PositivePow(vec3 base, vec3 power)
 {
     return pow(max(abs(base), vec3(FLT_EPSILON, FLT_EPSILON, FLT_EPSILON)), power);
+}
+
+float SRGBToLinear(float c)
+{
+#if USE_VERY_FAST_SRGB
+    return c * c;
+#elif USE_FAST_SRGB
+    return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
+#else
+    float linearRGBLo = c / 12.92;
+    float linearRGBHi = PositivePow((c + 0.055) / 1.055, 2.4);
+    float linearRGB = (c <= 0.04045) ? linearRGBLo : linearRGBHi;
+    return linearRGB;
+#endif
 }
 
 vec3 SRGBToLinear(vec3 c)

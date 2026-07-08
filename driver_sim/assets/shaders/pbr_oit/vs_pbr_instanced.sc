@@ -1,15 +1,15 @@
-$input a_position, a_normal, i_data0, i_data1, i_data2, i_data3, i_data4, i_data5, i_data6, i_data7
+$input a_position, a_normal, i_data0, i_data1, i_data2, i_data3, i_data4, i_data5
 $output v_viewPosition, v_viewNormal, v_currentPosition, v_previousPosition, v_worldPosition
 
 #include <bgfx_shader.sh>
 
 uniform vec4 u_pbrData;
-uniform mat4 u_previousModelViewProj;
+uniform mat4 u_previousViewProj;
 
 void main()
 {
-	mat4 model = mtxFromCols(i_data0, i_data1, i_data2, i_data3);
-	mat4 prevModel = mtxFromCols(i_data4, i_data5, i_data6, i_data7);
+	mat4 model = mtxFromRows(i_data0, i_data1, i_data2, vec4(0,0,0,1));
+	mat4 prevModel = mtxFromRows(i_data3, i_data4, i_data5, vec4(0,0,0,1));
 	
 	bool writeMotionVectors = u_pbrData.x > 0.5;
 
@@ -25,7 +25,7 @@ void main()
 	v_viewNormal = normalize(mul(modelView, vec4(normal, 0.0))).xyz;
 
 	if(writeMotionVectors) {
-		vec4 previousPosition = mul(u_previousModelViewProj, mul(prevModel, vec4(a_position, 1.0) ));
+		vec4 previousPosition = mul(u_previousViewProj, mul(prevModel, vec4(a_position, 1.0) ));
 		v_previousPosition = previousPosition;
 		v_currentPosition = position;
 	}
