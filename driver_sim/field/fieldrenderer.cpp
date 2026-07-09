@@ -3039,7 +3039,7 @@ void field::render(const blackboard::app::Window &window)
             float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
             if(targetDistance > 0.2f)
             {
-                driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, bx::length(velocity)));
+                driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
             }
 
             bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
