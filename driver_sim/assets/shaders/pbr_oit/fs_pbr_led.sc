@@ -23,6 +23,11 @@ vec3 fetchLedColor(int index, int ledCountI)
 	return texelFetch(s_ledColors, ivec2(index, 0), 0).rgb;
 }
 
+float smoothRemap(float value, float minInput, float maxInput, float minOutput, float maxOutput)
+{
+	return mix(minOutput, maxOutput, smoothstep(minInput, maxInput, value));
+}
+
 void main()
 {
 	bool writeMotionVectors = u_pbrData.x > 0.5;
@@ -48,8 +53,8 @@ void main()
 	vec3 ledColorA = fetchLedColor(int(floor(ledCoord.x - 1.0)), ledCountI);
 	vec3 ledColorC = fetchLedColor(int(floor(ledCoord.x + 1.0)), ledCountI);
 
-	vec3 ledColor = mix(ledColorA, ledColorB, saturate(fract(ledCoord.x) + 0.5));
-	ledColor = mix(ledColor, ledColorC, saturate(fract(ledCoord.x) - 0.5));
+	vec3 ledColor = mix(ledColorA, ledColorB, smoothRemap(fract(ledCoord.x), 0.0, 0.4, 0.5, 1.0));
+	ledColor = mix(ledColor, ledColorC, smoothRemap(fract(ledCoord.x), 0.6, 1.0, 0.0, 0.5));
 
 	vec3 emission = u_emissionColor.rgb * u_emissionColor.a;
 	emission += ledColor * 550.0 * mask;
