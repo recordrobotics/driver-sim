@@ -57,7 +57,7 @@ void main()
 	ledColor = mix(ledColor, ledColorC, smoothRemap(fract(ledCoord.x), 0.6, 1.0, 0.0, 0.5));
 
 	vec3 emission = u_emissionColor.rgb * u_emissionColor.a;
-	emission += ledColor * 550.0 * mask;
+	emission += SRGBToLinear(ledColor) * 550.0 * mask;
 
 	gl_FragData[0] = u_baseColor;
 	gl_FragData[1] = vec4(emission, 1.0);
