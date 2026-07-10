@@ -163,7 +163,7 @@ void initApp()
   fieldAsset = std::make_unique<RemoteStoredAsset>("field", "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31", prefPath, "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip");
   robotAsset = std::make_unique<RemoteStoredAsset>("robot", "4b2cef533ae98d9c1530991fe86ff04c93e83f3291bb4d358878166d51bd0e80", prefPath, "https://hamster1.ddns.net/robot-4b2cef533ae98d9c1530991fe86ff04c93e83f3291bb4d358878166d51bd0e80.zip");
   jniAsset = std::make_unique<RemoteStoredAsset>("jni", "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5", prefPath, "https://hamster1.ddns.net/jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip");
-  robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "08099cced74803a6941cf7ac6968202086cda329ae381e134eb874395e68ab17", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
+  robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "8a2257244cd7ae564c6c40bc45997823401ee3875f8a115a2b3d1f8d0cd5c209", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
 
   // make sure we keep logs and settings
   robotCodeAsset->keepPaths = {"logs", "ctre_sim", "networktables.json"};

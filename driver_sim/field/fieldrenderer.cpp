@@ -2994,15 +2994,15 @@ void field::render(const blackboard::app::Window &window)
         if (robotModels.size() > 0)
         {
             auto& robotInstances = robots[&robotModels[0]];
-            if(robotInstances.size() > 0 && robotInstances.back().dynamicData.lastDataUpdate == currentDataUpdateIndex)
+            if(robotInstances.size() > 0 && robotInstances[0].dynamicData.lastDataUpdate == currentDataUpdateIndex)
             {
                 float translationMtx[16];
-                bx::mtxTranslate(translationMtx, robotInstances.back().dynamicData.lastPosition.x, robotInstances.back().dynamicData.lastPosition.y, robotInstances.back().dynamicData.lastPosition.z);
+                bx::mtxTranslate(translationMtx, robotInstances[0].dynamicData.lastPosition.x, robotInstances[0].dynamicData.lastPosition.y, robotInstances[0].dynamicData.lastPosition.z);
                 if (cameraView == CameraView::RobotRelative)
                 {
                     // also apply rotation
                     float rotationMtx[16];
-                    bx::mtxFromQuaternion(rotationMtx, robotInstances.back().dynamicData.lastRotation);
+                    bx::mtxFromQuaternion(rotationMtx, robotInstances[0].dynamicData.lastRotation);
                     float transformMtx[16];
                     bx::mtxMul(transformMtx, rotationMtx, translationMtx);
                     bx::mtxInverse(orbitCamera.originTransform, transformMtx);
@@ -3023,11 +3023,11 @@ void field::render(const blackboard::app::Window &window)
     if(cameraView == CameraView::DriverStation && robotModels.size() > 0)
     {
         auto& robotInstances = robots[&robotModels[0]];
-        if(robotInstances.size() > 0 && robotInstances.back().allianceStationSub.Exists())
+        if(robotInstances.size() > 0 && robotInstances[0].allianceStationSub.Exists())
         {
-            int allianceStation = robotInstances.back().allianceStationSub.GetAtomic().value;
+            int allianceStation = robotInstances[0].allianceStationSub.GetAtomic().value;
             int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation - 4; // 6 elements ordered [B1, B2, B3, R1, R2, R3]
-            const bx::Vec3 at = bx::add(robotInstances.back().dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
+            const bx::Vec3 at = bx::add(robotInstances[0].dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
             const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
 
             const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
