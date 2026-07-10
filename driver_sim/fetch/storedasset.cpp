@@ -51,6 +51,11 @@ bool isFilenameSafe(const std::string &name)
 
 void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
 {
+    if(!fs::exists(rootFolder) || !fs::is_directory(rootFolder)) {
+        logger->info("Root folder {} does not exist or is not a directory. Skipping deletion of old files.", rootFolder.string());
+        return;
+    }
+
     logger->info("Deleting old files in {}", rootFolder.string());
     std::vector<fs::path> pathsToDelete;
     for (const auto &entry : fs::recursive_directory_iterator(rootFolder))
