@@ -128,7 +128,6 @@ std::string rendererApiToString(blackboard::renderer::Api api)
 
 void initApp()
 {
-  settings::loadSettings();
   set_theme();
 
   const auto dpi{app_ptr->main_window->effective_display_resolution()};
@@ -562,6 +561,16 @@ int main(int argc, char *argv[])
   catch (const std::exception& err) {
     logger::logger->error("Error parsing arguments: {}", err.what());
     logger::logger->info(program.help().str());
+  }
+
+  settings::loadSettings();
+
+  if(api == "auto") {
+    api = settings::renderApi;
+  } else if(api != settings::renderApi) {
+    logger::logger->info("Updating render API from {} to {}", settings::renderApi, api);
+    settings::renderApi = api;
+    settings::saveSettings();
   }
 
   blackboard::app::App app("Driver Sim",

@@ -33,6 +33,8 @@ namespace settings
     extern uint32_t gameMatchNumber;
     extern uint32_t gameMatchTotal;
 
+    extern std::string renderApi;
+
     typedef struct Rebuilt2026
     {
         int energizedRPThreshold;

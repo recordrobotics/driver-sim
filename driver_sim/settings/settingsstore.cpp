@@ -61,6 +61,8 @@ namespace settings
     uint32_t gameMatchNumber = 42;
     uint32_t gameMatchTotal = 76;
 
+    std::string renderApi = "auto";
+
     Rebuilt2026 rebuilt2026 = {
         .energizedRPThreshold = 100,
         .superchargedRPThreshold = 360};
@@ -78,6 +80,8 @@ namespace settings
         cacheModels = true;
         jvmArguments = {};
         codeArguments = {};
+
+        renderApi = "auto";
 
         if (std::filesystem::exists("C:\\Program Files (x86)\\FRC Driver Station\\DriverStation.exe"))
         {
@@ -207,6 +211,8 @@ namespace settings
             gameMatchNumber = j.value("gameMatchNumber", gameMatchNumber);
             gameMatchTotal = j.value("gameMatchTotal", gameMatchTotal);
 
+            renderApi = j.value("renderApi", renderApi);
+
             rebuilt2026 = j.value("rebuilt2026", rebuilt2026);
 
             logger->info("Settings loaded successfully from {0}", settingsPath);
@@ -245,6 +251,8 @@ namespace settings
         j["gameMatchNumber"] = gameMatchNumber;
         j["gameMatchTotal"] = gameMatchTotal;
 
+        j["renderApi"] = renderApi;
+        
         j["rebuilt2026"] = rebuilt2026;
 
         std::string jsonString = j.dump(4);
