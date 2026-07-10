@@ -1603,7 +1603,7 @@ typedef struct RobotData
 
     // RGB8 texture
     Texture ledColorTexture;
-    uint8_t* ledColorData = nullptr;
+    std::unique_ptr<uint8_t[]> ledColorData;
 
     RobotData(const RobotData &) = delete;
     RobotData &operator=(const RobotData &) = delete;
@@ -1614,7 +1614,7 @@ typedef struct RobotData
         : model(model), components(model->components.size()), bumperBaseColor(model->bumperModelColor)
     {
         uint16_t ledCount = static_cast<uint16_t>(floorf(model->ledCount));
-        ledColorData = new uint8_t[ledCount * 4];
+        ledColorData = std::make_unique<uint8_t[]>(ledCount * 4);
         TEXTURE(
             ledColorTexture,
             ledCount, 1,
@@ -1624,11 +1624,6 @@ typedef struct RobotData
             bgfx::TextureFormat::RGBA8,
             BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
             );
-    }
-
-    ~RobotData()
-    {
-        delete[] ledColorData;
     }
 
     void update(int currentDataUpdateIndex, float deltaTime)
@@ -2661,7 +2656,7 @@ void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel* robotModel, R &&meshes,
                 bgfx::updateTexture2D(
                     instance.second.ledColorTexture.handle,
                     0,0,0,0,instance.second.ledColorTexture.width,instance.second.ledColorTexture.height,
-                    bgfx::copy(instance.second.ledColorData, static_cast<uint32_t>(instance.second.ledColorTexture.width * 4))
+                    bgfx::copy(instance.second.ledColorData.get(), static_cast<uint32_t>(instance.second.ledColorTexture.width * 4))
                 );
 
                 encoder->setTexture(1, s_ledColors, instance.second.ledColorTexture.handle, BGFX_SAMPLER_UVW_CLAMP);
@@ -2933,13 +2928,16 @@ void field::render(const blackboard::app::Window &window)
                 "/AdvantageKit/RealOutputs/LedManager/HexStrings"
             );
 
-            // addRobot(
-            //     "/AdvantageKit/RealOutputs/Odometry/Robot",
-            //     "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses",
-            //     "/AdvantageKit/SystemStats/RSLState",
-            //     "/AdvantageKit/DriverStation/AllianceStation",
-            //     "/AdvantageKit/RealOutputs/LedManager/HexStrings"
-            // );
+            for(size_t i = 0; i < 5; ++i)
+            {
+                addRobot(
+                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Pose",
+                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/MechanismPoses",
+                    "/AdvantageKit/SystemStats/RSLState",
+                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/AllianceStation",
+                    "/AdvantageKit/RealOutputs/LedManager/HexStrings"
+                );
+            }
         }
 
         for(auto& model : robotModels)
