@@ -1598,6 +1598,11 @@ typedef struct RobotData
     nt::StringArrayTopic ledColorsTopic;
     nt::StringArraySubscriber ledColorsSub;
 
+    // is opponent robot enabled
+    nt::BooleanTopic enabledTopic;
+    nt::BooleanSubscriber enabledSub;
+    bool alwaysEnabled = false;
+
     std::array<float, 4> bumperBaseColor;
     float rslEmissionStrength = 0.0f;
 
@@ -1628,9 +1633,9 @@ typedef struct RobotData
 
     void update(int currentDataUpdateIndex, float deltaTime)
     {
-        auto robotPose = poseSub.GetAtomic();
-        if (poseSub.Exists())
+        if (poseSub.Exists() && (alwaysEnabled || (enabledSub.Exists() && enabledSub.GetAtomic().value)))
         {
+            auto robotPose = poseSub.GetAtomic();
             frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
             dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
             dynamicData.rotation = rotation3dToQuaternion(localPose.Rotation());
@@ -2773,7 +2778,7 @@ bool createdFieldMeshBuffers = false;
 bool createdRobotMeshBuffers = false;
 int currentDataUpdateIndex = 0;
 
-void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic)
+void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic, std::string_view enabledTopic = "")
 {
     RobotData& robot = robots[&robotModels[0]].emplace_back(&robotModels[0]);
 
@@ -2790,6 +2795,16 @@ void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, 
 
     robot.ledColorsTopic = ntInst.GetStringArrayTopic(ledColorsTopic);
     robot.ledColorsSub = robot.ledColorsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+
+    if(!enabledTopic.empty())
+    {
+        robot.enabledTopic = ntInst.GetBooleanTopic(enabledTopic);
+        robot.enabledSub = robot.enabledTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    }
+    else
+    {
+        robot.alwaysEnabled = true;
+    }
 }
 
 std::array<float, 4> skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
@@ -2928,14 +2943,15 @@ void field::render(const blackboard::app::Window &window)
                 "/AdvantageKit/RealOutputs/LedManager/HexStrings"
             );
 
-            for(size_t i = 0; i < 5; ++i)
+            for(size_t i = 0; i < 6; ++i)
             {
                 addRobot(
                     "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Pose",
                     "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/MechanismPoses",
                     "/AdvantageKit/SystemStats/RSLState",
                     "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/AllianceStation",
-                    "/AdvantageKit/RealOutputs/LedManager/HexStrings"
+                    "/AdvantageKit/RealOutputs/LedManager/HexStrings",
+                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Enabled"
                 );
             }
         }
