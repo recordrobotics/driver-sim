@@ -201,7 +201,8 @@ void initFieldView()
                                                        .working_directory = prefPath + "elastic",
                                                        .environment = {},
                                                        .kill_parent_on_child_exit = true,
-                                                       .auto_restart = false},
+                                                       .auto_restart = false,
+                                                       .use_existing_process = true /* elastic is single-instance (new instance exits immediately killing driver sim) */},
                                                    logger::logger);
 
   std::vector<std::string> javaCommandLine = {
@@ -216,7 +217,8 @@ void initFieldView()
                                                                       .environment = {{"HALSIM_EXTENSIONS", std::accumulate(settings::enabledExtensions.begin(), settings::enabledExtensions.end(), std::string(), [prefPath](const std::string &acc, const std::string &ext)
                                                                                                                             { return acc + prefPath + "jni/release/" + ext + ".dll;"; })}},
                                                                       .kill_parent_on_child_exit = false,
-                                                                      .auto_restart = true},
+                                                                      .auto_restart = true,
+                                                                      .use_existing_process = false},
                                                 logger::logger);
 
   if (settings::launchElastic)

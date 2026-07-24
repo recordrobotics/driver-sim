@@ -1,6 +1,22 @@
 #include "processrunner.h"
-
+#include <filesystem>
+#include <optional>
+#include <string_view>
 #include <SDL3/SDL.h>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <tlhelp32.h>
+#elif defined(__linux__)
+#include <dirent.h>
+#include <fstream>
+#include <unistd.h>
+#elif defined(__APPLE__)
+#include <libproc.h>
+#include <unistd.h>
+#include <vector>
+#endif
 
 using namespace TinyProcessLib;
 
@@ -43,6 +59,143 @@ Process::environment_type make_inherited_env(
     return env;
 }
 
+struct ExistingProcess
+{
+    int64_t pid;
+};
+
+std::optional<ExistingProcess> find_existing_process(const std::string_view executable_name)
+{
+    const auto wanted =
+        std::filesystem::path(executable_name).filename().string();
+
+#ifdef _WIN32
+
+    const DWORD self = GetCurrentProcessId();
+
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return std::nullopt;
+
+    PROCESSENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+
+    if (!Process32First(snapshot, &entry))
+    {
+        CloseHandle(snapshot);
+        return std::nullopt;
+    }
+
+    do
+    {
+        if (entry.th32ProcessID == self)
+            continue;
+
+        if (wanted == entry.szExeFile)
+        {
+            CloseHandle(snapshot);
+            return ExistingProcess{static_cast<int64_t>(entry.th32ProcessID)};
+        }
+
+    } while (Process32Next(snapshot, &entry));
+
+    CloseHandle(snapshot);
+
+#elif defined(__linux__)
+
+    const pid_t self = getpid();
+
+    DIR *dir = opendir("/proc");
+    if (!dir)
+        return std::nullopt;
+
+    while (auto *ent = readdir(dir))
+    {
+        if (!std::isdigit(ent->d_name[0]))
+            continue;
+
+        pid_t pid = static_cast<pid_t>(std::atoi(ent->d_name));
+
+        if (pid == self)
+            continue;
+
+        std::ifstream comm(std::string("/proc/") + ent->d_name + "/comm");
+
+        std::string name;
+        if (!std::getline(comm, name))
+            continue;
+
+        if (!name.empty() && name.back() == '\n')
+            name.pop_back();
+
+        if (name == wanted)
+        {
+            closedir(dir);
+            return ExistingProcess{pid};
+        }
+    }
+
+    closedir(dir);
+
+#elif defined(__APPLE__)
+
+    const pid_t self = getpid();
+
+    int count = proc_listpids(PROC_ALL_PIDS, 0, nullptr, 0);
+    if (count <= 0)
+        return std::nullopt;
+
+    std::vector<pid_t> pids(count);
+
+    count = proc_listpids(PROC_ALL_PIDS,
+                          0,
+                          pids.data(),
+                          static_cast<int>(pids.size() * sizeof(pid_t)));
+
+    count /= sizeof(pid_t);
+
+    char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
+
+    for (int i = 0; i < count; ++i)
+    {
+        pid_t pid = pids[i];
+
+        if (pid == 0 || pid == self)
+            continue;
+
+        if (proc_pidpath(pid, pathbuf, sizeof(pathbuf)) <= 0)
+            continue;
+
+        if (std::filesystem::path(pathbuf).filename() == wanted)
+            return ExistingProcess{pid};
+    }
+
+#else
+#error Unsupported platform
+#endif
+
+    return std::nullopt;
+}
+
+void handle_existing_process(std::stop_token stop_token, const std::string_view executable_name, std::shared_ptr<spdlog::logger> logger)
+{
+    logger->info("Searching for existing process: {}", executable_name);
+
+    auto existing = find_existing_process(executable_name);
+    if (!existing)
+    {
+        logger->info("No existing process found for {}", executable_name);
+        return;
+    }
+
+    logger->info("Found existing process: {}:{}", executable_name, existing.value().pid);
+
+    while(!stop_token.stop_requested())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
 bool ProcessRunner::start()
 {
     env = make_inherited_env(config.environment);
@@ -53,6 +206,11 @@ bool ProcessRunner::start()
 
         while (!stop_token.stop_requested())
         {
+            if (config.use_existing_process && !is_restart)
+            {
+                handle_existing_process(stop_token, config.commandLine[0], logger);
+            }
+
             if (is_restart)
             {
                 logger->info("Auto-restarting process: {}", config.commandLine[0]);

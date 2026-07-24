@@ -18,6 +18,7 @@ public:
         TinyProcessLib::Process::environment_type environment = {};
         bool kill_parent_on_child_exit = false;
         bool auto_restart = false;
+        bool use_existing_process = false;
     };
 
     ProcessRunner(Config config, std::shared_ptr<spdlog::logger> logger)
