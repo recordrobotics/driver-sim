@@ -68,6 +68,13 @@ bimg::ImageContainer *readImage(const char *path)
     {
         uint32_t size = (uint32_t)bx::getSize(&reader);
 
+        if(size == 0)
+        {
+            logger->error("Image file is empty: {}", path);
+            bx::close(&reader);
+            return nullptr;
+        }
+
         char *data = (char *)bx::alloc(&allocator, size);
         bx::read(&reader, data, size, &err);
 
