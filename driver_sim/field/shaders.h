@@ -37,9 +37,9 @@
 #include <essl/fs_pbr_oit.sc.bin.h>
 #include <spirv/fs_pbr_oit.sc.bin.h>
 
-#include <glsl/fs_pbr_oit_depth_post_pass.sc.bin.h>
-#include <essl/fs_pbr_oit_depth_post_pass.sc.bin.h>
-#include <spirv/fs_pbr_oit_depth_post_pass.sc.bin.h>
+#include <glsl/fs_oit_moments.sc.bin.h>
+#include <essl/fs_oit_moments.sc.bin.h>
+#include <spirv/fs_oit_moments.sc.bin.h>
 
 #include <glsl/vs_pass.sc.bin.h>
 #include <essl/vs_pass.sc.bin.h>
@@ -135,7 +135,7 @@
 #include <dxbc/fs_pbr_textured.sc.bin.h>
 #include <dxbc/fs_pbr_apriltag.sc.bin.h>
 #include <dxbc/fs_pbr_oit.sc.bin.h>
-#include <dxbc/fs_pbr_oit_depth_post_pass.sc.bin.h>
+#include <dxbc/fs_oit_moments.sc.bin.h>
 
 #include <dxbc/vs_pass.sc.bin.h>
 #include <dxbc/fs_present.sc.bin.h>
@@ -173,7 +173,7 @@
 #include <dxil/fs_pbr_textured.sc.bin.h>
 #include <dxil/fs_pbr_apriltag.sc.bin.h>
 #include <dxil/fs_pbr_oit.sc.bin.h>
-#include <dxil/fs_pbr_oit_depth_post_pass.sc.bin.h>
+#include <dxil/fs_oit_moments.sc.bin.h>
 
 #include <dxil/vs_pass.sc.bin.h>
 #include <dxil/fs_present.sc.bin.h>
@@ -211,7 +211,7 @@
 #include <metal/fs_pbr_textured.sc.bin.h>
 #include <metal/fs_pbr_apriltag.sc.bin.h>
 #include <metal/fs_pbr_oit.sc.bin.h>
-#include <metal/fs_pbr_oit_depth_post_pass.sc.bin.h>
+#include <metal/fs_oit_moments.sc.bin.h>
 
 #include <metal/vs_pass.sc.bin.h>
 #include <metal/fs_present.sc.bin.h>

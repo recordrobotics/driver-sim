@@ -681,6 +681,9 @@ float rcp(float _a) { return 1.0/_a; }
 vec2  rcp(vec2  _a) { return vec2(1.0)/_a; }
 vec3  rcp(vec3  _a) { return vec3(1.0)/_a; }
 vec4  rcp(vec4  _a) { return vec4(1.0)/_a; }
+
+float mad(float _a, float _b, float _c) { return _a * _b + _c; }
+
 #endif // BGFX_SHADER_LANGUAGE_*
 
 vec2 vec2_splat(float _x) { return vec2(_x, _x); }

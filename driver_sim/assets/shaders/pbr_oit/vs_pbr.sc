@@ -22,11 +22,11 @@ void main()
 	v_viewNormal = normalize(mul(u_modelView, vec4(normal, 0.0))).xyz;
 
 	if(writeMotionVectors) {
-		vec4 previousWorldPosition = mul(u_model[1], vec4(a_position, 1.0) );
-		vec4 previousPosition = mul(u_previousViewProj, previousWorldPosition );
+		vec4 previousPosition = mul(u_previousViewProj, mul(u_model[1], vec4(a_position, 1.0) ));
 		v_previousPosition = previousPosition;
-		v_currentPosition = position;
 	}
+
+	v_currentPosition = position;
 
 	v_worldPosition = worldPosition.xyz;
 

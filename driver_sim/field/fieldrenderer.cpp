@@ -120,7 +120,7 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] =
         BGFX_EMBEDDED_SHADER(fs_pbr_textured),
         BGFX_EMBEDDED_SHADER(fs_pbr_apriltag),
         BGFX_EMBEDDED_SHADER(fs_pbr_oit),
-        BGFX_EMBEDDED_SHADER(fs_pbr_oit_depth_post_pass),
+        BGFX_EMBEDDED_SHADER(fs_oit_moments),
 
         BGFX_EMBEDDED_SHADER(vs_pass),
         BGFX_EMBEDDED_SHADER(fs_present),
@@ -218,8 +218,9 @@ enum class DebugView
     PBRData,
     Velocity,
     Depth,
+    OITMoments,
+    OITTotalDepth,
     OITAccum,
-    OITReveal,
     MotionBlurVelocity,
     MotionBlurTileMaxX,
     MotionBlurTileMaxY,
@@ -246,8 +247,9 @@ static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBU
     "PBR Data",
     "Velocity",
     "Depth",
+    "OIT Moments",
+    "OIT Total Depth",
     "OIT Accum",
-    "OIT Reveal",
     "Motion Blur Velocity",
     "Motion Blur Tile Max X",
     "Motion Blur Tile Max Y",
@@ -322,8 +324,8 @@ using blackboard::gui::string_hex_to_rgba_float_array;
 
 static constexpr uint16_t VIEW_GBUFFER = 0;
 static constexpr uint16_t VIEW_GTAO = 1;
-static constexpr uint16_t VIEW_OIT = 2;
-static constexpr uint16_t VIEW_OIT_DEPTH_POST_PASS = 3;
+static constexpr uint16_t VIEW_OIT_MOMENTS = 2;
+static constexpr uint16_t VIEW_OIT = 3;
 static constexpr uint16_t VIEW_POSTPROCESS = 4;
 static constexpr uint16_t VIEW_BLIT = 5;
 
@@ -409,8 +411,8 @@ bgfx::ProgramHandle programPBRLed = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programPBRApriltag = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle programOitInstanced = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programOitDepthPostPass = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programOitDepthPostPassInstanced = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programOitMoments = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle programOitMomentsInstanced = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle tonemapProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle exposureProgram = BGFX_INVALID_HANDLE;
@@ -436,8 +438,9 @@ bgfx::ProgramHandle XeGTAO_DenoiseProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle XeGTAO_debugNormalsProgram = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle XeGTAO_debugVisibilityProgram = BGFX_INVALID_HANDLE;
 
+Texture gMomentsTex;
+Texture gTotalDepthTex;
 Texture gAccumTex;
-Texture gRevealTex;
 
 Texture gbufAlbedo;
 Texture gbufEmission;
@@ -476,7 +479,7 @@ Texture tonemappingLut;
 
 FrameBuffer gBufFbo;
 FrameBuffer gOitFbo;
-FrameBuffer gOitDepthPostPassFbo;
+FrameBuffer gOitMomentsFbo;
 
 bgfx::UniformHandle s_tex;
 bgfx::UniformHandle s_taaHistory;
@@ -484,6 +487,9 @@ bgfx::UniformHandle s_taaHistory;
 bgfx::UniformHandle s_color;
 bgfx::UniformHandle s_velocity;
 bgfx::UniformHandle s_depth;
+
+bgfx::UniformHandle s_momentsTex;
+bgfx::UniformHandle s_totalDepthTex;
 
 bgfx::UniformHandle s_mbTileMaxX;
 bgfx::UniformHandle s_mbTileMax;
@@ -533,8 +539,8 @@ struct AprilTagInstanceData
 {
     std::array<float, 16> modelMatrix{};
 
-    float& id() { return modelMatrix[15]; }
-    const float& id() const { return modelMatrix[15]; }
+    float &id() { return modelMatrix[15]; }
+    const float &id() const { return modelMatrix[15]; }
 };
 
 std::vector<AprilTagInstanceData> aprilTags;
@@ -594,6 +600,21 @@ void initPBROIT(uint16_t width, uint16_t height)
     {
         logger->error("Failed to create uniform for led colors texture.");
         throw std::runtime_error("Failed to create uniform for led colors texture.");
+    }
+
+
+    s_momentsTex = bgfx::createUniform("s_momentsTex", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_momentsTex))
+    {
+        logger->error("Failed to create uniform for moments texture.");
+        throw std::runtime_error("Failed to create uniform for moments texture.");
+    }
+
+    s_totalDepthTex = bgfx::createUniform("s_totalDepthTex", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_totalDepthTex))
+    {
+        logger->error("Failed to create uniform for total depth texture.");
+        throw std::runtime_error("Failed to create uniform for total depth texture.");
     }
 
     u_baseColor = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
@@ -736,24 +757,24 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create OIT instanced rendering program.");
     }
 
-    programOitDepthPostPass =
+    programOitMoments =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_oit_moments"), true);
 
-    if (!bgfx::isValid(programOitDepthPostPass))
+    if (!bgfx::isValid(programOitMoments))
     {
-        logger->error("Failed to create OIT depth post-pass program.");
-        throw std::runtime_error("Failed to create OIT depth post-pass program.");
+        logger->error("Failed to create OIT moments program.");
+        throw std::runtime_error("Failed to create OIT moments program.");
     }
 
-    programOitDepthPostPassInstanced =
+    programOitMomentsInstanced =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit_depth_post_pass"), true);
+                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_oit_moments"), true);
 
-    if (!bgfx::isValid(programOitDepthPostPassInstanced))
+    if (!bgfx::isValid(programOitMomentsInstanced))
     {
-        logger->error("Failed to create OIT instanced depth post-pass program.");
-        throw std::runtime_error("Failed to create OIT instanced depth post-pass program.");
+        logger->error("Failed to create OIT instanced moments program.");
+        throw std::runtime_error("Failed to create OIT instanced moments program.");
     }
 
     oitCompProgram =
@@ -775,21 +796,30 @@ void initPBROIT(uint16_t width, uint16_t height)
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     TEXTURE(
-        gRevealTex,
+        gMomentsTex,
         width, height,
         1.0f, 1.0f,
         false,
         1,
-        bgfx::TextureFormat::R16F,
+        bgfx::TextureFormat::RGBA32F,
+        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+
+    TEXTURE(
+        gTotalDepthTex,
+        width, height,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::R32F,
         BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     FRAMEBUFFER(
         gOitFbo,
-        &gAccumTex, &gRevealTex, &gbufDepth);
+        &gAccumTex, &gbufDepth);
 
     FRAMEBUFFER(
-        gOitDepthPostPassFbo,
-        &gbufVelocity, &gbufDepth);
+        gOitMomentsFbo,
+        &gMomentsTex, &gTotalDepthTex, &gbufDepth);
 
     TEXTURE(
         gOutputColor,
@@ -869,7 +899,7 @@ void initTonemap()
     }
 
     tonemapProgram =
-       bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_tonemap"), true);
+        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_tonemap"), true);
 
     if (!bgfx::isValid(tonemapProgram))
     {
@@ -1208,23 +1238,23 @@ void initBloom(uint16_t width, uint16_t height)
 }
 
 // From https://www.shadertoy.com/view/3tB3z3 - except we're using R2 here
-#define XE_HILBERT_LEVEL    6U
-#define XE_HILBERT_WIDTH    ( (1U << XE_HILBERT_LEVEL) )
-#define XE_HILBERT_AREA     ( XE_HILBERT_WIDTH * XE_HILBERT_WIDTH )
-inline uint32_t HilbertIndex( uint32_t posX, uint32_t posY )
-{   
+#define XE_HILBERT_LEVEL 6U
+#define XE_HILBERT_WIDTH ((1U << XE_HILBERT_LEVEL))
+#define XE_HILBERT_AREA (XE_HILBERT_WIDTH * XE_HILBERT_WIDTH)
+inline uint32_t HilbertIndex(uint32_t posX, uint32_t posY)
+{
     uint32_t index = 0U;
-    for( uint32_t curLevel = XE_HILBERT_WIDTH/2U; curLevel > 0U; curLevel /= 2U )
+    for (uint32_t curLevel = XE_HILBERT_WIDTH / 2U; curLevel > 0U; curLevel /= 2U)
     {
-        uint32_t regionX = ( posX & curLevel ) > 0U;
-        uint32_t regionY = ( posY & curLevel ) > 0U;
-        index += curLevel * curLevel * ( (3U * regionX) ^ regionY);
-        if( regionY == 0U )
+        uint32_t regionX = (posX & curLevel) > 0U;
+        uint32_t regionY = (posY & curLevel) > 0U;
+        index += curLevel * curLevel * ((3U * regionX) ^ regionY);
+        if (regionY == 0U)
         {
-            if( regionX == 1U )
+            if (regionX == 1U)
             {
-                posX = uint32_t( (XE_HILBERT_WIDTH - 1U) ) - posX;
-                posY = uint32_t( (XE_HILBERT_WIDTH - 1U) ) - posY;
+                posX = uint32_t((XE_HILBERT_WIDTH - 1U)) - posX;
+                posY = uint32_t((XE_HILBERT_WIDTH - 1U)) - posY;
             }
 
             uint32_t temp = posX;
@@ -1330,14 +1360,14 @@ void initGTAO(uint16_t width, uint16_t height)
 
     // Hilbert look-up texture! It's a 64 x 64 uint16 texture generated using HilbertIndex
     {
-        uint16_t * data = new uint16_t[64*64];
-        for( int x = 0; x < 64; x++ )
+        uint16_t *data = new uint16_t[64 * 64];
+        for (int x = 0; x < 64; x++)
         {
-            for( int y = 0; y < 64; y++ )
+            for (int y = 0; y < 64; y++)
             {
-                uint32_t r2index = HilbertIndex( x, y );
-                assert( r2index < 65536 );
-                data[ x + 64*y ] = (uint16_t)r2index;
+                uint32_t r2index = HilbertIndex(x, y);
+                assert(r2index < 65536);
+                data[x + 64 * y] = (uint16_t)r2index;
             }
         }
 
@@ -1349,8 +1379,7 @@ void initGTAO(uint16_t width, uint16_t height)
             1,
             bgfx::TextureFormat::R16U,
             BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
-            bgfx::copy(data, 64*64*sizeof(uint16_t))
-            );
+            bgfx::copy(data, 64 * 64 * sizeof(uint16_t)));
 
         delete[] data;
     }
@@ -1401,7 +1430,7 @@ static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
 }
 
 /**
- * 
+ *
  */
 typedef struct Transform
 {
@@ -1422,7 +1451,7 @@ typedef struct Transform
         bx::mtxFromQuaternion(rotationMatrix, rotation);
         float translationMatrix[16];
         bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
-        if(modelMatrix == nullptr && parentMatrix == nullptr)
+        if (modelMatrix == nullptr && parentMatrix == nullptr)
         {
             bx::mtxMul(matrix, rotationMatrix, translationMatrix);
         }
@@ -1430,11 +1459,11 @@ typedef struct Transform
         {
             float relativeMatrix[16];
             bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
-            if(modelMatrix == nullptr)
+            if (modelMatrix == nullptr)
             {
                 bx::mtxMul(matrix, relativeMatrix, parentMatrix);
             }
-            else if(parentMatrix == nullptr)
+            else if (parentMatrix == nullptr)
             {
                 bx::mtxMul(matrix, modelMatrix, relativeMatrix);
             }
@@ -1560,11 +1589,11 @@ typedef struct RobotModel
 
     // NT-dependent materials use per-instance robot data
     // Meshes with these materials can't be instanced
-    Material* rslMaterial = nullptr;
-    Material* bumperMaterial = nullptr;
-    Material* ledMaterial = nullptr;
+    Material *rslMaterial = nullptr;
+    Material *bumperMaterial = nullptr;
+    Material *ledMaterial = nullptr;
 
-    bool isInstanceable(const Material* material) const 
+    bool isInstanceable(const Material *material) const
     {
         return material != rslMaterial && material != bumperMaterial && material != ledMaterial;
     }
@@ -1578,7 +1607,7 @@ typedef struct RobotModel
 
 typedef struct RobotData
 {
-    RobotModel* model;
+    RobotModel *model;
 
     DynamicObjectData dynamicData;
     std::vector<DynamicObjectData> components;
@@ -1615,7 +1644,7 @@ typedef struct RobotData
     RobotData(RobotData &&) noexcept = default;
     RobotData &operator=(RobotData &&) noexcept = default;
 
-    RobotData(RobotModel* model)
+    RobotData(RobotModel *model)
         : model(model), components(model->components.size()), bumperBaseColor(model->bumperModelColor)
     {
         uint16_t ledCount = static_cast<uint16_t>(floorf(model->ledCount));
@@ -1627,8 +1656,7 @@ typedef struct RobotData
             false,
             1,
             bgfx::TextureFormat::RGBA8,
-            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
-            );
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
     }
 
     void update(int currentDataUpdateIndex, float deltaTime)
@@ -1644,7 +1672,7 @@ typedef struct RobotData
 
             // Update component poses
             auto componentPoses = componentPosesSub.GetAtomic();
-            
+
             float robotOriginMtx[16];
             float rotationMatrix[16];
             bx::mtxFromQuaternion(rotationMatrix, dynamicData.lastRotation);
@@ -1672,20 +1700,20 @@ typedef struct RobotData
             }
 
             // Update RSL state
-            if(rslStateSub.Exists())
+            if (rslStateSub.Exists())
             {
                 rslEmissionStrength = rslStateSub.GetAtomic().value ? model->rslOnEmissionStrength : 0.0f;
             }
 
             // Update bumper color
-            if(allianceStationSub.Exists())
+            if (allianceStationSub.Exists())
             {
                 int allianceStation = allianceStationSub.GetAtomic().value;
-                if((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && model->bumperRedColor.has_value()) // Red
+                if ((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && model->bumperRedColor.has_value()) // Red
                 {
                     bumperBaseColor = model->bumperRedColor.value();
                 }
-                else if((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && model->bumperBlueColor.has_value()) // Blue
+                else if ((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && model->bumperBlueColor.has_value()) // Blue
                 {
                     bumperBaseColor = model->bumperBlueColor.value();
                 }
@@ -1696,15 +1724,15 @@ typedef struct RobotData
             }
 
             // Update LED colors
-            if(ledColorsSub.Exists())
+            if (ledColorsSub.Exists())
             {
                 std::vector<std::string> ledColors = ledColorsSub.GetAtomic().value;
-                for(uint16_t i = 0; i < ledColorTexture.width; ++i)
+                for (uint16_t i = 0; i < ledColorTexture.width; ++i)
                 {
-                    if(i < ledColors.size())
+                    if (i < ledColors.size())
                     {
                         std::string colorStr = ledColors[i];
-                        if(colorStr.length() == 7 && colorStr[0] == '#')
+                        if (colorStr.length() == 7 && colorStr[0] == '#')
                         {
                             uint8_t r = std::stoi(colorStr.substr(1, 2), nullptr, 16);
                             uint8_t g = std::stoi(colorStr.substr(3, 2), nullptr, 16);
@@ -1726,7 +1754,7 @@ typedef struct RobotData
             }
             else
             {
-                for(uint16_t i = 0; i < ledColorTexture.width; ++i)
+                for (uint16_t i = 0; i < ledColorTexture.width; ++i)
                 {
                     ledColorData[i * 4 + 0] = 0;
                     ledColorData[i * 4 + 1] = 0;
@@ -1800,7 +1828,7 @@ typedef struct GamePieceData
 } GamePieceData;
 
 std::vector<RobotModel> robotModels;
-std::unordered_map<RobotModel*, std::vector<RobotData>> robots;
+std::unordered_map<RobotModel *, std::vector<RobotData>> robots;
 std::vector<GamePieceData> gamePieces;
 
 static std::function<void()> restartSimulationCallback;
@@ -1982,7 +2010,7 @@ void loadFieldModel()
 
         std::unordered_map<std::string, std::string> tags;
 
-        if(j.contains("gamePieces"))
+        if (j.contains("gamePieces"))
         {
             for (const auto &gamePiece : j["gamePieces"])
             {
@@ -2007,7 +2035,7 @@ void loadFieldModel()
             }
         }
 
-        if(j.contains("aprilTags"))
+        if (j.contains("aprilTags"))
         {
             for (const auto &aprilTag : j["aprilTags"])
             {
@@ -2016,7 +2044,7 @@ void loadFieldModel()
                 std::string family = variant.substr(0, variant.find('-'));
                 std::string size = variant.substr(variant.find('-') + 1, variant.find("in") - variant.find('-') - 1);
 
-                if(family != "36h11")
+                if (family != "36h11")
                 {
                     logger->warn("AprilTag family {} is not supported. Only 36h11 is supported.", family);
                     continue;
@@ -2024,7 +2052,7 @@ void loadFieldModel()
 
                 float tagSizeInches = std::stof(size);
                 float tagSizeMeters = tagSizeInches * INCHES_TO_METERS;
-                
+
                 float scaleMtx[16];
                 bx::mtxScale(scaleMtx, 1.0f, tagSizeMeters, tagSizeMeters);
                 float rotationMtx[16];
@@ -2049,7 +2077,7 @@ void loadFieldModel()
             }
         }
 
-        if(j.contains("driverStations"))
+        if (j.contains("driverStations"))
         {
             driverStationCameraPositions = j["driverStations"].get<std::vector<bx::Vec3>>();
         }
@@ -2125,7 +2153,7 @@ void loadRobotModel()
             });
         }
 
-        RobotModel& robotModel = robotModels.emplace_back(std::to_array(robotModelMatrix), components);
+        RobotModel &robotModel = robotModels.emplace_back(std::to_array(robotModelMatrix), components);
 
         std::vector<std::string> rslNodeNames = j.value("rsl", std::vector<std::string>());
 
@@ -2170,7 +2198,7 @@ void loadRobotModel()
         }
 
         std::vector<std::string> ledNodeNames;
-        if(j.contains("led"))
+        if (j.contains("led"))
         {
             const auto &ledObject = j["led"];
             if (ledObject.contains("name"))
@@ -2182,7 +2210,7 @@ void loadRobotModel()
                 logger->warn("LED object exists but does not contain a name field.");
             }
 
-            if(ledObject.contains("count"))
+            if (ledObject.contains("count"))
             {
                 robotModel.ledCount = ledObject["count"].get<float>();
             }
@@ -2191,7 +2219,7 @@ void loadRobotModel()
                 logger->warn("LED object exists but does not contain a count field.");
             }
 
-            if(ledObject.contains("aspectRatio"))
+            if (ledObject.contains("aspectRatio"))
             {
                 robotModel.ledAspectRatio = ledObject["aspectRatio"].get<float>();
             }
@@ -2311,7 +2339,6 @@ void field::init(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create present program.");
     }
 
-
     debugNormalsProgram =
         bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_debug_normals"), true);
 
@@ -2353,19 +2380,20 @@ void field::startNTClient()
     ntInst.StartClient4("driver-sim");
 }
 
+constexpr float CAMERA_LINEAR_FAR = 100.0f;
+
 // assumes reverse z, infinite far
 void updateInfo(bgfx::Encoder *encoder, float cameraNear, float proj[16])
 {
     float info[8] = {
         cameraNear,
+        std::log(cameraNear),
+        CAMERA_LINEAR_FAR - cameraNear,
+        std::log(CAMERA_LINEAR_FAR) - std::log(cameraNear),
         2.0f / proj[0],
         -2.0f / proj[5],
         -1.0f / proj[0],
-        1.0f / proj[5],
-        0.0f,
-        0.0f,
-        0.0f
-    };
+        1.0f / proj[5]};
     encoder->setUniform(u_info, info, 2);
 }
 
@@ -2425,6 +2453,7 @@ void screenSpaceQuad(bool _originBottomLeft, bgfx::Encoder *encoder, float _widt
 float previousViewProj[16] = {0};
 float previousView[16] = {0};
 float previousProj[16] = {0};
+std::array<float, 4> jitterData;
 float curTime = 0.0f;
 float previousJitterX = 0.0f;
 float previousJitterY = 0.0f;
@@ -2458,7 +2487,8 @@ static constexpr uint32_t HALTON_SAMPLES = 8;
 void ensureTextures(uint16_t width, uint16_t height)
 {
     gAccumTex.beginFrame();
-    gRevealTex.beginFrame();
+    gMomentsTex.beginFrame();
+    gTotalDepthTex.beginFrame();
 
     gbufAlbedo.beginFrame();
     gbufEmission.beginFrame();
@@ -2486,10 +2516,11 @@ void ensureTextures(uint16_t width, uint16_t height)
     gGTAOFinalAOTerm.beginFrame();
 
     gAccumTex.ensure(width, height);
-    gRevealTex.ensure(width, height);
+    gMomentsTex.ensure(width, height);
+    gTotalDepthTex.ensure(width, height);
 
     gOitFbo.ensure(width, height);
-    gOitDepthPostPassFbo.ensure(width, height);
+    gOitMomentsFbo.ensure(width, height);
 
     gbufAlbedo.ensure(width, height);
     gbufEmission.ensure(width, height);
@@ -2529,7 +2560,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gGTAOFinalAOTerm.ensure(width, height);
 }
 
-void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh)
+void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepass = true)
 {
     float pbrData[4] = {
         (mesh.material.writesObjectMotionVectors && settings::writeObjectMotionVectors) ? 1.0f : 0.0f,
@@ -2540,14 +2571,17 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh)
     if (mesh.material.type == MaterialType::Transparent)
     {
         encoder->setState(
-            BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_INDEPENDENT |
-                BGFX_STATE_DEPTH_TEST_GREATER
-                // RT0
-                | BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE,
-                                        BGFX_STATE_BLEND_ONE),
-            // RT1
-            BGFX_STATE_BLEND_FUNC_RT_1(BGFX_STATE_BLEND_ZERO,
-                                       BGFX_STATE_BLEND_INV_SRC_ALPHA));
+            BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+            BGFX_STATE_DEPTH_TEST_GREATER |
+            // Additive blending
+            BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE,
+                                    BGFX_STATE_BLEND_ONE));
+        if(!isTransparentPrepass)
+        {
+            // Use moments prepass for OIT
+            encoder->setTexture(0, s_momentsTex, gMomentsTex.handle);
+            encoder->setTexture(1, s_totalDepthTex, gTotalDepthTex.handle);
+        }
     }
     else
     {
@@ -2555,7 +2589,8 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh)
             BGFX_STATE_WRITE_RGB |
             BGFX_STATE_WRITE_A |
             BGFX_STATE_DEPTH_TEST_GREATER |
-            BGFX_STATE_WRITE_Z);
+            BGFX_STATE_WRITE_Z |
+            BGFX_STATE_CULL_CW);
     }
 
     encoder->setVertexBuffer(0, mesh.vertexBuffer);
@@ -2565,6 +2600,7 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh)
     encoder->setUniform(u_emissionColor, SRGBToLinear(mesh.material.emissionColor).data());
     encoder->setUniform(u_previousViewProj, previousViewProj);
     encoder->setUniform(u_pbrData, pbrData);
+    encoder->setUniform(u_jitter, jitterData.data());
 
     if (mesh.material.texture == "carpet")
     {
@@ -2575,7 +2611,7 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh)
     {
         encoder->setTexture(0, s_apriltags, apriltagTexture.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     }
-    else if(mesh.material.texture == "led")
+    else if (mesh.material.texture == "led")
     {
         encoder->setTexture(0, s_ledMask, ledMaskTexture.handle, BGFX_SAMPLER_UVW_CLAMP);
     }
@@ -2590,6 +2626,9 @@ void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[2][16])
         encoder->setTransform(modelMatrix, 2);
         if (mesh.material.type == MaterialType::Transparent)
         {
+            encoder->submit(VIEW_OIT_MOMENTS, programOitMoments);
+            setupMesh(encoder, mesh, false);
+            encoder->setTransform(modelMatrix, 2);
             encoder->submit(VIEW_OIT, programOit);
         }
         else
@@ -2600,37 +2639,34 @@ void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[2][16])
 }
 
 template <std::ranges::forward_range R>
-void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel* robotModel, R &&meshes, const std::vector<std::pair<const InstanceData&, const RobotData&>>& instances)
+void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel *robotModel, R &&meshes, const std::vector<std::pair<const InstanceData &, const RobotData &>> &instances)
 {
-    auto instanceableMeshes = meshes | std::views::filter([robotModel](const Mesh& mesh) {
-        return robotModel->isInstanceable(&mesh.material);
-    });
+    auto instanceableMeshes = meshes | std::views::filter([robotModel](const Mesh &mesh)
+                                                          { return robotModel->isInstanceable(&mesh.material); });
 
-    auto nonInstanceableMeshes = meshes | std::views::filter([robotModel](const Mesh& mesh) {
-        return !robotModel->isInstanceable(&mesh.material);
-    });
+    auto nonInstanceableMeshes = meshes | std::views::filter([robotModel](const Mesh &mesh)
+                                                             { return !robotModel->isInstanceable(&mesh.material); });
 
     std::vector<InstanceData> instanceData;
     instanceData.reserve(instances.size());
-    std::ranges::transform(instances, std::back_inserter(instanceData), [](const auto &pair) {
-        return pair.first;
-    });
+    std::ranges::transform(instances, std::back_inserter(instanceData), [](const auto &pair)
+                           { return pair.first; });
 
     drawMeshesInstanced(encoder, instanceableMeshes, instanceData);
 
-    if(std::ranges::distance(nonInstanceableMeshes) == 0)
+    if (std::ranges::distance(nonInstanceableMeshes) == 0)
     {
         return;
     }
 
     for (const auto &instance : instances)
     {
-        if(robotModel->rslMaterial)
+        if (robotModel->rslMaterial)
         {
             robotModel->rslMaterial->emissionColor[3] = instance.second.rslEmissionStrength;
         }
 
-        if(robotModel->bumperMaterial)
+        if (robotModel->bumperMaterial)
         {
             robotModel->bumperMaterial->baseColor = instance.second.bumperBaseColor;
         }
@@ -2646,23 +2682,24 @@ void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel* robotModel, R &&meshes,
 
             if (mesh.material.type == MaterialType::Transparent)
             {
+                encoder->submit(VIEW_OIT_MOMENTS, programOitMoments);
+                setupMesh(encoder, mesh, false);
+                encoder->setTransform(matrices, 2);
                 encoder->submit(VIEW_OIT, programOit);
             }
-            else if(mesh.material.texture == "led")
+            else if (mesh.material.texture == "led")
             {
                 float ledData[4] = {
                     robotModel->ledCount,
                     robotModel->ledAspectRatio,
                     0.0f,
-                    0.0f
-                };
+                    0.0f};
                 encoder->setUniform(u_ledData, ledData);
 
                 bgfx::updateTexture2D(
                     instance.second.ledColorTexture.handle,
-                    0,0,0,0,instance.second.ledColorTexture.width,instance.second.ledColorTexture.height,
-                    bgfx::copy(instance.second.ledColorData.get(), static_cast<uint32_t>(instance.second.ledColorTexture.width * 4))
-                );
+                    0, 0, 0, 0, instance.second.ledColorTexture.width, instance.second.ledColorTexture.height,
+                    bgfx::copy(instance.second.ledColorData.get(), static_cast<uint32_t>(instance.second.ledColorTexture.width * 4)));
 
                 encoder->setTexture(1, s_ledColors, instance.second.ledColorTexture.handle, BGFX_SAMPLER_UVW_CLAMP);
 
@@ -2677,7 +2714,7 @@ void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel* robotModel, R &&meshes,
 }
 
 template <std::ranges::input_range R>
-void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes, const std::vector<InstanceData>& instanceData)
+void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes, const std::vector<InstanceData> &instanceData)
 {
     // figure out how big of a buffer is available
     uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(instanceData.size(), sizeof(InstanceData));
@@ -2694,6 +2731,9 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes, const std::vector<I
         encoder->setInstanceDataBuffer(&idb);
         if (mesh.material.type == MaterialType::Transparent)
         {
+            encoder->submit(VIEW_OIT_MOMENTS, programOitMomentsInstanced);
+            setupMesh(encoder, mesh, false);
+            encoder->setInstanceDataBuffer(&idb);
             encoder->submit(VIEW_OIT, programOitInstanced);
         }
         else
@@ -2704,30 +2744,30 @@ void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes, const std::vector<I
 }
 
 template <std::ranges::input_range R>
-void drawRobot(bgfx::Encoder *encoder, RobotModel* robotModel, R &&instances, const std::function<bool(const DynamicObjectData&)>& componentFilter)
+void drawRobot(bgfx::Encoder *encoder, RobotModel *robotModel, R &&instances, const std::function<bool(const DynamicObjectData &)> &componentFilter)
 {
-    if(instances.empty())
+    if (instances.empty())
     {
         return;
     }
 
-    std::vector<std::pair<const InstanceData&, const RobotData&>> robotInstances;
+    std::vector<std::pair<const InstanceData &, const RobotData &>> robotInstances;
     robotInstances.reserve(std::ranges::distance(instances));
-    for (auto& robot : instances)
+    for (auto &robot : instances)
     {
         robotInstances.emplace_back(robot.dynamicData.instanceData, robot);
     }
 
     drawRobotMeshes(encoder, robotModel, robotModel->meshes, robotInstances);
 
-    std::map<size_t, std::vector<std::pair<const InstanceData&, const RobotData&>>> componentInstancesMap;
+    std::map<size_t, std::vector<std::pair<const InstanceData &, const RobotData &>>> componentInstancesMap;
 
-    for(const auto& robot : instances)
+    for (const auto &robot : instances)
     {
-        for(size_t i = 0; i < robot.components.size(); ++i)
+        for (size_t i = 0; i < robot.components.size(); ++i)
         {
-            const auto& component = robot.components[i];
-            if(!componentFilter(component))
+            const auto &component = robot.components[i];
+            if (!componentFilter(component))
             {
                 continue;
             }
@@ -2736,27 +2776,27 @@ void drawRobot(bgfx::Encoder *encoder, RobotModel* robotModel, R &&instances, co
         }
     }
 
-    for(const auto& [index, componentInstances] : componentInstancesMap)
+    for (const auto &[index, componentInstances] : componentInstancesMap)
     {
-        if(componentInstances.empty())
+        if (componentInstances.empty())
         {
             continue;
         }
-        
-        if(index >= robotModel->components.size())
+
+        if (index >= robotModel->components.size())
         {
             logger->warn("Component index {} is out of bounds for robot model with {} components.", index, robotModel->components.size());
             continue;
         }
 
-        const auto& component = robotModel->components[index];
+        const auto &component = robotModel->components[index];
         drawRobotMeshes(encoder, robotModel, component.meshes, componentInstances);
     }
 }
 
 void drawAprilTags(bgfx::Encoder *encoder)
 {
-    if(aprilTags.empty())
+    if (aprilTags.empty())
     {
         return;
     }
@@ -2780,7 +2820,7 @@ int currentDataUpdateIndex = 0;
 
 void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic, std::string_view enabledTopic = "")
 {
-    RobotData& robot = robots[&robotModels[0]].emplace_back(&robotModels[0]);
+    RobotData &robot = robots[&robotModels[0]].emplace_back(&robotModels[0]);
 
     robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>(poseTopic);
     robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::ntPeriodic});
@@ -2796,7 +2836,7 @@ void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, 
     robot.ledColorsTopic = ntInst.GetStringArrayTopic(ledColorsTopic);
     robot.ledColorsSub = robot.ledColorsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
 
-    if(!enabledTopic.empty())
+    if (!enabledTopic.empty())
     {
         robot.enabledTopic = ntInst.GetBooleanTopic(enabledTopic);
         robot.enabledSub = robot.enabledTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
@@ -2829,7 +2869,7 @@ void field::render(const blackboard::app::Window &window)
 
     ImGui::Separator();
 
-    if(settings::enableMotionBlur)
+    if (settings::enableMotionBlur)
     {
         ImGui::Text("Motion Blur Settings");
         int tileSize = MB_TILE_SIZE;
@@ -2842,7 +2882,7 @@ void field::render(const blackboard::app::Window &window)
         ImGui::Separator();
     }
 
-    if(settings::enableBloom)
+    if (settings::enableBloom)
     {
         ImGui::Text("Bloom Settings");
         ImGui::SliderFloat("Threshold", &bloomThreshold, 0.0f, 8.0f);
@@ -2853,7 +2893,7 @@ void field::render(const blackboard::app::Window &window)
     ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
     ImGui::Separator();
 
-    if(settings::enableGTAO)
+    if (settings::enableGTAO)
     {
         ImGui::Text("GTAO Settings");
 
@@ -2933,17 +2973,16 @@ void field::render(const blackboard::app::Window &window)
     if (!createdRobotMeshBuffers && robotModelLoadingFuture.valid() &&
         robotModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
-        if(robotModels.size() > 0)
+        if (robotModels.size() > 0)
         {
             addRobot(
                 "/AdvantageKit/RealOutputs/RobotModel/Robot",
                 "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses",
                 "/AdvantageKit/SystemStats/RSLState",
                 "/AdvantageKit/DriverStation/AllianceStation",
-                "/AdvantageKit/RealOutputs/LedManager/HexStrings"
-            );
+                "/AdvantageKit/RealOutputs/LedManager/HexStrings");
 
-            for(size_t i = 0; i < 6; ++i)
+            for (size_t i = 0; i < 6; ++i)
             {
                 addRobot(
                     "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Pose",
@@ -2951,12 +2990,11 @@ void field::render(const blackboard::app::Window &window)
                     "/AdvantageKit/SystemStats/RSLState",
                     "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/AllianceStation",
                     "/AdvantageKit/RealOutputs/LedManager/HexStrings",
-                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Enabled"
-                );
+                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Enabled");
             }
         }
 
-        for(auto& model : robotModels)
+        for (auto &model : robotModels)
         {
             Mesh::createBuffersForMeshes(model.meshes);
             for (size_t i = 0; i < model.components.size(); i++)
@@ -2965,19 +3003,19 @@ void field::render(const blackboard::app::Window &window)
             }
 
             model.rslMaterial = Mesh::getTaggedMaterial(model.meshes, "rsl");
-            if(model.rslMaterial != nullptr)
+            if (model.rslMaterial != nullptr)
             {
                 model.rslOnEmissionStrength = model.rslMaterial->emissionColor[3];
             }
 
             model.bumperMaterial = Mesh::getTaggedMaterial(model.meshes, "bumper");
-            if(model.bumperMaterial != nullptr)
+            if (model.bumperMaterial != nullptr)
             {
                 model.bumperModelColor = model.bumperMaterial->baseColor;
             }
 
             model.ledMaterial = Mesh::getTaggedMaterial(model.meshes, "led");
-            if(model.ledMaterial != nullptr)
+            if (model.ledMaterial != nullptr)
             {
                 model.ledMaterial->texture = "led";
             }
@@ -2992,7 +3030,7 @@ void field::render(const blackboard::app::Window &window)
     curTime += deltaTime;
 
     // Dynamic objects
-    for (auto& [robotModel, instances] : robots)
+    for (auto &[robotModel, instances] : robots)
     {
         for (auto &robot : instances)
         {
@@ -3009,8 +3047,8 @@ void field::render(const blackboard::app::Window &window)
     {
         if (robotModels.size() > 0)
         {
-            auto& robotInstances = robots[&robotModels[0]];
-            if(robotInstances.size() > 0 && robotInstances[0].dynamicData.lastDataUpdate == currentDataUpdateIndex)
+            auto &robotInstances = robots[&robotModels[0]];
+            if (robotInstances.size() > 0 && robotInstances[0].dynamicData.lastDataUpdate == currentDataUpdateIndex)
             {
                 float translationMtx[16];
                 bx::mtxTranslate(translationMtx, robotInstances[0].dynamicData.lastPosition.x, robotInstances[0].dynamicData.lastPosition.y, robotInstances[0].dynamicData.lastPosition.z);
@@ -3030,19 +3068,24 @@ void field::render(const blackboard::app::Window &window)
             }
         }
     }
-    
+
     uint16_t m_width = window.width;
     uint16_t m_height = window.height;
 
     float view[16];
-    
-    if(cameraView == CameraView::DriverStation && robotModels.size() > 0)
+
+    if (cameraView == CameraView::DriverStation && robotModels.size() > 0)
     {
-        auto& robotInstances = robots[&robotModels[0]];
-        if(robotInstances.size() > 0 && robotInstances[0].allianceStationSub.Exists())
+        auto &robotInstances = robots[&robotModels[0]];
+        if (robotInstances.size() > 0 && robotInstances[0].allianceStationSub.Exists())
         {
             int allianceStation = robotInstances[0].allianceStationSub.GetAtomic().value;
-            int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation - 4; // 6 elements ordered [B1, B2, B3, R1, R2, R3]
+             // 6 elements ordered [B1, B2, B3, R1, R2, R3]
+            int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? 
+                                    allianceStation + 2 : 
+                               allianceStation >= 4 && allianceStation <= 6 ? 
+                                    allianceStation - 4 : 
+                                    0 /* fallback to 0 */;
             const bx::Vec3 at = bx::add(robotInstances[0].dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
             const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
 
@@ -3051,13 +3094,15 @@ void field::render(const blackboard::app::Window &window)
 
             float cameraDistance = bx::distance(eye, at);
             float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
-            if(targetDistance > 0.2f)
+            if (targetDistance > 0.2f)
             {
                 driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
             }
 
             bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
-        } else {
+        }
+        else
+        {
             updateOrbitCameraFromInput();
             const bx::Vec3 at = orbitCamera.target;
             const bx::Vec3 eye = getOrbitEye();
@@ -3069,7 +3114,9 @@ void field::render(const blackboard::app::Window &window)
             bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
             bx::mtxMul(view, orbitCamera.originTransform, lookAt);
         }
-    } else {
+    }
+    else
+    {
         updateOrbitCameraFromInput();
         const bx::Vec3 at = orbitCamera.target;
         const bx::Vec3 eye = getOrbitEye();
@@ -3125,8 +3172,7 @@ void field::render(const blackboard::app::Window &window)
         jitterIndex = (jitterIndex + 1) % HALTON_SAMPLES;
     }
 
-    float jitter[4] = {jitterX, jitterY, previousJitterX, previousJitterY};
-    encoder->setUniform(u_jitter, jitter);
+    jitterData = {jitterX, jitterY, previousJitterX, previousJitterY};
 
     // Light uniforms
     Vec3Padded lightPos[LIGHT_COUNT] = {
@@ -3163,19 +3209,24 @@ void field::render(const blackboard::app::Window &window)
     bgfx::setViewRect(VIEW_OIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_OIT, gOitFbo.handle);
     bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear accum to 0
-    bgfx::setPaletteColor(1, 1, 1, 1, 1); // Clear reveal to 1
     bgfx::setViewClear(VIEW_OIT,
                        BGFX_CLEAR_COLOR,
                        0.0f,
                        0,
-                       0,
-                       1);
+                       0);
 
-    // Transparent depth post-pass
-    bgfx::setViewName(VIEW_OIT_DEPTH_POST_PASS, "Field - OIT Depth Post-Pass");
-    bgfx::setViewTransform(VIEW_OIT_DEPTH_POST_PASS, view, proj);
-    bgfx::setViewRect(VIEW_OIT_DEPTH_POST_PASS, 0, 0, uint16_t(m_width), uint16_t(m_height));
-    bgfx::setViewFrameBuffer(VIEW_OIT_DEPTH_POST_PASS, gOitDepthPostPassFbo.handle);
+    // Transparent moments
+    bgfx::setViewName(VIEW_OIT_MOMENTS, "Field - OIT Moments");
+    bgfx::setViewTransform(VIEW_OIT_MOMENTS, view, proj);
+    bgfx::setViewRect(VIEW_OIT_MOMENTS, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    bgfx::setViewFrameBuffer(VIEW_OIT_MOMENTS, gOitMomentsFbo.handle);
+    bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear moments and totalDepth to 0
+    bgfx::setViewClear(VIEW_OIT_MOMENTS,
+                       BGFX_CLEAR_COLOR,
+                       0.0f,
+                       0,
+                       0,
+                       0);
 
     // Post processing
     bgfx::setViewName(VIEW_POSTPROCESS, "Field - Post Process");
@@ -3217,21 +3268,24 @@ void field::render(const blackboard::app::Window &window)
 
     if (createdRobotMeshBuffers)
     {
-        for (auto& [robotModel, instances] : robots) {
+        for (auto &[robotModel, instances] : robots)
+        {
             drawRobot(encoder, robotModel, instances | std::views::filter([](const RobotData &robot)
-                            { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; }),
-                            [](const DynamicObjectData& component) { return component.lastDataUpdate == currentDataUpdateIndex; });
+                                                                          { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; }),
+                      [](const DynamicObjectData &component)
+                      { return component.lastDataUpdate == currentDataUpdateIndex; });
         }
     }
 
     // always clear OIT buffers
     encoder->touch(VIEW_OIT);
+    encoder->touch(VIEW_OIT_MOMENTS);
 
     int xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     int yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
     // GTAO
-    if(settings::enableGTAO)
+    if (settings::enableGTAO)
     {
         // force unbind gbuffer view fbo
         encoder->touch(VIEW_GTAO);
@@ -3241,7 +3295,7 @@ void field::render(const blackboard::app::Window &window)
             gtaoRadiusMultiplier,
             gtaoEffectFalloffRange,
             float(gtaoNoiseIndex) + 0.5f,
-        
+
             gtaoSampleDistributionPower,
             gtaoThinOccluderCompensation,
             2.0f / (proj[0] * float(m_width)),
@@ -3250,8 +3304,7 @@ void field::render(const blackboard::app::Window &window)
             gtaoDepthMipSamplingOffset,
             gtaoFinalValuePower,
             gtaoDenoiseBlurBeta,
-            0.0f
-        };
+            0.0f};
 
         if (!freezeTemporalEffects)
         {
@@ -3296,20 +3349,19 @@ void field::render(const blackboard::app::Window &window)
         settings::enableGTAO ? gtaoIntensity : 0.0f,
         settings::enableGTAO ? (gtaoIntensity * gtaoDirectIntensity) : 0.0f,
         settings::enableGTAO ? (gtaoIntensity * gtaoBentNormalIntensity) : 0.0f,
-        0.0f
-    };
+        0.0f};
 
     encoder->setUniform(u_skyColor, skyColor.data());
     encoder->setUniform(u_gtaoIntensity, gtaoIntensityField);
+    encoder->setUniform(u_jitter, jitterData.data());
     encoder->setImage(0, gAccumTex.handle, 0, bgfx::Access::Read);
-    encoder->setImage(1, gRevealTex.handle, 0, bgfx::Access::Read);
-    encoder->setImage(2, gbufAlbedo.handle, 0, bgfx::Access::Read);
-    encoder->setImage(3, gbufEmission.handle, 0, bgfx::Access::Read);
-    encoder->setImage(4, gbufNormal.handle, 0, bgfx::Access::Read);
-    encoder->setImage(5, gbufPBRData.handle, 0, bgfx::Access::Read);
-    encoder->setImage(6, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Read);
-    encoder->setImage(7, gOutputColor.handle, 0, bgfx::Access::Write);
-    encoder->setTexture(8, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+    encoder->setImage(1, gbufAlbedo.handle, 0, bgfx::Access::Read);
+    encoder->setImage(2, gbufEmission.handle, 0, bgfx::Access::Read);
+    encoder->setImage(3, gbufNormal.handle, 0, bgfx::Access::Read);
+    encoder->setImage(4, gbufPBRData.handle, 0, bgfx::Access::Read);
+    encoder->setImage(5, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Read);
+    encoder->setImage(6, gOutputColor.handle, 0, bgfx::Access::Write);
+    encoder->setTexture(7, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     encoder->dispatch(VIEW_POSTPROCESS, oitCompProgram, xGroups, yGroups);
 
     // Motion blur Velocity
@@ -3344,6 +3396,7 @@ void field::render(const blackboard::app::Window &window)
     encoder->setUniform(u_mbVelocityData, &mbVelocityData, 3);
     encoder->setUniform(u_previousView, previousView);
     encoder->setUniform(u_previousProj, previousProj);
+    encoder->setUniform(u_jitter, jitterData.data());
     encoder->setTexture(0, s_depth, gbufDepth.handle);
     encoder->setTexture(1, s_velocity, gbufVelocity.handle);
     encoder->setImage(2, gMBVelocity.handle, 0, bgfx::Access::Write);
@@ -3539,11 +3592,14 @@ void field::render(const blackboard::app::Window &window)
     case DebugView::Depth:
         encoder->setTexture(0, s_tex, gbufDepth.handle);
         break;
+    case DebugView::OITMoments:
+        encoder->setTexture(0, s_tex, gMomentsTex.handle);
+        break;
+    case DebugView::OITTotalDepth:
+        encoder->setTexture(0, s_tex, gTotalDepthTex.handle);
+        break;
     case DebugView::OITAccum:
         encoder->setTexture(0, s_tex, gAccumTex.handle);
-        break;
-    case DebugView::OITReveal:
-        encoder->setTexture(0, s_tex, gRevealTex.handle);
         break;
     case DebugView::MotionBlurVelocity:
         encoder->setTexture(0, s_tex, gMBVelocity.handle);
@@ -3679,7 +3735,7 @@ void field::cleanup()
         }
     }
 
-    for (auto& [robotModel, instances] : robots)
+    for (auto &[robotModel, instances] : robots)
     {
         for (auto &robot : instances)
         {
@@ -3748,10 +3804,10 @@ void field::cleanup()
         bgfx::destroy(programOit);
     if (bgfx::isValid(programOitInstanced))
         bgfx::destroy(programOitInstanced);
-    if (bgfx::isValid(programOitDepthPostPass))
-        bgfx::destroy(programOitDepthPostPass);
-    if (bgfx::isValid(programOitDepthPostPassInstanced))
-        bgfx::destroy(programOitDepthPostPassInstanced);
+    if (bgfx::isValid(programOitMoments))
+        bgfx::destroy(programOitMoments);
+    if (bgfx::isValid(programOitMomentsInstanced))
+        bgfx::destroy(programOitMomentsInstanced);
     if (bgfx::isValid(oitCompProgram))
         bgfx::destroy(oitCompProgram);
     if (bgfx::isValid(tonemapProgram))
@@ -3794,10 +3850,11 @@ void field::cleanup()
         bgfx::destroy(XeGTAO_debugVisibilityProgram);
 
     gAccumTex.destroy();
-    gRevealTex.destroy();
+    gMomentsTex.destroy();
+    gTotalDepthTex.destroy();
 
     gOitFbo.destroy();
-    gOitDepthPostPassFbo.destroy();
+    gOitMomentsFbo.destroy();
 
     gbufAlbedo.destroy();
     gbufEmission.destroy();
@@ -3871,9 +3928,13 @@ void field::cleanup()
         bgfx::destroy(s_ledMask);
     if (bgfx::isValid(s_ledColors))
         bgfx::destroy(s_ledColors);
+    if(bgfx::isValid(s_momentsTex))
+        bgfx::destroy(s_momentsTex);
+    if(bgfx::isValid(s_totalDepthTex))
+        bgfx::destroy(s_totalDepthTex);
 
-    if(bgfx::isValid(s_workingAOTerm))
+    if (bgfx::isValid(s_workingAOTerm))
         bgfx::destroy(s_workingAOTerm);
-    if(bgfx::isValid(s_workingEdges))
+    if (bgfx::isValid(s_workingEdges))
         bgfx::destroy(s_workingEdges);
 }

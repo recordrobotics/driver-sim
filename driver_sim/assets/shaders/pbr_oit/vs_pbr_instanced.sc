@@ -24,10 +24,11 @@ void main()
 	vec3 normal = a_normal.xyz * 2.0 - 1.0;
 	v_viewNormal = normalize(mul(modelView, vec4(normal, 0.0))).xyz;
 
+	v_currentPosition = position;
+
 	if(writeMotionVectors) {
 		vec4 previousPosition = mul(u_previousViewProj, mul(prevModel, vec4(a_position, 1.0) ));
 		v_previousPosition = previousPosition;
-		v_currentPosition = position;
 	}
 
 	gl_Position = position;

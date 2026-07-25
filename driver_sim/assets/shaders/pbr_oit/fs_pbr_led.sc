@@ -65,11 +65,8 @@ void main()
 	gl_FragData[3] = u_pbrData;
 
 	if(writeMotionVectors) {
-		vec3 currentPosNDC = v_currentPosition.xyz / v_currentPosition.w;
-		vec3 previousPosNDC = v_previousPosition.xyz / v_previousPosition.w;
-
-		vec2 currentPosUV = (currentPosNDC.xy - u_jitter.xy) * 0.5 + 0.5;
-		vec2 previousPosUV = (previousPosNDC.xy - u_jitter.zw) * 0.5 + 0.5;
+		vec2 currentPosUV = (v_currentPosition.xy / v_currentPosition.w - u_jitter.xy) * 0.5 + 0.5;
+		vec2 previousPosUV = (v_previousPosition.xy / v_previousPosition.w - u_jitter.zw) * 0.5 + 0.5;
 		vec2 velocity = previousPosUV - currentPosUV;
 		
 		gl_FragData[4] = vec4(velocity, 0.0, 1.0);

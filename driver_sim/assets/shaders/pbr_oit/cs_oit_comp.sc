@@ -5,14 +5,13 @@
 #include "../gtao/common.sh"
 
 IMAGE2D_RO(s_accum, rgba16f, 0);
-IMAGE2D_RO(s_reveal, r16f, 1);
-IMAGE2D_RO(s_albedo, rgba8, 2);
-IMAGE2D_RO(s_emission, rgba16f, 3);
-UIMAGE2D_RO(s_normal, r32ui, 4);
-IMAGE2D_RO(s_pbrData, rgba8, 5);
-UIMAGE2D_RO(s_finalAOTerm, r32ui, 6);
-IMAGE2D_WO(s_output, rgba16f, 7);
-SAMPLER2D(s_depth, 8);
+IMAGE2D_RO(s_albedo, rgba8, 1);
+IMAGE2D_RO(s_emission, rgba16f, 2);
+UIMAGE2D_RO(s_normal, r32ui, 3);
+IMAGE2D_RO(s_pbrData, rgba8, 4);
+UIMAGE2D_RO(s_finalAOTerm, r32ui, 5);
+IMAGE2D_WO(s_output, rgba16f, 6);
+SAMPLER2D(s_depth, 7);
 
 uniform vec4 u_jitter;
 
@@ -37,7 +36,6 @@ void main()
 	}
 
     vec4 accum = imageLoad(s_accum, uvi);
-    float reveal = imageLoad(s_reveal, uvi).r;
 
     vec2 uvn = vec2(uvi + vec2_splat(0.5)) / render_size;
 
@@ -82,10 +80,11 @@ void main()
         pbr_col = vec4_splat(0.0);
     }
     
-    vec4 oit_col = clamp(vec4(accum.rgb / clamp(accum.a, 1e-4, 5e4), reveal), 0.0, 300.0);
-    oit_col.a = saturate(oit_col.a);
-    vec4 final_col = oit_col * (1.0 - oit_col.a) + pbr_col * oit_col.a;
-    final_col.a = saturate(final_col.a);
+    float transparentAlpha = saturate(accum.a);
 
-    imageStore(s_output, uvi, vec4(u_skyColor.rgb * (1.0 - final_col.a) + final_col.rgb * final_col.a, 1.0));
+    vec4 finalColor;
+    finalColor.rgb = accum.rgb + pbr_col.rgb * (1.0 - transparentAlpha);
+    finalColor.a = transparentAlpha + pbr_col.a * (1.0 - transparentAlpha);
+
+    imageStore(s_output, uvi, vec4(finalColor.rgb + u_skyColor.rgb * (1.0 - finalColor.a), 1.0));
 }
