@@ -44,6 +44,8 @@
 #include "process/processrunner.h"
 #include "javalogmanager.h"
 
+#include "discord.h"
+
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
@@ -74,6 +76,8 @@ std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> jniAs
 std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> robotCodeAsset;
 std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> elasticProcess;
 std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> javaProcess;
+
+std::shared_ptr<Discord> discord;
 
 std::future<void> javaLogEnforceFuture;
 
@@ -161,7 +165,7 @@ void initApp()
   javaAsset = std::make_unique<RemoteStoredAsset>("jdk", "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5", prefPath, "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/eclipse?project=jdk");
   dashboardAsset = std::make_unique<RemoteStoredAsset>("elastic", "6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7", prefPath, "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/Elastic-Windows_portable.zip");
   fieldAsset = std::make_unique<RemoteStoredAsset>("field", "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31", prefPath, "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip");
-  robotAsset = std::make_unique<RemoteStoredAsset>("robot", "4b2cef533ae98d9c1530991fe86ff04c93e83f3291bb4d358878166d51bd0e80", prefPath, "https://hamster1.ddns.net/robot-4b2cef533ae98d9c1530991fe86ff04c93e83f3291bb4d358878166d51bd0e80.zip");
+  robotAsset = std::make_unique<RemoteStoredAsset>("robot", "b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462", prefPath, "https://hamster1.ddns.net/robot-b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462.zip");
   jniAsset = std::make_unique<RemoteStoredAsset>("jni", "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5", prefPath, "https://hamster1.ddns.net/jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip");
   robotCodeAsset = std::make_unique<PackagedStoredAsset>("code", "7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878", prefPath, std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
 
@@ -184,6 +188,8 @@ void initApp()
   }
 
   javaLogEnforceFuture = std::async(std::launch::async, java_log_manager::enforceFolderLimits);
+
+  discord = std::make_shared<Discord>();
 }
 
 bool hasInitializedFieldView = false;
@@ -511,9 +517,11 @@ void drawFPS()
 
 void app_update()
 {
+  discord->update();
+
   if (pageTransition.getCurrentPage() == PAGE_3D_FIELD)
   {
-    field::render(*app_ptr->main_window);
+    field::render(*app_ptr->main_window, discord);
   }
 
   drawUI();
@@ -543,33 +551,39 @@ int main(int argc, char *argv[])
 
   argparse::ArgumentParser program("driver_sim", "1.0", argparse::default_arguments::none, false);
   program.add_argument("--api")
-          .default_value("auto")
-          .choices("auto", "metal", "d3d11", "d3d12", "vulkan", "opengl")
-          .store_into(api);
+      .default_value("auto")
+      .choices("auto", "metal", "d3d11", "d3d12", "vulkan", "opengl")
+      .store_into(api);
 
   logger::init();
 
-  try {
+  try
+  {
 #ifdef _WIN32
     auto unknown_args = program.parse_known_args(__argc, __argv);
 #else
     auto unknown_args = program.parse_known_args(argc, argv);
 #endif
 
-    if(!unknown_args.empty()) {
+    if (!unknown_args.empty())
+    {
       logger::logger->warn("Unknown arguments: {}", fmt::join(unknown_args, " "));
     }
   }
-  catch (const std::exception& err) {
+  catch (const std::exception &err)
+  {
     logger::logger->error("Error parsing arguments: {}", err.what());
     logger::logger->info(program.help().str());
   }
 
   settings::loadSettings();
 
-  if(api == "auto") {
+  if (api == "auto")
+  {
     api = settings::renderApi;
-  } else if(api != settings::renderApi) {
+  }
+  else if (api != settings::renderApi)
+  {
     logger::logger->info("Updating render API from {} to {}", settings::renderApi, api);
     settings::renderApi = api;
     settings::saveSettings();

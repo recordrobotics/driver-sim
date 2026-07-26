@@ -164,6 +164,7 @@ target_link_libraries(${PROJECT_NAME}
     wpimath
     argparse
     fmt::fmt
+    discordsdk::discordsdk
 )
 
 target_include_directories(${PROJECT_NAME}

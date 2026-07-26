@@ -58,6 +58,9 @@ Rebuilt2026FMSUI::Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst)
     isAutonomousTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Autonomous");
     isAutonomousSub = isAutonomousTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
 
+    isEnabledTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Enabled");
+    isEnabledSub = isEnabledTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+
     allianceStationTopic = ntInst.GetIntegerTopic("/AdvantageKit/DriverStation/AllianceStation");
     allianceStationSub = allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
 
@@ -363,4 +366,69 @@ void Rebuilt2026FMSUI::postProcessField(std::vector<Mesh> &fieldMeshes)
     hubRedLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::redHubLedTag);
     hubBlueLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::blueHubLedTag);
     logger->info("Post-processed field meshes for hub light materials: red={}, blue={}", (hubRedLightMaterial != nullptr), (hubBlueLightMaterial != nullptr));
+}
+
+int Rebuilt2026FMSUI::getDriverScore() const
+{
+    int allianceStation = allianceStationSub.Get();
+    if (allianceStation >= 1 && allianceStation <= 3)
+    {
+        return static_cast<int>(redScoreSub.Get());
+    }
+    else if (allianceStation >= 4 && allianceStation <= 6)
+    {
+        return static_cast<int>(blueScoreSub.Get());
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+int Rebuilt2026FMSUI::getOpponentScore() const
+{
+    int allianceStation = allianceStationSub.Get();
+    if (allianceStation >= 1 && allianceStation <= 3)
+    {
+        return static_cast<int>(blueScoreSub.Get());
+    }
+    else if (allianceStation >= 4 && allianceStation <= 6)
+    {
+        return static_cast<int>(redScoreSub.Get());
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+std::string Rebuilt2026FMSUI::getDriveMode() const
+{
+    if(!isEnabledSub.Get())
+    {
+        return "Disabled";
+    }
+    else if(isAutonomousSub.Get())
+    {
+        return "Auto";
+    }
+    else
+    {
+        return "Teleop";
+    }
+}
+
+uint64_t Rebuilt2026FMSUI::getMatchEndTime() const
+{
+    double matchTime = matchTimeSub.Get();
+    if (matchTime < 0)
+    {
+        return 0;
+    }
+    else
+    {
+        uint64_t currentTimeMillis = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        uint64_t matchEndTimeMillis = currentTimeMillis + static_cast<uint64_t>(matchTime * 1000.0);
+        return matchEndTimeMillis;
+    }
 }

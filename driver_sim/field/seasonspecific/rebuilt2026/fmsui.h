@@ -30,6 +30,13 @@ public:
     void render(ImVec2 winSize);
     void postProcessField(std::vector<Mesh> &fieldMeshes);
 
+    int getDriverScore() const;
+    int getOpponentScore() const;
+
+    std::string getDriveMode() const;
+
+    uint64_t getMatchEndTime() const;
+
 private:
     void drawFMSUI(ImVec2 winSize);
     void updateHubMaterials();
@@ -57,6 +64,9 @@ private:
 
     nt::BooleanTopic isAutonomousTopic;
     nt::BooleanSubscriber isAutonomousSub;
+
+    nt::BooleanTopic isEnabledTopic;
+    nt::BooleanSubscriber isEnabledSub;
 
     nt::IntegerTopic allianceStationTopic;
     nt::IntegerSubscriber allianceStationSub;

@@ -48,6 +48,8 @@ namespace settings
     bool launchRobotCode = true;
     double ntPeriodic = 0.022;
 
+    bool enableDiscordSDK = true;
+
     uint64_t javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
 
     uint32_t gameTeam = 6731;
@@ -95,6 +97,9 @@ namespace settings
         launchElastic = true;
         launchRobotCode = true;
         ntPeriodic = 0.022;
+
+        enableDiscordSDK = true;
+
         javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
 
         gameTeam = 6731;
@@ -203,6 +208,9 @@ namespace settings
             launchElastic = j.value("launchElastic", launchElastic);
             launchRobotCode = j.value("launchRobotCode", launchRobotCode);
             ntPeriodic = j.value("ntPeriodic", ntPeriodic);
+
+            enableDiscordSDK = j.value("enableDiscordSDK", enableDiscordSDK);
+
             javaLogMaxBytes = parseHumanSizeToBytes(j.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
 
             gameTeam = j.value("gameTeam", gameTeam);
@@ -243,6 +251,9 @@ namespace settings
         j["launchElastic"] = launchElastic;
         j["launchRobotCode"] = launchRobotCode;
         j["ntPeriodic"] = ntPeriodic;
+
+        j["enableDiscordSDK"] = enableDiscordSDK;
+
         j["javaLogMaxBytes"] = humanReadableSize(javaLogMaxBytes);
 
         j["gameTeam"] = gameTeam;
@@ -252,7 +263,7 @@ namespace settings
         j["gameMatchTotal"] = gameMatchTotal;
 
         j["renderApi"] = renderApi;
-        
+
         j["rebuilt2026"] = rebuilt2026;
 
         std::string jsonString = j.dump(4);

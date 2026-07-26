@@ -58,6 +58,8 @@
 #include "seasonspecific/rebuilt2026/hublights.h"
 #endif
 
+using namespace std::chrono_literals;
+
 struct Pose3dObject
 {
     frc::Pose3d pose;
@@ -335,6 +337,8 @@ static constexpr uint8_t XE_GTAO_DEPTH_MIP_LEVELS = 5;
 
 static constexpr float DRIVER_STATION_CAMERA_HEIGHT = 64 * INCHES_TO_METERS;
 
+static constexpr auto DISCORD_UPDATE_INTERVAL = 5s;
+
 namespace nlohmann
 {
     template <>
@@ -535,6 +539,8 @@ WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
 float fieldWidthMeters = 1.0f;
 float fieldHeightMeters = 1.0f;
 
+auto lastDiscordUpdateTime = std::chrono::steady_clock::now() - DISCORD_UPDATE_INTERVAL;
+
 struct AprilTagInstanceData
 {
     std::array<float, 16> modelMatrix{};
@@ -601,7 +607,6 @@ void initPBROIT(uint16_t width, uint16_t height)
         logger->error("Failed to create uniform for led colors texture.");
         throw std::runtime_error("Failed to create uniform for led colors texture.");
     }
-
 
     s_momentsTex = bgfx::createUniform("s_momentsTex", bgfx::UniformType::Sampler);
     if (!bgfx::isValid(s_momentsTex))
@@ -1574,6 +1579,8 @@ typedef struct RobotComponentData
 
 typedef struct RobotModel
 {
+    std::string name;
+
     std::array<float, 16> modelMatrix;
     std::vector<Mesh> meshes;
 
@@ -1599,8 +1606,8 @@ typedef struct RobotModel
     }
 
     // Construct, specifying only model matrices from config file
-    RobotModel(std::array<float, 16> modelMatrix, std::vector<RobotComponentData> components)
-        : modelMatrix(modelMatrix), components(components)
+    RobotModel(std::string name, std::array<float, 16> modelMatrix, std::vector<RobotComponentData> components)
+        : name(name), modelMatrix(modelMatrix), components(components)
     {
     }
 } RobotModel;
@@ -2129,6 +2136,8 @@ void loadRobotModel()
 
         logger->info("Loaded robot config file: {0}", configFile);
 
+        std::string robotName = j["name"].get<std::string>();
+
         float rotationMtx[16];
         performRotationStack(rotationMtx, j["rotations"].get<std::vector<ModelRotationConfig>>());
         const auto &position = j["position"].get<std::vector<float>>();
@@ -2153,7 +2162,7 @@ void loadRobotModel()
             });
         }
 
-        RobotModel &robotModel = robotModels.emplace_back(std::to_array(robotModelMatrix), components);
+        RobotModel &robotModel = robotModels.emplace_back(robotName, std::to_array(robotModelMatrix), components);
 
         std::vector<std::string> rslNodeNames = j.value("rsl", std::vector<std::string>());
 
@@ -2575,8 +2584,8 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepa
             BGFX_STATE_DEPTH_TEST_GREATER |
             // Additive blending
             BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE,
-                                    BGFX_STATE_BLEND_ONE));
-        if(!isTransparentPrepass)
+                                  BGFX_STATE_BLEND_ONE));
+        if (!isTransparentPrepass)
         {
             // Use moments prepass for OIT
             encoder->setTexture(0, s_momentsTex, gMomentsTex.handle);
@@ -2856,7 +2865,7 @@ std::array<std::array<float, 4>, LIGHT_COUNT> lightColor = {
     SRGBToLinear({0.25f, 0.45f, 1.0f, 432.0f}),
     SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})};
 
-void field::render(const blackboard::app::Window &window)
+void field::render(const blackboard::app::Window &window, const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
     ImGui::Begin("Options");
@@ -3073,33 +3082,47 @@ void field::render(const blackboard::app::Window &window)
     uint16_t m_height = window.height;
 
     float view[16];
+    int allianceStation = 0;
 
-    if (cameraView == CameraView::DriverStation && robotModels.size() > 0)
+    if (robotModels.size() > 0)
     {
         auto &robotInstances = robots[&robotModels[0]];
         if (robotInstances.size() > 0 && robotInstances[0].allianceStationSub.Exists())
         {
-            int allianceStation = robotInstances[0].allianceStationSub.GetAtomic().value;
-             // 6 elements ordered [B1, B2, B3, R1, R2, R3]
-            int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? 
-                                    allianceStation + 2 : 
-                               allianceStation >= 4 && allianceStation <= 6 ? 
-                                    allianceStation - 4 : 
-                                    0 /* fallback to 0 */;
-            const bx::Vec3 at = bx::add(robotInstances[0].dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
-            const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
-
-            const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
-            lastDriverStationCameraTarget = at;
-
-            float cameraDistance = bx::distance(eye, at);
-            float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
-            if (targetDistance > 0.2f)
+            allianceStation = robotInstances[0].allianceStationSub.GetAtomic().value;
+            if (cameraView == CameraView::DriverStation)
             {
-                driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
-            }
+                // 6 elements ordered [B1, B2, B3, R1, R2, R3]
+                int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation >= 4 && allianceStation <= 6 ? allianceStation - 4
+                                                                                                                                                     : 0 /* fallback to 0 */;
+                const bx::Vec3 at = bx::add(robotInstances[0].dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
+                const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
 
-            bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+                const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
+                lastDriverStationCameraTarget = at;
+
+                float cameraDistance = bx::distance(eye, at);
+                float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
+                if (targetDistance > 0.2f)
+                {
+                    driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
+                }
+
+                bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+            }
+            else
+            {
+                updateOrbitCameraFromInput();
+                const bx::Vec3 at = orbitCamera.target;
+                const bx::Vec3 eye = getOrbitEye();
+
+                driverStationCameraTarget = at;
+                lastDriverStationCameraTarget = at;
+
+                float lookAt[16];
+                bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+                bx::mtxMul(view, orbitCamera.originTransform, lookAt);
+            }
         }
         else
         {
@@ -3127,6 +3150,22 @@ void field::render(const blackboard::app::Window &window)
         float lookAt[16];
         bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
         bx::mtxMul(view, orbitCamera.originTransform, lookAt);
+    }
+
+    auto now = std::chrono::high_resolution_clock::now();
+    if (now - lastDiscordUpdateTime > DISCORD_UPDATE_INTERVAL)
+    {
+        lastDiscordUpdateTime = now;
+        discord->setField(
+            GAME_YEAR,
+            allianceStation,
+            fmsUI ? fmsUI->getDriverScore() : 0,
+            fmsUI ? fmsUI->getOpponentScore() : 0,
+            robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
+            fmsUI ? fmsUI->getDriveMode() : "<Unknown>",
+            "https://github.com/recordrobotics/2026-robot",
+            "https://github.com/recordrobotics/2026-robot/releases/latest",
+            fmsUI ? fmsUI->getMatchEndTime() : 0);
     }
 
     ensureTextures(m_width, m_height);
@@ -3928,9 +3967,9 @@ void field::cleanup()
         bgfx::destroy(s_ledMask);
     if (bgfx::isValid(s_ledColors))
         bgfx::destroy(s_ledColors);
-    if(bgfx::isValid(s_momentsTex))
+    if (bgfx::isValid(s_momentsTex))
         bgfx::destroy(s_momentsTex);
-    if(bgfx::isValid(s_totalDepthTex))
+    if (bgfx::isValid(s_totalDepthTex))
         bgfx::destroy(s_totalDepthTex);
 
     if (bgfx::isValid(s_workingAOTerm))

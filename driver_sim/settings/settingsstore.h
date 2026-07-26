@@ -25,6 +25,8 @@ namespace settings
     extern bool launchRobotCode;
     extern double ntPeriodic;
 
+    extern bool enableDiscordSDK;
+
     extern uint64_t javaLogMaxBytes;
 
     extern uint32_t gameTeam;
