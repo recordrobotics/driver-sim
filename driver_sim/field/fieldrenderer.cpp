@@ -3442,6 +3442,37 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     encoder->setImage(3, gFullVelocity.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, mbVelocityProgram, xGroups, yGroups);
 
+    if (settings::enableTAA)
+    {
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+        // TAA resolve
+        Texture taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;
+
+        if (firstTAAFrame)
+        {
+            encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::Read);
+            encoder->setImage(1, taaOutput.handle, 0, bgfx::Access::Write);
+            encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
+            firstTAAFrame = false;
+        }
+        else
+        {
+            encoder->setImage(0, gFullVelocity.handle, 0, bgfx::Access::Read);
+            encoder->setTexture(1, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+            encoder->setImage(2, gOutputColor.handle, 0, bgfx::Access::Read);
+            encoder->setTexture(3, s_taaHistory, taaUseBuffer1 ? gTAABuffer0.handle : gTAABuffer1.handle);
+            encoder->setImage(4, taaOutput.handle, 0, bgfx::Access::Write);
+            encoder->dispatch(VIEW_POSTPROCESS, taaResolveProgram, xGroups, yGroups);
+
+            // Copy to output
+            encoder->setImage(0, taaOutput.handle, 0, bgfx::Access::Read);
+            encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+            encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
+        }
+    }
+
     // Motion blur
     if (settings::enableMotionBlur)
     {
@@ -3502,37 +3533,6 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         encoder->setImage(0, gMBOutputColor.handle, 0, bgfx::Access::Read);
         encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
-    }
-
-    if (settings::enableTAA)
-    {
-        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
-        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
-
-        // TAA resolve
-        Texture taaOutput = taaUseBuffer1 ? gTAABuffer1 : gTAABuffer0;
-
-        if (firstTAAFrame)
-        {
-            encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::Read);
-            encoder->setImage(1, taaOutput.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
-            firstTAAFrame = false;
-        }
-        else
-        {
-            encoder->setImage(0, gFullVelocity.handle, 0, bgfx::Access::Read);
-            encoder->setTexture(1, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-            encoder->setImage(2, gOutputColor.handle, 0, bgfx::Access::Read);
-            encoder->setTexture(3, s_taaHistory, taaUseBuffer1 ? gTAABuffer0.handle : gTAABuffer1.handle);
-            encoder->setImage(4, taaOutput.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, taaResolveProgram, xGroups, yGroups);
-
-            // Copy to output
-            encoder->setImage(0, taaOutput.handle, 0, bgfx::Access::Read);
-            encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
-            encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
-        }
     }
 
     // Exposure

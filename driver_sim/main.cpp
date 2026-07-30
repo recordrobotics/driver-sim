@@ -266,7 +266,8 @@ void drawHeader()
   ImVec2 winSize = ImGui::GetWindowSize();
 
   const ImVec2 logoSize(70.0f * globalScale, 70.0f * globalScale);
-  const float logoTopY = (winSize.y - logoSize.y) * 0.5f;
+  const float contentHeight = pageTransition.getCurrentPage() == PAGE_LOADING ? 450.0f * globalScale : 270.0f * globalScale;
+  const float logoTopY = std::max(0.0f, (winSize.y - logoSize.y - contentHeight) * 0.5f);
 
   ImGui::SetCursorPosY(logoTopY);
 
@@ -294,9 +295,9 @@ void drawFooter()
 {
   auto &style{ImGui::GetStyle()};
   float globalScale = style.FontScaleMain * style.FontScaleDpi;
-  ImVec2 winSize = ImGui::GetWindowSize();
+  float height = std::max(ImGui::GetCursorPosY() + 40 * globalScale, ImGui::GetWindowSize().y);
 
-  ImGui::SetCursorPosY(winSize.y - 30 * globalScale);
+  ImGui::SetCursorPosY(height - 30 * globalScale);
   ImGui::PushFont(nullptr, 10.0f);
   ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#858585ff"));
   DrawCenteredText("Made by Record Robotics");
