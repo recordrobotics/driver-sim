@@ -2868,92 +2868,90 @@ std::array<std::array<float, 4>, LIGHT_COUNT> lightColor = {
 void field::render(const blackboard::app::Window &window, const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
-    ImGui::Begin("Options");
-    ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
-    ImGui::Checkbox("Write Object Motion Vectors", &settings::writeObjectMotionVectors);
-    ImGui::Checkbox("Enable Motion Blur", &settings::enableMotionBlur);
-    ImGui::Checkbox("Enable TAA", &settings::enableTAA);
-    ImGui::Checkbox("Enable Bloom", &settings::enableBloom);
-    ImGui::Checkbox("Enable GTAO", &settings::enableGTAO);
-
-    ImGui::Separator();
-
-    if (settings::enableMotionBlur)
+    if (settings::enableDebugMenu)
     {
-        ImGui::Text("Motion Blur Settings");
-        int tileSize = MB_TILE_SIZE;
-        ImGui::SliderInt("Tile Size", &tileSize, 8, 128);
-        MB_TILE_SIZE = static_cast<uint8_t>(tileSize);
-        int sampleCount = MB_SAMPLE_COUNT;
-        ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
-        MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
+        ImGui::Begin("Debug Menu");
+        ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
 
         ImGui::Separator();
-    }
 
-    if (settings::enableBloom)
-    {
-        ImGui::Text("Bloom Settings");
-        ImGui::SliderFloat("Threshold", &bloomThreshold, 0.0f, 8.0f);
-        ImGui::Separator();
-    }
-
-    ImGui::Text("Tonemapping Settings");
-    ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
-    ImGui::Separator();
-
-    if (settings::enableGTAO)
-    {
-        ImGui::Text("GTAO Settings");
-
-        ImGui::SliderFloat("Effect Radius", &gtaoEffectRadius, 0.01f, 3.0f);
-        ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
-        ImGui::SliderFloat("Intensity", &gtaoIntensity, 0.0f, 3.0f);
-        ImGui::SliderFloat("Direct Intensity", &gtaoDirectIntensity, 0.0f, 3.0f);
-        ImGui::SliderFloat("Bent Normal Intensity", &gtaoBentNormalIntensity, 0.0f, 3.0f);
-
-        ImGui::Separator();
-    }
-
-    if (ImGui::BeginCombo("Debug View", DEBUG_VIEW_NAMES[static_cast<int>(debugView)].c_str()))
-    {
-        for (int i = 0; i < DEBUG_VIEW_NAMES.size(); i++)
+        if (settings::enableMotionBlur)
         {
-            if (ImGui::Selectable(DEBUG_VIEW_NAMES[i].c_str(), debugView == static_cast<DebugView>(i)))
+            ImGui::Text("Motion Blur Settings");
+            int tileSize = MB_TILE_SIZE;
+            ImGui::SliderInt("Tile Size", &tileSize, 8, 128);
+            MB_TILE_SIZE = static_cast<uint8_t>(tileSize);
+            int sampleCount = MB_SAMPLE_COUNT;
+            ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
+            MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
+
+            ImGui::Separator();
+        }
+
+        if (settings::enableBloom)
+        {
+            ImGui::Text("Bloom Settings");
+            ImGui::SliderFloat("Threshold", &bloomThreshold, 0.0f, 8.0f);
+            ImGui::Separator();
+        }
+
+        ImGui::Text("Tonemapping Settings");
+        ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
+        ImGui::Separator();
+
+        if (settings::enableGTAO)
+        {
+            ImGui::Text("GTAO Settings");
+
+            ImGui::SliderFloat("Effect Radius", &gtaoEffectRadius, 0.01f, 3.0f);
+            ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
+            ImGui::SliderFloat("Intensity", &gtaoIntensity, 0.0f, 3.0f);
+            ImGui::SliderFloat("Direct Intensity", &gtaoDirectIntensity, 0.0f, 3.0f);
+            ImGui::SliderFloat("Bent Normal Intensity", &gtaoBentNormalIntensity, 0.0f, 3.0f);
+
+            ImGui::Separator();
+        }
+
+        if (ImGui::BeginCombo("Debug View", DEBUG_VIEW_NAMES[static_cast<int>(debugView)].c_str()))
+        {
+            for (int i = 0; i < DEBUG_VIEW_NAMES.size(); i++)
             {
-                debugView = static_cast<DebugView>(i);
+                if (ImGui::Selectable(DEBUG_VIEW_NAMES[i].c_str(), debugView == static_cast<DebugView>(i)))
+                {
+                    debugView = static_cast<DebugView>(i);
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::BeginCombo("Camera View", CAMERA_VIEW_NAMES[static_cast<int>(cameraView)].c_str()))
+        {
+            for (int i = 0; i < CAMERA_VIEW_NAMES.size(); i++)
+            {
+                if (ImGui::Selectable(CAMERA_VIEW_NAMES[i].c_str(), cameraView == static_cast<CameraView>(i)))
+                {
+                    cameraView = static_cast<CameraView>(i);
+                    orbitCamera.target = {0.0f, 0.0f, 0.25f};
+                    bx::mtxIdentity(orbitCamera.originTransform);
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        if (ImGui::Button("Restart Simulation"))
+        {
+            if (restartSimulationCallback)
+            {
+                restartSimulationCallback();
             }
         }
 
-        ImGui::EndCombo();
+        ImGui::End();
     }
-
-    ImGui::Separator();
-
-    if (ImGui::BeginCombo("Camera View", CAMERA_VIEW_NAMES[static_cast<int>(cameraView)].c_str()))
-    {
-        for (int i = 0; i < CAMERA_VIEW_NAMES.size(); i++)
-        {
-            if (ImGui::Selectable(CAMERA_VIEW_NAMES[i].c_str(), cameraView == static_cast<CameraView>(i)))
-            {
-                cameraView = static_cast<CameraView>(i);
-                orbitCamera.target = {0.0f, 0.0f, 0.25f};
-                bx::mtxIdentity(orbitCamera.originTransform);
-            }
-        }
-
-        ImGui::EndCombo();
-    }
-
-    if (ImGui::Button("Restart Simulation"))
-    {
-        if (restartSimulationCallback)
-        {
-            restartSimulationCallback();
-        }
-    }
-
-    ImGui::End();
 
     if (fmsUI)
     {

@@ -303,6 +303,7 @@ void drawFooter()
   DrawCenteredText("Made by Record Robotics");
   ImGui::PopStyleColor();
   ImGui::PopFont();
+  ImGui::Dummy(ImVec2(0, 10 * globalScale));
 }
 
 inline std::string getProgressName(const std::string &assetName, AssetState state, std::string error)
@@ -356,7 +357,7 @@ void drawPageLoading()
                                       jniAsset->getState() == AssetState::Complete &&
                                       robotCodeAsset->getState() == AssetState::Complete)))
   {
-    pageTransition.transition(settings::showSelectPage ? PAGE_SELECT : PAGE_3D_FIELD,
+    pageTransition.transition(settings::showMainMenu ? PAGE_SELECT : PAGE_3D_FIELD,
                               // instant transition if all assets were quick loaded
                               fieldAsset->isQuickLoaded() &&
                                   robotAsset->isQuickLoaded() &&
@@ -364,7 +365,7 @@ void drawPageLoading()
                                   (!settings::launchRobotCode || (javaAsset->isQuickLoaded() &&
                                                                   jniAsset->isQuickLoaded() &&
                                                                   robotCodeAsset->isQuickLoaded())));
-    if (!settings::showSelectPage)
+    if (!settings::showMainMenu)
     {
       initFieldView();
     }
@@ -435,7 +436,7 @@ void drawPageSelect()
 
   if (UnderlineTextButton("Don't show again"))
   {
-    settings::showSelectPage = false;
+    settings::showMainMenu = false;
     settings::saveSettings();
     pageTransition.transition(PAGE_3D_FIELD);
     initFieldView();

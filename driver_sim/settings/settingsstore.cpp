@@ -37,8 +37,9 @@ namespace settings
     bool enableBloom = true;
     bool enableGTAO = true;
     bool writeObjectMotionVectors = true;
+    bool enableDebugMenu = false;
 
-    bool showSelectPage = true;
+    bool showMainMenu = true;
     bool cacheModels = true;
     std::vector<std::string> jvmArguments;
     std::vector<std::string> codeArguments;
@@ -77,8 +78,8 @@ namespace settings
         enableBloom = true;
         enableGTAO = true;
         writeObjectMotionVectors = true;
-
-        showSelectPage = true;
+        enableDebugMenu = false;
+        showMainMenu = true;
         cacheModels = true;
         jvmArguments = {};
         codeArguments = {};
@@ -199,8 +200,9 @@ namespace settings
             enableBloom = j.value("enableBloom", enableBloom);
             enableGTAO = j.value("enableGTAO", enableGTAO);
             writeObjectMotionVectors = j.value("writeObjectMotionVectors", writeObjectMotionVectors);
+            enableDebugMenu = j.value("enableDebugMenu", enableDebugMenu);
 
-            showSelectPage = j.value("showSelectPage", showSelectPage);
+            showMainMenu = j.value("showMainMenu", showMainMenu);
             cacheModels = j.value("cacheModels", cacheModels);
             jvmArguments = j.value("jvmArguments", jvmArguments);
             codeArguments = j.value("codeArguments", codeArguments);
@@ -242,8 +244,9 @@ namespace settings
         j["enableBloom"] = enableBloom;
         j["enableGTAO"] = enableGTAO;
         j["writeObjectMotionVectors"] = writeObjectMotionVectors;
+        j["enableDebugMenu"] = enableDebugMenu;
 
-        j["showSelectPage"] = showSelectPage;
+        j["showMainMenu"] = showMainMenu;
         j["cacheModels"] = cacheModels;
         j["jvmArguments"] = jvmArguments;
         j["codeArguments"] = codeArguments;

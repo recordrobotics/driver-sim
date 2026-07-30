@@ -14,8 +14,9 @@ namespace settings
     extern bool enableBloom;
     extern bool enableGTAO;
     extern bool writeObjectMotionVectors;
+    extern bool enableDebugMenu;
 
-    extern bool showSelectPage;
+    extern bool showMainMenu;
     extern bool cacheModels;
     extern std::vector<std::string> jvmArguments;
     extern std::vector<std::string> codeArguments;
