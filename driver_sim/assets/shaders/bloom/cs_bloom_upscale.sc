@@ -10,6 +10,8 @@ SAMPLER2D(u_dirt_texture, 2);
 uniform vec4  u_texel_size;
 uniform vec4 u_bloom_intensity;
 
+#define DIRT_TEXTURE_ASPECT_RATIO  (1280.0 / 720.0)
+
 #define GROUP_SIZE         8
 #define GROUP_THREAD_COUNT (GROUP_SIZE * GROUP_SIZE)
 #define FILTER_SIZE        3
@@ -79,6 +81,15 @@ void main()
     if (u_mip_level == 1)
     {
         vec2  uv  = (vec2(pixel_coords) + vec2(0.5, 0.5)) * u_texel_size.xy;
+        float screenAspect = u_viewRect.z / u_viewRect.w;
+        if(screenAspect > DIRT_TEXTURE_ASPECT_RATIO)
+        {
+            uv.y = uv.y * (DIRT_TEXTURE_ASPECT_RATIO / screenAspect) + 0.5 * (1.0 - DIRT_TEXTURE_ASPECT_RATIO / screenAspect);
+        }
+        else
+        {
+            uv.x = uv.x * (screenAspect / DIRT_TEXTURE_ASPECT_RATIO) + 0.5 * (1.0 - screenAspect / DIRT_TEXTURE_ASPECT_RATIO);
+        }
         out_pixel += texture2DLod(u_dirt_texture, uv, 0.0) * u_bloom_intensity.y * bloom * u_bloom_intensity.x;
     }
 
