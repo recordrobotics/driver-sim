@@ -19,26 +19,28 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
     }
 
     cpr::Response r = cpr::Download(
-        ofs,
-        cpr::Url{remoteUrl},
-        cpr::ProgressCallback([this, &stoken](cpr::cpr_off_t downloadTotal, cpr::cpr_off_t downloadNow,
-                                              cpr::cpr_off_t /*uploadTotal*/, cpr::cpr_off_t /*uploadNow*/,
-                                              intptr_t /*userdata*/) -> bool
-                              {
-                                  if (stoken.stop_requested())
-                                  {
-                                      logger->info("Download cancelled by engine during progress callback: {}", remoteUrl);
-                                      return false;
-                                  }
+        ofs, cpr::Url{remoteUrl},
+        cpr::ProgressCallback(
+            [this, &stoken](cpr::cpr_off_t downloadTotal, cpr::cpr_off_t downloadNow,
+                            cpr::cpr_off_t /*uploadTotal*/, cpr::cpr_off_t /*uploadNow*/,
+                            intptr_t /*userdata*/) -> bool
+            {
+                if (stoken.stop_requested())
+                {
+                    logger->info("Download cancelled by engine during progress callback: {}",
+                                 remoteUrl);
+                    return false;
+                }
 
-                                  if (downloadTotal > 0)
-                                  {
-                                      progressPercent = static_cast<int>((downloadNow * 100) / downloadTotal);
-                                      logger->trace("Download progress: {}% ({} / {})", progressPercent.load(), downloadNow, downloadTotal);
-                                  }
+                if (downloadTotal > 0)
+                {
+                    progressPercent = static_cast<int>((downloadNow * 100) / downloadTotal);
+                    logger->trace("Download progress: {}% ({} / {})", progressPercent.load(),
+                                  downloadNow, downloadTotal);
+                }
 
-                                  return true; // Continue downloading
-                              }));
+                return true; // Continue downloading
+            }));
 
     ofs.close();
 
@@ -57,7 +59,8 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
     }
     else
     {
-        logger->error("Failed to download asset from {}: HTTP {} - {}", remoteUrl, r.status_code, r.error.message);
+        logger->error("Failed to download asset from {}: HTTP {} - {}", remoteUrl, r.status_code,
+                      r.error.message);
         std::filesystem::remove(localTempZipPath); // Delete potential files
 
         if (r.error.code != cpr::ErrorCode::OK)

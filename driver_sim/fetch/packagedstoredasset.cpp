@@ -26,14 +26,16 @@ void PackagedStoredAsset::performDownload(std::stop_token stoken)
     {
         if (stoken.stop_requested())
         {
-            logger->info("Write cancelled by engine during asset write: {}", localTempZipPath.string());
+            logger->info("Write cancelled by engine during asset write: {}",
+                         localTempZipPath.string());
             outFile.close();
             fs::remove(localTempZipPath); // Cleanup partial file
             return;
         }
 
         size_t writeSize = std::min(chunkSize, totalBytes - bytesWritten);
-        outFile.write(reinterpret_cast<const char *>(embeddedData.data() + bytesWritten), writeSize);
+        outFile.write(reinterpret_cast<const char *>(embeddedData.data() + bytesWritten),
+                      writeSize);
 
         if (!outFile)
         {

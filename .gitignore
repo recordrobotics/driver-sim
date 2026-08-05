@@ -5,7 +5,6 @@
 .build*/
 .external/
 .vs/
-.clang-format
 _external
 _build*/
 build*/

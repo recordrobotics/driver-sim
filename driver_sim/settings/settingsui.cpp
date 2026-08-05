@@ -13,14 +13,9 @@ namespace settings
     ImTexture logo = {};
 };
 
-void settings::init(ImTexture &logo)
-{
-    settings::logo = logo;
-}
+void settings::init(ImTexture &logo) { settings::logo = logo; }
 
-void settings::cleanup()
-{
-}
+void settings::cleanup() {}
 
 void DrawVerticallyCenteredText(const char *text, float heightAvailable)
 {
@@ -43,13 +38,10 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
     ImGui::SetNextWindowSize(viewportSize);
     ImGui::SetNextWindowViewport(viewportId);
 
-    if (ImGui::Begin("Settings", nullptr,
-                     ImGuiWindowFlags_NoDecoration |
-                         ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_NoResize |
-                         ImGuiWindowFlags_NoSavedSettings |
-                         ImGuiWindowFlags_NoBringToFrontOnFocus |
-                         ImGuiWindowFlags_NoDocking))
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoDocking;
+    if (ImGui::Begin("Settings", nullptr, flags))
     {
         const ImVec2 logoSize(70.0f * globalScale, 70.0f * globalScale);
 

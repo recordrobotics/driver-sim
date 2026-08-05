@@ -1,8 +1,8 @@
 #include "storedasset.h"
 
 #include <blackboard_app/logger.h>
-#include <miniz.h>
 #include <fstream>
+#include <miniz.h>
 #include <vector>
 
 using namespace blackboard::logger;
@@ -51,8 +51,11 @@ bool isFilenameSafe(const std::string &name)
 
 void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
 {
-    if(!fs::exists(rootFolder) || !fs::is_directory(rootFolder)) {
-        logger->info("Root folder {} does not exist or is not a directory. Skipping deletion of old files.", rootFolder.string());
+    if (!fs::exists(rootFolder) || !fs::is_directory(rootFolder))
+    {
+        logger->info(
+            "Root folder {} does not exist or is not a directory. Skipping deletion of old files.",
+            rootFolder.string());
         return;
     }
 
@@ -69,7 +72,8 @@ void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
             bool shouldKeep = false;
             for (const auto &keepPath : keepPaths)
             {
-                if (relativePathStr == keepPath || relativePathStr.starts_with(keepPath + "/") || relativePathStr.starts_with(keepPath + "\\"))
+                if (relativePathStr == keepPath || relativePathStr.starts_with(keepPath + "/") ||
+                    relativePathStr.starts_with(keepPath + "\\"))
                 {
                     shouldKeep = true;
                     break;
@@ -83,9 +87,11 @@ void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
         }
     }
 
-    std::sort(pathsToDelete.begin(), pathsToDelete.end(), [](const fs::path &a, const fs::path &b) {
-        return a.string().size() > b.string().size(); // Sort by path length descending
-    });
+    std::sort(pathsToDelete.begin(), pathsToDelete.end(),
+              [](const fs::path &a, const fs::path &b)
+              {
+                  return a.string().size() > b.string().size(); // Sort by path length descending
+              });
 
     std::error_code ec;
     for (const auto &path : pathsToDelete)
@@ -138,13 +144,15 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
         mz_zip_archive_file_stat file_stat;
         if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat))
         {
-            logger->trace("Failed to get file stat for index {}: {}", i, mz_zip_get_error_string(zip_archive.m_last_error));
+            logger->trace("Failed to get file stat for index {}: {}", i,
+                          mz_zip_get_error_string(zip_archive.m_last_error));
             continue;
         }
 
         fs::path baseDir = fs::weakly_canonical(extractTo);
         fs::path targetPath = fs::weakly_canonical(extractTo / file_stat.m_filename);
-        auto [mismatch_base, mismatch_target] = std::mismatch(baseDir.begin(), baseDir.end(), targetPath.begin());
+        auto [mismatch_base, mismatch_target] =
+            std::mismatch(baseDir.begin(), baseDir.end(), targetPath.begin());
 
         if (mismatch_base != baseDir.end())
         {
@@ -201,7 +209,8 @@ void StoredAsset::cleanupExtractedFiles()
     }
 }
 
-StoredAsset::StoredAsset(const std::string &relativeExtractPath, const std::string &hash, const std::string &sdlPrefPath)
+StoredAsset::StoredAsset(const std::string &relativeExtractPath, const std::string &hash,
+                         const std::string &sdlPrefPath)
     : expectedSha256(hash)
 {
     localExtractPath = fs::path(sdlPrefPath) / relativeExtractPath;
@@ -222,14 +231,17 @@ void StoredAsset::verifyOrDownload()
     if (state != AssetState::Idle && state != AssetState::Error)
         return;
 
-    workerThread = std::jthread([this](std::stop_token stoken)
-                                {
+    workerThread = std::jthread(
+        [this](std::stop_token stoken)
+        {
             state = AssetState::Verifying;
             progressPercent = 0;
 
-            if (fs::exists(localHashPath)) {
+            if (fs::exists(localHashPath))
+            {
                 std::string actualHash = readSha256(localHashPath);
-                if (actualHash == expectedSha256) {
+                if (actualHash == expectedSha256)
+                {
                     progressPercent = 100;
                     state = AssetState::Complete;
                     logger->info("Asset is valid and up to date: {}", localExtractPath.string());
@@ -238,13 +250,16 @@ void StoredAsset::verifyOrDownload()
                 }
             }
 
-            if (stoken.stop_requested()) return;
+            if (stoken.stop_requested())
+                return;
 
             fs::create_directories(localExtractPath.parent_path());
             performDownload(stoken);
 
-            if(state == AssetState::Extracting) {
-                if(stoken.stop_requested()) return;
+            if (state == AssetState::Extracting)
+            {
+                if (stoken.stop_requested())
+                    return;
 
                 deleteOldFiles(localExtractPath);
                 extractZip(localTempZipPath, localExtractPath);
@@ -252,14 +267,16 @@ void StoredAsset::verifyOrDownload()
 
                 // Write hash file
                 std::ofstream hashFile(localHashPath, std::ios::trunc);
-                if (hashFile)            {
+                if (hashFile)
+                {
                     hashFile << expectedSha256;
                 }
                 else
                 {
                     setError("Failed to write hash file for asset.");
                 }
-            } });
+            }
+        });
 }
 
 std::string StoredAsset::getError()

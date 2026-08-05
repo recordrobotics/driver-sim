@@ -1,17 +1,18 @@
-#include <cmath>
-#include <stdexcept>
-#include <blackboard_app/logger.h>
 #include "texture.h"
-#include <format>
 #include <bimg/decode.h>
+#include <blackboard_app/logger.h>
 #include <bx/allocator.h>
 #include <bx/math.h>
+#include <cmath>
+#include <format>
+#include <stdexcept>
 
 using namespace blackboard::logger;
 
 static bx::DefaultAllocator s_allocator;
 
-inline constexpr uint8_t calcNumMips(bool _hasMips, uint16_t _width, uint16_t _height, uint16_t _depth = 1)
+inline constexpr uint8_t calcNumMips(bool _hasMips, uint16_t _width, uint16_t _height,
+                                     uint16_t _depth = 1)
 {
     if (_hasMips)
     {
@@ -24,16 +25,16 @@ inline constexpr uint8_t calcNumMips(bool _hasMips, uint16_t _width, uint16_t _h
     return 1;
 }
 
-Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction, float heightFraction, bool hasMips, uint16_t numLayers, bgfx::TextureFormat::Enum format, uint64_t flags, const bgfx::Memory* _mem)
-    : name(name), width(static_cast<uint16_t>(floorf(viewWidth * widthFraction))), height(static_cast<uint16_t>(floorf(viewHeight * heightFraction))), widthFraction(widthFraction), heightFraction(heightFraction), hasMips(hasMips), numLayers(numLayers), format(format), flags(flags), hasResized(false)
+Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction,
+                 float heightFraction, bool hasMips, uint16_t numLayers,
+                 bgfx::TextureFormat::Enum format, uint64_t flags, const bgfx::Memory *_mem)
+    : name(name), width(static_cast<uint16_t>(floorf(viewWidth * widthFraction))),
+      height(static_cast<uint16_t>(floorf(viewHeight * heightFraction))),
+      widthFraction(widthFraction), heightFraction(heightFraction), hasMips(hasMips),
+      numLayers(numLayers), format(format), flags(flags), hasResized(false)
 {
-    handle = bgfx::createTexture2D(
-        this->width, this->height,
-        hasMips,
-        numLayers,
-        format,
-        flags,
-        _mem);
+    handle =
+        bgfx::createTexture2D(this->width, this->height, hasMips, numLayers, format, flags, _mem);
 
     if (!bgfx::isValid(handle))
     {
@@ -44,14 +45,14 @@ Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, floa
     mipCount = calcNumMips(this->hasMips, this->width, this->height, this->numLayers);
 }
 
-Texture::Texture(std::string name, void *image_data, int image_data_size, bimg::TextureFormat::Enum imageFormat, bgfx::TextureFormat::Enum format, uint64_t _flags)
-    : name(name), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1), format(format), flags(_flags), hasResized(false)
+Texture::Texture(std::string name, void *image_data, int image_data_size,
+                 bimg::TextureFormat::Enum imageFormat, bgfx::TextureFormat::Enum format,
+                 uint64_t _flags)
+    : name(name), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1),
+      format(format), flags(_flags), hasResized(false)
 {
     bimg::ImageContainer *image = bimg::imageParse(
-        &s_allocator,
-        image_data,
-        static_cast<uint32_t>(image_data_size),
-        imageFormat);
+        &s_allocator, image_data, static_cast<uint32_t>(image_data_size), imageFormat);
 
     if (image == nullptr)
     {
@@ -62,14 +63,9 @@ Texture::Texture(std::string name, void *image_data, int image_data_size, bimg::
     this->width = static_cast<uint16_t>(image->m_width);
     this->height = static_cast<uint16_t>(image->m_height);
 
-    handle = bgfx::createTexture2D(
-        static_cast<uint16_t>(image->m_width),
-        static_cast<uint16_t>(image->m_height),
-        false,
-        1,
-        format,
-        _flags,
-        bgfx::copy(image->m_data, image->m_size));
+    handle = bgfx::createTexture2D(static_cast<uint16_t>(image->m_width),
+                                   static_cast<uint16_t>(image->m_height), false, 1, format, _flags,
+                                   bgfx::copy(image->m_data, image->m_size));
 
     bimg::imageFree(image);
 
@@ -106,12 +102,7 @@ void Texture::ensure(uint16_t viewWidth, uint16_t viewHeight)
             bgfx::destroy(handle);
         }
 
-        handle = bgfx::createTexture2D(
-            width, height,
-            hasMips,
-            numLayers,
-            format,
-            flags);
+        handle = bgfx::createTexture2D(width, height, hasMips, numLayers, format, flags);
 
         logger->info("Resized texture '{0}' to {1}x{2}", name, width, height);
 
@@ -127,10 +118,7 @@ void Texture::ensure(uint16_t viewWidth, uint16_t viewHeight)
     }
 }
 
-void Texture::beginFrame()
-{
-    hasResized = false;
-}
+void Texture::beginFrame() { hasResized = false; }
 
 FrameBuffer::FrameBuffer(std::string name, std::vector<Texture *> attachments)
     : name(name), attachments(attachments)

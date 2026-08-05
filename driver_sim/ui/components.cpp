@@ -1,6 +1,6 @@
+#include <blackboard_app/gui.h>
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
-#include <blackboard_app/gui.h>
 
 #include "components.h"
 
@@ -29,7 +29,8 @@ void ui::DrawProgress(const std::string_view &label, float value, bool isError)
     ImGui::SetCursorPosX((winSize.x - width) * 0.5f);
 
     char buf[128];
-    snprintf(buf, sizeof(buf), "%.*s (%.0f%%)", static_cast<int>(label.size()), label.data(), value * 100.0f);
+    snprintf(buf, sizeof(buf), "%.*s (%.0f%%)", static_cast<int>(label.size()), label.data(),
+             value * 100.0f);
 
     ImGui::PushFont(nullptr, 16.0f);
     ImGui::TextColored(string_hex_to_rgba_float("#A7A7A7ff"), "%s", buf);
@@ -40,7 +41,8 @@ void ui::DrawProgress(const std::string_view &label, float value, bool isError)
     ImGui::SetCursorPosX((winSize.x - width) * 0.5f);
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg, string_hex_to_rgba_float("#2D2A2Aff"));
-    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, isError ? string_hex_to_rgba_float("#c83c3c") : string_hex_to_rgba_float("#42A749ff"));
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, isError ? string_hex_to_rgba_float("#c83c3c")
+                                                          : string_hex_to_rgba_float("#42A749ff"));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f * globalScale);
     ImGui::ProgressBar(value, ImVec2(width, 7 * globalScale), "");
     ImGui::PopStyleVar();
@@ -132,17 +134,13 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
             cornerFlags = ImDrawFlags_RoundCornersRight;
         }
 
-        drawList->AddRectFilled(
-            segmentPos,
-            ImVec2(segmentPos.x + segmentSize.x, segmentPos.y + segmentSize.y),
-            fillColor,
-            frameRounding,
-            cornerFlags);
+        drawList->AddRectFilled(segmentPos,
+                                ImVec2(segmentPos.x + segmentSize.x, segmentPos.y + segmentSize.y),
+                                fillColor, frameRounding, cornerFlags);
 
         const ImVec2 textSize = ImGui::CalcTextSize(button.label);
-        const ImVec2 textPos(
-            segmentPos.x + (segmentSize.x - textSize.x) * 0.5f,
-            segmentPos.y + (segmentSize.y - textSize.y) * 0.5f);
+        const ImVec2 textPos(segmentPos.x + (segmentSize.x - textSize.x) * 0.5f,
+                             segmentPos.y + (segmentSize.y - textSize.y) * 0.5f);
 
         drawList->AddText(ImGui::GetFont(), ImGui::GetFontSize(), textPos, textColor, button.label);
 
@@ -156,13 +154,8 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
     }
 
     const ImVec2 groupMax(groupMin.x + totalWidth, groupMin.y + segmentHeight);
-    drawList->AddRect(
-        groupMin,
-        groupMax,
-        borderColor,
-        frameRounding,
-        borderThickness,
-        ImDrawFlags_RoundCornersAll);
+    drawList->AddRect(groupMin, groupMax, borderColor, frameRounding, borderThickness,
+                      ImDrawFlags_RoundCornersAll);
 
     float dividerX = groupMin.x;
     size_t dividerIndex = 0;
@@ -172,11 +165,8 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
         ++dividerIndex;
         if (dividerIndex < buttonCount)
         {
-            drawList->AddLine(
-                ImVec2(dividerX, groupMin.y),
-                ImVec2(dividerX, groupMax.y),
-                borderColor,
-                borderThickness);
+            drawList->AddLine(ImVec2(dividerX, groupMin.y), ImVec2(dividerX, groupMax.y),
+                              borderColor, borderThickness);
         }
     }
 
@@ -207,8 +197,9 @@ bool ui::UnderlineTextButton(const char *text)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
 
-    ImU32 textColor = active ? string_hex_to_rgba_u32("#5cbd62ff") : hovered ? string_hex_to_rgba_u32("#47a54dff")
-                                                                             : string_hex_to_rgba_u32("#38903Eff");
+    ImU32 textColor = active    ? string_hex_to_rgba_u32("#5cbd62ff")
+                      : hovered ? string_hex_to_rgba_u32("#47a54dff")
+                                : string_hex_to_rgba_u32("#38903Eff");
 
     ImVec2 min = ImGui::GetItemRectMin();
     ImVec2 max = ImGui::GetItemRectMax();
@@ -218,11 +209,8 @@ bool ui::UnderlineTextButton(const char *text)
     float thickness = 1.5f * globalScale;
     float offset = 2.0f * globalScale;
 
-    ImGui::GetWindowDrawList()->AddLine(
-        ImVec2(min.x, max.y + offset),
-        ImVec2(max.x, max.y + offset),
-        textColor,
-        thickness);
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y + offset),
+                                        ImVec2(max.x, max.y + offset), textColor, thickness);
 
     ImGui::PopFont();
 
@@ -244,8 +232,9 @@ bool ui::CircularButton(const char *id, float radius)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
 
-    ImU32 color = active ? string_hex_to_rgba_u32("#71d478ff") : hovered ? string_hex_to_rgba_u32("#5dbb64ff")
-                                                                         : string_hex_to_rgba_u32("#42A749ff");
+    ImU32 color = active    ? string_hex_to_rgba_u32("#71d478ff")
+                  : hovered ? string_hex_to_rgba_u32("#5dbb64ff")
+                            : string_hex_to_rgba_u32("#42A749ff");
 
     draw->AddCircleFilled(ImVec2(pos.x + radius, pos.y + radius), radius, color);
 
@@ -274,7 +263,9 @@ bool ui::CircularButton(const char *id, float radius)
     return pressed;
 }
 
-bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon, float size, float borderSize, float rounding, float fontSize, float textOffset, float opacity, bool inverted)
+bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon,
+                    float size, float borderSize, float rounding, float fontSize, float textOffset,
+                    float opacity, bool inverted)
 {
     ImVec2 pos = ImGui::GetCursorScreenPos();
     ImDrawList *draw = ImGui::GetWindowDrawList();
@@ -294,14 +285,16 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
     ImU32 iconColor;
     if (inverted)
     {
-        fill = active ? string_hex_to_rgba_u32("#D0D0D0ff") : hovered ? string_hex_to_rgba_u32("#E0E0E0ff")
-                                                                      : string_hex_to_rgba_u32("#ffffffff");
+        fill = active    ? string_hex_to_rgba_u32("#D0D0D0ff")
+               : hovered ? string_hex_to_rgba_u32("#E0E0E0ff")
+                         : string_hex_to_rgba_u32("#ffffffff");
         iconColor = string_hex_to_rgba_u32("#2189DEff");
     }
     else
     {
-        fill = active ? string_hex_to_rgba_u32("#ffffff3B") : hovered ? string_hex_to_rgba_u32("#ffffff31")
-                                                                      : string_hex_to_rgba_u32("#ffffff00");
+        fill = active    ? string_hex_to_rgba_u32("#ffffff3B")
+               : hovered ? string_hex_to_rgba_u32("#ffffff31")
+                         : string_hex_to_rgba_u32("#ffffff00");
         iconColor = string_hex_to_rgba_u32("#ffffffff");
     }
 
@@ -309,40 +302,33 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
     border = u32_multiply_alpha(border, opacity);
     iconColor = u32_multiply_alpha(iconColor, opacity);
 
-    draw->AddRectFilled(
-        pos,
-        ImVec2(pos.x + size, pos.y + size),
-        fill,
-        rounding);
+    draw->AddRectFilled(pos, ImVec2(pos.x + size, pos.y + size), fill, rounding);
 
     draw->AddRect(
         ImVec2(pos.x + borderSize / 2.0f - 1, pos.y + borderSize / 2.0f - 1),
-        ImVec2(pos.x + size - borderSize / 2.0f + 1, pos.y + size - borderSize / 2.0f + 1),
-        border,
-        rounding,
-        borderSize);
+        ImVec2(pos.x + size - borderSize / 2.0f + 1, pos.y + size - borderSize / 2.0f + 1), border,
+        rounding, borderSize);
 
     const ImVec2 center(pos.x + size * 0.5f, pos.y + size * 0.5f);
     const float imageSize = size * 0.5f;
 
-    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, center.y - imageSize * 0.5f), ImVec2(center.x + imageSize * 0.5f, center.y + imageSize * 0.5f), ImVec2(0, 0), ImVec2(1, 1), iconColor);
+    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, center.y - imageSize * 0.5f),
+                   ImVec2(center.x + imageSize * 0.5f, center.y + imageSize * 0.5f), ImVec2(0, 0),
+                   ImVec2(1, 1), iconColor);
 
-    ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text.data(), text.data() + text.size());
+    ImVec2 textSize =
+        font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text.data(), text.data() + text.size());
 
-    draw->AddText(font, fontSize, ImVec2(center.x - textSize.x / 2.0f, pos.y + size + textOffset), u32_multiply_alpha(string_hex_to_rgba_u32("#FFFFFFFF"), opacity), text.data(), text.data() + text.size());
+    draw->AddText(font, fontSize, ImVec2(center.x - textSize.x / 2.0f, pos.y + size + textOffset),
+                  u32_multiply_alpha(string_hex_to_rgba_u32("#FFFFFFFF"), opacity), text.data(),
+                  text.data() + text.size());
 
     return pressed;
 }
 
-inline float AddCenteredWrappedText(
-    ImDrawList *draw,
-    ImFont *font,
-    float fontSize,
-    const ImVec2 &pos,
-    float wrapWidth,
-    ImU32 color,
-    const char *text,
-    const char *textEnd = nullptr)
+inline float AddCenteredWrappedText(ImDrawList *draw, ImFont *font, float fontSize,
+                                    const ImVec2 &pos, float wrapWidth, ImU32 color,
+                                    const char *text, const char *textEnd = nullptr)
 {
     if (!text)
         return 0.0f;
@@ -355,11 +341,7 @@ inline float AddCenteredWrappedText(
 
     while (text < textEnd)
     {
-        const char *lineEnd = font->CalcWordWrapPosition(
-            fontSize,
-            text,
-            textEnd,
-            wrapWidth);
+        const char *lineEnd = font->CalcWordWrapPosition(fontSize, text, textEnd, wrapWidth);
 
         for (const char *s = text; s < lineEnd; ++s)
         {
@@ -383,21 +365,10 @@ inline float AddCenteredWrappedText(
             lineEnd = text + ImTextCharFromUtf8(&c, text, textEnd);
         }
 
-        const float lineWidth = font->CalcTextSizeA(
-                                        fontSize,
-                                        FLT_MAX,
-                                        0.0f,
-                                        text,
-                                        lineEnd)
-                                    .x;
+        const float lineWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text, lineEnd).x;
 
-        draw->AddText(
-            font,
-            fontSize,
-            ImVec2(pos.x + (wrapWidth - lineWidth) * 0.5f, y),
-            color,
-            text,
-            lineEnd);
+        draw->AddText(font, fontSize, ImVec2(pos.x + (wrapWidth - lineWidth) * 0.5f, y), color,
+                      text, lineEnd);
 
         y += lineHeight;
 
@@ -413,7 +384,9 @@ inline float AddCenteredWrappedText(
     return y - pos.y;
 }
 
-bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name, std::string_view description, ImTextureID icon, float width, float height, float globalScale, bool selected)
+bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name,
+                      std::string_view description, ImTextureID icon, float width, float height,
+                      float globalScale, bool selected)
 {
     ImVec2 pos = ImGui::GetCursorScreenPos();
     ImDrawList *draw = ImGui::GetWindowDrawList();
@@ -433,9 +406,7 @@ bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name, std::
     ImU32 nameColor = string_hex_to_rgba_u32("#FFFFFFFF");
     ImU32 descriptionColor = string_hex_to_rgba_u32("#CECECEFF");
 
-    float opacity = selected ? 1.0f : active ? 0.85f
-                                  : hovered  ? 0.7f
-                                             : 0.5f;
+    float opacity = selected ? 1.0f : active ? 0.85f : hovered ? 0.7f : 0.5f;
 
     border = u32_multiply_alpha(border, opacity);
     iconColor = u32_multiply_alpha(iconColor, opacity);
@@ -450,32 +421,30 @@ bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name, std::
     draw->AddRect(
         ImVec2(pos.x + borderSize / 2.0f - 1, pos.y + borderSize / 2.0f - 1),
         ImVec2(pos.x + width - borderSize / 2.0f + 1, pos.y + height - borderSize / 2.0f + 1),
-        border,
-        rounding,
-        borderSize);
+        border, rounding, borderSize);
 
     const ImVec2 center(pos.x + width * 0.5f, pos.y + height * 0.5f);
     const float imageSize = 64.0f * globalScale;
 
-    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, pos.y + 10.0f * globalScale), ImVec2(center.x + imageSize * 0.5f, pos.y + 10.0f * globalScale + imageSize), ImVec2(0, 0), ImVec2(1, 1), iconColor);
+    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, pos.y + 10.0f * globalScale),
+                   ImVec2(center.x + imageSize * 0.5f, pos.y + 10.0f * globalScale + imageSize),
+                   ImVec2(0, 0), ImVec2(1, 1), iconColor);
 
-    ImVec2 nameSize = font->CalcTextSizeA(nameFontSize, FLT_MAX, 0.0f, name.data(), name.data() + name.size());
-    draw->AddText(font, nameFontSize, ImVec2(center.x - nameSize.x / 2.0f, pos.y + 10.0f * globalScale + imageSize + 1.0f * globalScale), nameColor, name.data(), name.data() + name.size());
+    ImVec2 nameSize =
+        font->CalcTextSizeA(nameFontSize, FLT_MAX, 0.0f, name.data(), name.data() + name.size());
+    draw->AddText(font, nameFontSize,
+                  ImVec2(center.x - nameSize.x / 2.0f,
+                         pos.y + 10.0f * globalScale + imageSize + 1.0f * globalScale),
+                  nameColor, name.data(), name.data() + name.size());
 
     const float textWidth = width - 35.0f * globalScale;
 
-    AddCenteredWrappedText(
-        draw,
-        font,
-        descriptionFontSize,
-        ImVec2(
-            center.x - textWidth * 0.5f,
-            pos.y + 10.0f * globalScale + imageSize +
-                1.0f * globalScale + nameSize.y + 5.0f * globalScale),
-        textWidth,
-        descriptionColor,
-        description.data(),
-        description.data() + description.size());
+    AddCenteredWrappedText(draw, font, descriptionFontSize,
+                           ImVec2(center.x - textWidth * 0.5f, pos.y + 10.0f * globalScale +
+                                                                   imageSize + 1.0f * globalScale +
+                                                                   nameSize.y + 5.0f * globalScale),
+                           textWidth, descriptionColor, description.data(),
+                           description.data() + description.size());
 
     return pressed;
 }

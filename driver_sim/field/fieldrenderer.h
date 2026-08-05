@@ -2,38 +2,38 @@
 
 #include <bgfx/bgfx.h>
 
-#include <bx/file.h>
-#include <bx/error.h>
-#include <bx/pixelformat.h>
 #include <bimg/decode.h>
+#include <bx/error.h>
+#include <bx/file.h>
+#include <bx/pixelformat.h>
 
-#include <vector>
+#include "texture.h"
 #include <algorithm>
-#include <cstring>
-#include <cmath>
-#include <unordered_map>
-#include <random>
-#include <optional>
 #include <cassert>
 #include <chrono>
-#include "texture.h"
+#include <cmath>
+#include <cstring>
+#include <optional>
+#include <random>
+#include <unordered_map>
+#include <vector>
 
 #include "mesh.h"
 #include <future>
 
-#include <blackboard_app/logger.h>
 #include <blackboard_app/gui.h>
+#include <blackboard_app/logger.h>
 #include <blackboard_app/window.h>
 
 #include "../discord.h"
 
-#include <networktables/NetworkTable.h>
-#include <networktables/NetworkTableInstance.h>
-#include <networktables/StructTopic.h>
-#include <networktables/StructArrayTopic.h>
 #include <networktables/BooleanTopic.h>
 #include <networktables/IntegerTopic.h>
+#include <networktables/NetworkTable.h>
+#include <networktables/NetworkTableInstance.h>
 #include <networktables/StringArrayTopic.h>
+#include <networktables/StructArrayTopic.h>
+#include <networktables/StructTopic.h>
 
 #include <wpi/struct/Struct.h>
 
@@ -48,19 +48,15 @@
 inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
 {
     const frc::Quaternion &frcQuat = rotation.GetQuaternion();
-    return {static_cast<float>(frcQuat.X()),
-            static_cast<float>(frcQuat.Y()),
-            static_cast<float>(frcQuat.Z()),
-            static_cast<float>(frcQuat.W())};
+    return {static_cast<float>(frcQuat.X()), static_cast<float>(frcQuat.Y()),
+            static_cast<float>(frcQuat.Z()), static_cast<float>(frcQuat.W())};
 }
 
 inline constexpr bx::Quaternion rotation3dToQuaternionInverse(const frc::Rotation3d &rotation)
 {
     const frc::Quaternion frcQuat = rotation.GetQuaternion().Inverse();
-    return {static_cast<float>(frcQuat.X()),
-            static_cast<float>(frcQuat.Y()),
-            static_cast<float>(frcQuat.Z()),
-            static_cast<float>(frcQuat.W())};
+    return {static_cast<float>(frcQuat.X()), static_cast<float>(frcQuat.Y()),
+            static_cast<float>(frcQuat.Z()), static_cast<float>(frcQuat.W())};
 }
 
 struct Pose3dObject
@@ -76,36 +72,26 @@ struct Pose3dObject
 namespace
 {
     constexpr size_t kPoseOff = 0;
-    constexpr size_t kIdentityOff =
-        kPoseOff + wpi::GetStructSize<frc::Pose3d>();
+    constexpr size_t kIdentityOff = kPoseOff + wpi::GetStructSize<frc::Pose3d>();
 } // namespace
 
-template <>
-struct wpi::Struct<Pose3dObject>
+template <> struct wpi::Struct<Pose3dObject>
 {
     static constexpr std::string_view GetTypeName() { return "Pose3dObject"; }
-    static constexpr size_t GetSize()
-    {
-        return wpi::GetStructSize<frc::Pose3d>() + 4;
-    }
-    static constexpr std::string_view GetSchema()
-    {
-        return "Pose3d pose;int identity";
-    }
+    static constexpr size_t GetSize() { return wpi::GetStructSize<frc::Pose3d>() + 4; }
+    static constexpr std::string_view GetSchema() { return "Pose3d pose;int identity"; }
 
     static Pose3dObject Unpack(std::span<const uint8_t> data)
     {
-        return Pose3dObject{
-            wpi::UnpackStruct<frc::Pose3d, kPoseOff>(data),
-            wpi::UnpackStruct<int, kIdentityOff>(data)};
+        return Pose3dObject{wpi::UnpackStruct<frc::Pose3d, kPoseOff>(data),
+                            wpi::UnpackStruct<int, kIdentityOff>(data)};
     }
     static void Pack(std::span<uint8_t> data, const Pose3dObject &value)
     {
         wpi::PackStruct<kPoseOff>(data, value.pose);
         wpi::PackStruct<kIdentityOff>(data, value.identity);
     }
-    static void ForEachNested(
-        std::invocable<std::string_view, std::string_view> auto fn)
+    static void ForEachNested(std::invocable<std::string_view, std::string_view> auto fn)
     {
         wpi::ForEachStructSchema<frc::Pose3d>(fn);
     }
@@ -158,7 +144,8 @@ struct DynamicObjectData
 
     InstanceData instanceData = {};
 
-    void update(float *modelMatrix, float *parentMatrix, float deltaTime, bool freezeTemporalEffects);
+    void update(float *modelMatrix, float *parentMatrix, float deltaTime,
+                bool freezeTemporalEffects);
 
     void update(float *modelMatrix, float deltaTime, bool freezeTemporalEffects)
     {
@@ -201,7 +188,8 @@ struct RobotModel
     }
 
     // Construct, specifying only model matrices from config file
-    RobotModel(std::string name, std::array<float, 16> modelMatrix, std::vector<RobotComponentData> components)
+    RobotModel(std::string name, std::array<float, 16> modelMatrix,
+               std::vector<RobotComponentData> components)
         : name(name), modelMatrix(modelMatrix), components(components)
     {
     }
@@ -247,7 +235,8 @@ struct RobotData
     RobotData &operator=(RobotData &&) noexcept = default;
 
     RobotData(RobotModel *model);
-    void update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects, std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates);
+    void update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects,
+                std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates);
 };
 
 struct GamePieceData
@@ -263,7 +252,8 @@ struct GamePieceData
     nt::StructArrayTopic<Pose3dObject> poseObjectsTopic;
     nt::StructArraySubscriber<Pose3dObject> poseObjectsSub;
 
-    void update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects, std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates);
+    void update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects,
+                std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates);
 };
 
 struct OrbitCamera
@@ -278,10 +268,7 @@ struct OrbitCamera
 
     float originTransform[16];
 
-    OrbitCamera()
-    {
-        bx::mtxIdentity(originTransform);
-    }
+    OrbitCamera() { bx::mtxIdentity(originTransform); }
 
     bx::Vec3 getEye() const
     {
@@ -290,10 +277,8 @@ struct OrbitCamera
         const float sinYaw = std::sin(yaw);
         const float cosYaw = std::cos(yaw);
 
-        return {
-            target.x + distance * cosPitch * cosYaw,
-            target.y - distance * cosPitch * sinYaw,
-            target.z + distance * sinPitch};
+        return {target.x + distance * cosPitch * cosYaw, target.y - distance * cosPitch * sinYaw,
+                target.z + distance * sinPitch};
     }
 };
 
@@ -329,7 +314,7 @@ enum class DebugView
 
 class FieldRenderer
 {
-public:
+  public:
     FieldRenderer(const blackboard::app::Window &window);
     ~FieldRenderer();
 
@@ -347,7 +332,7 @@ public:
 
     void setRestartSimulationCallback(std::function<void()> callback);
 
-private:
+  private:
     static constexpr uint16_t VIEW_GBUFFER = 0;
     static constexpr uint16_t VIEW_GTAO = 1;
     static constexpr uint16_t VIEW_OIT_MOMENTS = 2;
@@ -392,24 +377,29 @@ private:
             }
             else
             {
-                encoder->submit(VIEW_GBUFFER, mesh.material.texture.empty() ? programPBR : programPBRTextured);
+                encoder->submit(VIEW_GBUFFER,
+                                mesh.material.texture.empty() ? programPBR : programPBRTextured);
             }
         }
     }
 
     template <std::ranges::forward_range R>
-    void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel *robotModel, R &&meshes, const std::vector<std::pair<const InstanceData &, const RobotData &>> &instances)
+    void drawRobotMeshes(
+        bgfx::Encoder *encoder, RobotModel *robotModel, R &&meshes,
+        const std::vector<std::pair<const InstanceData &, const RobotData &>> &instances)
     {
-        auto instanceableMeshes = meshes | std::views::filter([robotModel](const Mesh &mesh)
-                                                              { return robotModel->isInstanceable(&mesh.material); });
+        auto instanceableMeshes =
+            meshes | std::views::filter([robotModel](const Mesh &mesh)
+                                        { return robotModel->isInstanceable(&mesh.material); });
 
-        auto nonInstanceableMeshes = meshes | std::views::filter([robotModel](const Mesh &mesh)
-                                                                 { return !robotModel->isInstanceable(&mesh.material); });
+        auto nonInstanceableMeshes =
+            meshes | std::views::filter([robotModel](const Mesh &mesh)
+                                        { return !robotModel->isInstanceable(&mesh.material); });
 
         std::vector<InstanceData> instanceData;
         instanceData.reserve(instances.size());
-        std::ranges::transform(instances, std::back_inserter(instanceData), [](const auto &pair)
-                               { return pair.first; });
+        std::ranges::transform(instances, std::back_inserter(instanceData),
+                               [](const auto &pair) { return pair.first; });
 
         drawMeshesInstanced(encoder, instanceableMeshes, instanceData);
 
@@ -448,19 +438,20 @@ private:
                 }
                 else if (mesh.material.texture == "led")
                 {
-                    float ledData[4] = {
-                        robotModel->ledCount,
-                        robotModel->ledAspectRatio,
-                        0.0f,
-                        0.0f};
+                    float ledData[4] = {robotModel->ledCount, robotModel->ledAspectRatio, 0.0f,
+                                        0.0f};
                     encoder->setUniform(u_ledData, ledData);
 
                     bgfx::updateTexture2D(
-                        instance.second.ledColorTexture.handle,
-                        0, 0, 0, 0, instance.second.ledColorTexture.width, instance.second.ledColorTexture.height,
-                        bgfx::copy(instance.second.ledColorData.get(), static_cast<uint32_t>(instance.second.ledColorTexture.width * 4)));
+                        instance.second.ledColorTexture.handle, 0, 0, 0, 0,
+                        instance.second.ledColorTexture.width,
+                        instance.second.ledColorTexture.height,
+                        bgfx::copy(
+                            instance.second.ledColorData.get(),
+                            static_cast<uint32_t>(instance.second.ledColorTexture.width * 4)));
 
-                    encoder->setTexture(1, s_ledColors, instance.second.ledColorTexture.handle, BGFX_SAMPLER_UVW_CLAMP);
+                    encoder->setTexture(1, s_ledColors, instance.second.ledColorTexture.handle,
+                                        BGFX_SAMPLER_UVW_CLAMP);
 
                     encoder->submit(VIEW_GBUFFER, programPBRLed);
                 }
@@ -473,10 +464,12 @@ private:
     }
 
     template <std::ranges::input_range R>
-    void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes, const std::vector<InstanceData> &instanceData)
+    void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes,
+                             const std::vector<InstanceData> &instanceData)
     {
         // figure out how big of a buffer is available
-        uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(instanceData.size(), sizeof(InstanceData));
+        uint32_t instanceCount =
+            bgfx::getAvailInstanceDataBuffer(instanceData.size(), sizeof(InstanceData));
 
         bgfx::InstanceDataBuffer idb;
         bgfx::allocInstanceDataBuffer(&idb, instanceCount, sizeof(InstanceData));
@@ -503,7 +496,8 @@ private:
     }
 
     template <std::ranges::input_range R>
-    void drawRobot(bgfx::Encoder *encoder, RobotModel *robotModel, R &&instances, const std::function<bool(const DynamicObjectData &)> &componentFilter)
+    void drawRobot(bgfx::Encoder *encoder, RobotModel *robotModel, R &&instances,
+                   const std::function<bool(const DynamicObjectData &)> &componentFilter)
     {
         if (instances.empty())
         {
@@ -519,7 +513,8 @@ private:
 
         drawRobotMeshes(encoder, robotModel, robotModel->meshes, robotInstances);
 
-        std::map<size_t, std::vector<std::pair<const InstanceData &, const RobotData &>>> componentInstancesMap;
+        std::map<size_t, std::vector<std::pair<const InstanceData &, const RobotData &>>>
+            componentInstancesMap;
 
         for (const auto &robot : instances)
         {
@@ -544,7 +539,9 @@ private:
 
             if (index >= robotModel->components.size())
             {
-                blackboard::logger::logger->warn("Component index {} is out of bounds for robot model with {} components.", index, robotModel->components.size());
+                blackboard::logger::logger->warn(
+                    "Component index {} is out of bounds for robot model with {} components.",
+                    index, robotModel->components.size());
                 continue;
             }
 
@@ -555,7 +552,9 @@ private:
 
     void drawAprilTags(bgfx::Encoder *encoder);
 
-    void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic, std::string_view enabledTopic = "");
+    void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic,
+                  std::string_view rslStateTopic, std::string_view allianceStationTopic,
+                  std::string_view ledColorsTopic, std::string_view enabledTopic = "");
 
     void drawDebugMenu();
     void drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
@@ -739,7 +738,8 @@ private:
 
     static constexpr auto DISCORD_UPDATE_INTERVAL = std::chrono::seconds(5);
 
-    std::chrono::steady_clock::time_point lastDiscordUpdateTime = std::chrono::steady_clock::now() - DISCORD_UPDATE_INTERVAL;
+    std::chrono::steady_clock::time_point lastDiscordUpdateTime =
+        std::chrono::steady_clock::now() - DISCORD_UPDATE_INTERVAL;
 
     std::vector<AprilTagInstanceData> aprilTags;
 

@@ -1,24 +1,24 @@
 #pragma once
 
+#include <networktables/BooleanTopic.h>
+#include <networktables/DoubleTopic.h>
+#include <networktables/IntegerTopic.h>
 #include <networktables/NetworkTable.h>
 #include <networktables/NetworkTableInstance.h>
-#include <networktables/DoubleTopic.h>
-#include <networktables/BooleanTopic.h>
-#include <networktables/IntegerTopic.h>
 
 #include <blackboard_app/gui.h>
 
 #include "../teamassigner.h"
 #include "../teamlogocache.h"
 
-#include <vector>
 #include "../../mesh.h"
+#include <vector>
 
 using blackboard::gui::string_hex_to_rgba_float;
 
 class Rebuilt2026FMSUI
 {
-public:
+  public:
     Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst);
     ~Rebuilt2026FMSUI();
 
@@ -37,7 +37,7 @@ public:
 
     uint64_t getMatchEndTime() const;
 
-private:
+  private:
     void drawFMSUI(ImVec2 winSize);
     void updateHubMaterials();
 

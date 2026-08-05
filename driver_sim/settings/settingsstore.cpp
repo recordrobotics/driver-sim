@@ -1,9 +1,9 @@
 #include "settingsstore.h"
 
-#include <bx/file.h>
-#include <bx/error.h>
-#include <nlohmann/json.hpp>
 #include <SDL3/SDL.h>
+#include <bx/error.h>
+#include <bx/file.h>
+#include <nlohmann/json.hpp>
 
 #include <blackboard_app/logger.h>
 
@@ -11,26 +11,22 @@ using namespace blackboard::logger;
 
 namespace nlohmann
 {
-    template <>
-    struct adl_serializer<settings::Rebuilt2026>
+    template <> struct adl_serializer<settings::Rebuilt2026>
     {
         static void to_json(json &j, const settings::Rebuilt2026 &value)
         {
-            j = {
-                {"energizedRPThreshold", value.energizedRPThreshold},
-                {"superchargedRPThreshold", value.superchargedRPThreshold}};
+            j = {{"energizedRPThreshold", value.energizedRPThreshold},
+                 {"superchargedRPThreshold", value.superchargedRPThreshold}};
         }
 
         static settings::Rebuilt2026 from_json(const json &j)
         {
-            return {
-                j.at("energizedRPThreshold").get<int>(),
-                j.at("superchargedRPThreshold").get<int>()};
+            return {j.at("energizedRPThreshold").get<int>(),
+                    j.at("superchargedRPThreshold").get<int>()};
         }
     };
 
-    template <>
-    struct adl_serializer<CameraView>
+    template <> struct adl_serializer<CameraView>
     {
         static void to_json(json &j, const CameraView &value)
         {
@@ -76,7 +72,7 @@ namespace nlohmann
             }
         }
     };
-}
+} // namespace nlohmann
 
 namespace settings
 {
@@ -104,12 +100,7 @@ namespace settings
     uint64_t javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
 
     uint32_t gameTeam = 6731;
-    std::vector<uint32_t> gameTeamPool = {
-        151,
-        69,
-        97,
-        4169,
-        246};
+    std::vector<uint32_t> gameTeamPool = {151, 69, 97, 4169, 246};
     uint32_t gameMatchType = 2;
     uint32_t gameMatchNumber = 42;
     uint32_t gameMatchTotal = 76;
@@ -117,9 +108,7 @@ namespace settings
     std::string renderApi = "auto";
     bool updateWhileMinimized = true;
 
-    Rebuilt2026 rebuilt2026 = {
-        .energizedRPThreshold = 100,
-        .superchargedRPThreshold = 360};
+    Rebuilt2026 rebuilt2026 = {.energizedRPThreshold = 100, .superchargedRPThreshold = 360};
 
     CameraView viewMode = CameraView::Field;
     float cameraFov = 60.0f;
@@ -144,7 +133,8 @@ namespace settings
         updateWhileMinimized = true;
         renderApi = "auto";
 
-        if (std::filesystem::exists("C:\\Program Files (x86)\\FRC Driver Station\\DriverStation.exe"))
+        if (std::filesystem::exists(
+                "C:\\Program Files (x86)\\FRC Driver Station\\DriverStation.exe"))
         {
             enabledExtensions = {"halsim_ds_socket"};
         }
@@ -162,19 +152,12 @@ namespace settings
         javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
 
         gameTeam = 6731;
-        gameTeamPool = {
-            151,
-            69,
-            97,
-            4169,
-            246};
+        gameTeamPool = {151, 69, 97, 4169, 246};
         gameMatchType = 2;
         gameMatchNumber = 42;
         gameMatchTotal = 76;
 
-        rebuilt2026 = {
-            .energizedRPThreshold = 100,
-            .superchargedRPThreshold = 360};
+        rebuilt2026 = {.energizedRPThreshold = 100, .superchargedRPThreshold = 360};
 
         viewMode = CameraView::Field;
         cameraFov = 60.0f;
@@ -231,7 +214,8 @@ namespace settings
 
     void loadSettings()
     {
-        std::string settingsPath = std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "settings.json";
+        std::string settingsPath =
+            std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "settings.json";
         bx::Error error;
         bx::FileReader reader;
 
@@ -240,7 +224,8 @@ namespace settings
             const int64_t size = bx::getSize(&reader);
             if (size < 0)
             {
-                logger->error("Failed to get size of settings file: {0}, error: {1}", settingsPath, error.getMessage().getCPtr());
+                logger->error("Failed to get size of settings file: {0}, error: {1}", settingsPath,
+                              error.getMessage().getCPtr());
                 loadDefaultSettings();
                 return;
             }
@@ -248,7 +233,8 @@ namespace settings
             std::vector<char> data(size + 1);
             if (bx::read(&reader, data.data(), size, &error) != size)
             {
-                logger->error("Failed to read settings file: {0}, error: {1}", settingsPath, error.getMessage().getCPtr());
+                logger->error("Failed to read settings file: {0}, error: {1}", settingsPath,
+                              error.getMessage().getCPtr());
                 bx::close(&reader);
                 loadDefaultSettings();
                 return;
@@ -261,7 +247,8 @@ namespace settings
             enableMotionBlur = j.value("enableMotionBlur", enableMotionBlur);
             enableBloom = j.value("enableBloom", enableBloom);
             enableGTAO = j.value("enableGTAO", enableGTAO);
-            writeObjectMotionVectors = j.value("writeObjectMotionVectors", writeObjectMotionVectors);
+            writeObjectMotionVectors =
+                j.value("writeObjectMotionVectors", writeObjectMotionVectors);
             enableVSync = j.value("enableVSync", enableVSync);
             enableDebugMenu = j.value("enableDebugMenu", enableDebugMenu);
 
@@ -273,11 +260,13 @@ namespace settings
             launchElastic = j.value("launchElastic", launchElastic);
             launchRobotCode = j.value("launchRobotCode", launchRobotCode);
             ntPeriodic = j.value("ntPeriodic", ntPeriodic);
-            enableFrameInterpolation = j.value("enableFrameInterpolation", enableFrameInterpolation);
+            enableFrameInterpolation =
+                j.value("enableFrameInterpolation", enableFrameInterpolation);
 
             enableDiscordSDK = j.value("enableDiscordSDK", enableDiscordSDK);
 
-            javaLogMaxBytes = parseHumanSizeToBytes(j.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
+            javaLogMaxBytes = parseHumanSizeToBytes(
+                j.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
 
             gameTeam = j.value("gameTeam", gameTeam);
             gameTeamPool = j.value("gameTeamPool", gameTeamPool);
@@ -298,14 +287,16 @@ namespace settings
         }
         else
         {
-            logger->error("Could not open settings file: {0}, error: {1}", settingsPath, error.getMessage().getCPtr());
+            logger->error("Could not open settings file: {0}, error: {1}", settingsPath,
+                          error.getMessage().getCPtr());
             loadDefaultSettings();
         }
     }
 
     void saveSettings()
     {
-        std::string settingsPath = std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "settings.json";
+        std::string settingsPath =
+            std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "settings.json";
 
         nlohmann::json j;
         j["enableTAA"] = enableTAA;
@@ -351,9 +342,11 @@ namespace settings
 
         if (bx::open(&writer, settingsPath.c_str(), false, &error))
         {
-            if (bx::write(&writer, jsonString.data(), jsonString.size(), &error) != jsonString.size())
+            if (bx::write(&writer, jsonString.data(), jsonString.size(), &error) !=
+                jsonString.size())
             {
-                logger->error("Failed to write settings file: {0}, error: {1}", settingsPath, error.getMessage().getCPtr());
+                logger->error("Failed to write settings file: {0}, error: {1}", settingsPath,
+                              error.getMessage().getCPtr());
             }
             else
             {
@@ -364,7 +357,8 @@ namespace settings
         }
         else
         {
-            logger->error("Could not open settings file for writing: {0}, error: {1}", settingsPath, error.getMessage().getCPtr());
+            logger->error("Could not open settings file for writing: {0}, error: {1}", settingsPath,
+                          error.getMessage().getCPtr());
         }
     }
-}
+} // namespace settings

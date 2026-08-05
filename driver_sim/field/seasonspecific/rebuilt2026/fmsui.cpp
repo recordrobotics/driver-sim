@@ -4,11 +4,11 @@
 
 #include "../../../settings/settingsstore.h"
 
-#include <rebuilt2026/firstage.png.h>
-#include <rebuilt2026/rebuilt.png.h>
 #include <rebuilt2026/arrow.png.h>
+#include <rebuilt2026/firstage.png.h>
 #include <rebuilt2026/fuelblue.png.h>
 #include <rebuilt2026/fuelred.png.h>
+#include <rebuilt2026/rebuilt.png.h>
 
 #include "../../mesh.h"
 #include "hublights.h"
@@ -37,22 +37,28 @@ Rebuilt2026FMSUI::Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst)
     matchTimeTopic = ntInst.GetDoubleTopic("/AdvantageKit/DriverStation/MatchTime");
     matchTimeSub = matchTimeTopic.Subscribe(-1.0, {.periodic = settings::ntPeriodic});
 
-    redHubActiveTopic = ntInst.GetBooleanTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active");
+    redHubActiveTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active");
     redHubActiveSub = redHubActiveTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
 
-    blueHubActiveTopic = ntInst.GetBooleanTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active");
+    blueHubActiveTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active");
     blueHubActiveSub = blueHubActiveTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
 
-    redHubLedTopic = ntInst.GetBooleanTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led");
+    redHubLedTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led");
     redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
 
-    blueHubLedTopic = ntInst.GetBooleanTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led");
+    blueHubLedTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led");
     blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
 
-    redScoreTopic = ntInst.GetDoubleTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score");
+    redScoreTopic = ntInst.GetDoubleTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score");
     redScoreSub = redScoreTopic.Subscribe(0.0, {.periodic = settings::ntPeriodic});
 
-    blueScoreTopic = ntInst.GetDoubleTopic("/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Score");
+    blueScoreTopic = ntInst.GetDoubleTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Score");
     blueScoreSub = blueScoreTopic.Subscribe(0.0, {.periodic = settings::ntPeriodic});
 
     isAutonomousTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Autonomous");
@@ -92,11 +98,13 @@ void Rebuilt2026FMSUI::updateHubMaterials()
 {
     if (hubRedLightMaterial)
     {
-        hubRedLightMaterial->emissionColor = redHubLedSub.Get() ? Rebuilt2026::redHubLedColor : Rebuilt2026::hubLedOffColor;
+        hubRedLightMaterial->emissionColor =
+            redHubLedSub.Get() ? Rebuilt2026::redHubLedColor : Rebuilt2026::hubLedOffColor;
     }
     if (hubBlueLightMaterial)
     {
-        hubBlueLightMaterial->emissionColor = blueHubLedSub.Get() ? Rebuilt2026::blueHubLedColor : Rebuilt2026::hubLedOffColor;
+        hubBlueLightMaterial->emissionColor =
+            blueHubLedSub.Get() ? Rebuilt2026::blueHubLedColor : Rebuilt2026::hubLedOffColor;
     }
 }
 
@@ -112,11 +120,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     float offsetY = viewport->Pos.y;
 
     auto Transform = [scale, offsetX, offsetY](ImVec2 p)
-    {
-        return ImVec2(
-            p.x * scale + offsetX,
-            p.y * scale + offsetY);
-    };
+    { return ImVec2(p.x * scale + offsetX, p.y * scale + offsetY); };
 
     ImDrawList *drawList = ImGui::GetBackgroundDrawList(viewport);
 
@@ -125,10 +129,12 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         topLeft = Transform(topLeft);
         size.x *= scale;
         size.y *= scale;
-        drawList->AddRectFilled(ImVec2(topLeft.x, topLeft.y), ImVec2(topLeft.x + size.x, topLeft.y + size.y), color);
+        drawList->AddRectFilled(ImVec2(topLeft.x, topLeft.y),
+                                ImVec2(topLeft.x + size.x, topLeft.y + size.y), color);
     };
 
-    auto Text = [this, &Transform, scale, drawList](ImVec2 pos, const char *text, float fontSize, ImU32 color, bool centered = false)
+    auto Text = [this, &Transform, scale, drawList](ImVec2 pos, const char *text, float fontSize,
+                                                    ImU32 color, bool centered = false)
     {
         pos = Transform(pos);
 
@@ -159,18 +165,25 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     else
         centerText = "Unknown Match Type ";
 
-    Text({960, 37.5f}, (settings::gameMatchType == 0 ? centerText : (centerText + std::to_string(settings::gameMatchNumber) + " of " + std::to_string(settings::gameMatchTotal))).c_str(), 32, IM_COL32_WHITE, true);
+    Text({960, 37.5f},
+         (settings::gameMatchType == 0 ? centerText
+                                       : (centerText + std::to_string(settings::gameMatchNumber) +
+                                          " of " + std::to_string(settings::gameMatchTotal)))
+             .c_str(),
+         32, IM_COL32_WHITE, true);
 
     // Banners
     Rect({450, 15}, {180, 45}, LIGHT);
     if (firstAgeBanner.id)
     {
-        drawList->AddImage(firstAgeBanner.id, Transform({450, 15}), Transform({450 + 180, 15 + 45}));
+        drawList->AddImage(firstAgeBanner.id, Transform({450, 15}),
+                           Transform({450 + 180, 15 + 45}));
     }
     Rect({1290, 15}, {180, 45}, LIGHT);
     if (rebuiltBanner.id)
     {
-        drawList->AddImage(rebuiltBanner.id, Transform({1290, 15}), Transform({1290 + 180, 15 + 45}));
+        drawList->AddImage(rebuiltBanner.id, Transform({1290, 15}),
+                           Transform({1290 + 180, 15 + 45}));
     }
 
     // blue panel
@@ -203,10 +216,12 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     constexpr int redScoreCY = teamY + teamPanelH; // bottom edge
 
     // Blue score
-    Text({blueScoreCX, blueScoreCY - blueScoreH / 2}, std::to_string(blueScore).c_str(), 48, IM_COL32_WHITE, true);
+    Text({blueScoreCX, blueScoreCY - blueScoreH / 2}, std::to_string(blueScore).c_str(), 48,
+         IM_COL32_WHITE, true);
 
     // Red score
-    Text({redScoreCX, redScoreCY - redScoreH / 2}, std::to_string(redScore).c_str(), 48, IM_COL32_WHITE, true);
+    Text({redScoreCX, redScoreCY - redScoreH / 2}, std::to_string(redScore).c_str(), 48,
+         IM_COL32_WHITE, true);
 
     // Team numbers
     std::array<uint32_t, 6> teamNumbers = teamAssigner.getTeamNumbers();
@@ -232,11 +247,13 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         ImTexture logoTex = logoCache.getTeamLogo(teamNumber);
         if (logoTex.id)
         {
-            drawList->AddImage(logoTex.id, Transform({logoX, logoY}), Transform({logoX + logoW, logoY + logoH}));
+            drawList->AddImage(logoTex.id, Transform({logoX, logoY}),
+                               Transform({logoX + logoW, logoY + logoH}));
         }
 
         // Team Number
-        Text({cellX + (teamCellW + 30) / 2, teamY + 30}, std::to_string(teamNumber).c_str(), 21, IM_COL32_WHITE, true);
+        Text({cellX + (teamCellW + 30) / 2, teamY + 30}, std::to_string(teamNumber).c_str(), 21,
+             IM_COL32_WHITE, true);
     }
 
     // Match time
@@ -252,7 +269,10 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     constexpr int timerPanelH = 60;
     constexpr int timerCY = timerPanelY + timerPanelH;
 
-    Text({960, timerCY - timerPanelH / 2}, (std::to_string(minutes) + ":" + (seconds < 10 ? "0" : "") + std::to_string(seconds)).c_str(), 45, IM_COL32_BLACK, true);
+    Text({960, timerCY - timerPanelH / 2},
+         (std::to_string(minutes) + ":" + (seconds < 10 ? "0" : "") + std::to_string(seconds))
+             .c_str(),
+         45, IM_COL32_BLACK, true);
 
     // Shift timer
     if (!isAutonomousSub.Get())
@@ -305,13 +325,16 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         constexpr int shiftCountY = shiftPanelY;
         constexpr int shiftCountW = 75;
         Rect({shiftCountX, shiftCountY}, {shiftCountW, shiftPanelH}, IM_COL32_WHITE);
-        Text({shiftCountX + shiftCountW / 2, shiftCountY + shiftPanelH / 2}, (std::to_string(shiftNum) + " / 6").c_str(), 32, IM_COL32_BLACK, true);
+        Text({shiftCountX + shiftCountW / 2, shiftCountY + shiftPanelH / 2},
+             (std::to_string(shiftNum) + " / 6").c_str(), 32, IM_COL32_BLACK, true);
 
         // Shift timer panel
         constexpr int shiftTimerX = shiftCountX + shiftCountW;
         constexpr int shiftTimerW = shiftPanelW - shiftCountW;
         Rect({shiftTimerX, shiftCountY}, {shiftTimerW, shiftPanelH}, borderColor);
-        Text({shiftTimerX + shiftTimerW / 2, shiftCountY + shiftPanelH / 2}, ((shiftTimeLeft < 10 ? ":0" : ":") + std::to_string(shiftTimeLeft)).c_str(), 21, IM_COL32_BLACK, true);
+        Text({shiftTimerX + shiftTimerW / 2, shiftCountY + shiftPanelH / 2},
+             ((shiftTimeLeft < 10 ? ":0" : ":") + std::to_string(shiftTimeLeft)).c_str(), 21,
+             IM_COL32_BLACK, true);
     }
 
     // Blue fuel counter
@@ -321,8 +344,12 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         drawList->AddImage(fuelBlueIcon.id, Transform({35, 67}), Transform({35 + 45, 67 + 45}));
     }
     Rect({80, 67}, {150, 45}, BLUE);
-    int rankingPointThresholdBlue = blueScore >= settings::rebuilt2026.energizedRPThreshold ? settings::rebuilt2026.superchargedRPThreshold : settings::rebuilt2026.energizedRPThreshold;
-    Text({155, 89.5f}, (std::to_string(blueScore) + " / " + std::to_string(rankingPointThresholdBlue)).c_str(), 32, IM_COL32_WHITE, true);
+    int rankingPointThresholdBlue = blueScore >= settings::rebuilt2026.energizedRPThreshold
+                                        ? settings::rebuilt2026.superchargedRPThreshold
+                                        : settings::rebuilt2026.energizedRPThreshold;
+    Text({155, 89.5f},
+         (std::to_string(blueScore) + " / " + std::to_string(rankingPointThresholdBlue)).c_str(),
+         32, IM_COL32_WHITE, true);
 
     // Red fuel counter
     Rect({1689, 67}, {45, 45}, IM_COL32_WHITE);
@@ -331,15 +358,20 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         drawList->AddImage(fuelRedIcon.id, Transform({1689, 67}), Transform({1689 + 45, 67 + 45}));
     }
     Rect({1734, 67}, {150, 45}, RED);
-    int rankingPointThresholdRed = redScore >= settings::rebuilt2026.energizedRPThreshold ? settings::rebuilt2026.superchargedRPThreshold : settings::rebuilt2026.energizedRPThreshold;
-    Text({1809, 89.5f}, (std::to_string(redScore) + " / " + std::to_string(rankingPointThresholdRed)).c_str(), 32, IM_COL32_WHITE, true);
+    int rankingPointThresholdRed = redScore >= settings::rebuilt2026.energizedRPThreshold
+                                       ? settings::rebuilt2026.superchargedRPThreshold
+                                       : settings::rebuilt2026.energizedRPThreshold;
+    Text({1809, 89.5f},
+         (std::to_string(redScore) + " / " + std::to_string(rankingPointThresholdRed)).c_str(), 32,
+         IM_COL32_WHITE, true);
 
     // Left arrow
     if (blueHubActiveSub.Get())
     {
         if (arrowIcon.id)
         {
-            drawList->AddImage(arrowIcon.id, Transform({302, 67}), Transform({302 + 45, 67 + 45}), {1, 0}, {0, 1}); // flip horizontally
+            drawList->AddImage(arrowIcon.id, Transform({302, 67}), Transform({302 + 45, 67 + 45}),
+                               {1, 0}, {0, 1}); // flip horizontally
         }
         else
         {
@@ -352,7 +384,8 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     {
         if (arrowIcon.id)
         {
-            drawList->AddImage(arrowIcon.id, Transform({1573, 67}), Transform({1573 + 45, 67 + 45}));
+            drawList->AddImage(arrowIcon.id, Transform({1573, 67}),
+                               Transform({1573 + 45, 67 + 45}));
         }
         else
         {
@@ -365,7 +398,8 @@ void Rebuilt2026FMSUI::postProcessField(std::vector<Mesh> &fieldMeshes)
 {
     hubRedLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::redHubLedTag);
     hubBlueLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::blueHubLedTag);
-    logger->info("Post-processed field meshes for hub light materials: red={}, blue={}", (hubRedLightMaterial != nullptr), (hubBlueLightMaterial != nullptr));
+    logger->info("Post-processed field meshes for hub light materials: red={}, blue={}",
+                 (hubRedLightMaterial != nullptr), (hubBlueLightMaterial != nullptr));
 }
 
 int Rebuilt2026FMSUI::getDriverScore() const
@@ -404,11 +438,11 @@ int Rebuilt2026FMSUI::getOpponentScore() const
 
 std::string Rebuilt2026FMSUI::getDriveMode() const
 {
-    if(!isEnabledSub.Get())
+    if (!isEnabledSub.Get())
     {
         return "Disabled";
     }
-    else if(isAutonomousSub.Get())
+    else if (isAutonomousSub.Get())
     {
         return "Auto";
     }
@@ -427,7 +461,10 @@ uint64_t Rebuilt2026FMSUI::getMatchEndTime() const
     }
     else
     {
-        uint64_t currentTimeMillis = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        uint64_t currentTimeMillis =
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::system_clock::now().time_since_epoch())
+                                      .count());
         uint64_t matchEndTimeMillis = currentTimeMillis + static_cast<uint64_t>(matchTime * 1000.0);
         return matchEndTimeMillis;
     }

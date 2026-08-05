@@ -11,7 +11,7 @@ namespace ui
 
     class Transition
     {
-    public:
+      public:
         Transition(int startingPage, float duration = 0.30f);
 
         void transition(int page, bool instant = false);
@@ -20,7 +20,7 @@ namespace ui
 
         int getCurrentPage() const { return currentPage; }
 
-    private:
+      private:
         TransitionState state = TRANSITION_NONE;
         float alpha = 0.0f;
         const float duration;
@@ -28,4 +28,4 @@ namespace ui
         int currentPage;
         int targetPage;
     };
-}
+} // namespace ui

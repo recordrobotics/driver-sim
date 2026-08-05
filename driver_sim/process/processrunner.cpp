@@ -1,13 +1,13 @@
 #include "processrunner.h"
+#include <SDL3/SDL.h>
 #include <filesystem>
 #include <optional>
 #include <string_view>
-#include <SDL3/SDL.h>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <tlhelp32.h>
+#include <windows.h>
 #elif defined(__linux__)
 #include <dirent.h>
 #include <fstream>
@@ -30,8 +30,7 @@ extern char **environ;
 #define ENV_PTR environ
 #endif
 
-Process::environment_type make_inherited_env(
-    const Process::environment_type &overrides)
+Process::environment_type make_inherited_env(const Process::environment_type &overrides)
 {
     Process::environment_type env;
 
@@ -66,8 +65,7 @@ struct ExistingProcess
 
 std::optional<ExistingProcess> find_existing_process(const std::string_view executable_name)
 {
-    const auto wanted =
-        std::filesystem::path(executable_name).filename().string();
+    const auto wanted = std::filesystem::path(executable_name).filename().string();
 
 #ifdef _WIN32
 
@@ -147,10 +145,8 @@ std::optional<ExistingProcess> find_existing_process(const std::string_view exec
 
     std::vector<pid_t> pids(count);
 
-    count = proc_listpids(PROC_ALL_PIDS,
-                          0,
-                          pids.data(),
-                          static_cast<int>(pids.size() * sizeof(pid_t)));
+    count =
+        proc_listpids(PROC_ALL_PIDS, 0, pids.data(), static_cast<int>(pids.size() * sizeof(pid_t)));
 
     count /= sizeof(pid_t);
 
@@ -177,7 +173,8 @@ std::optional<ExistingProcess> find_existing_process(const std::string_view exec
     return std::nullopt;
 }
 
-void handle_existing_process(std::stop_token stop_token, const std::string_view executable_name, std::shared_ptr<spdlog::logger> logger)
+void handle_existing_process(std::stop_token stop_token, const std::string_view executable_name,
+                             std::shared_ptr<spdlog::logger> logger)
 {
     logger->info("Searching for existing process: {}", executable_name);
 
@@ -190,7 +187,7 @@ void handle_existing_process(std::stop_token stop_token, const std::string_view 
 
     logger->info("Found existing process: {}:{}", executable_name, existing.value().pid);
 
-    while(!stop_token.stop_requested())
+    while (!stop_token.stop_requested())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
@@ -200,141 +197,136 @@ bool ProcessRunner::start()
 {
     env = make_inherited_env(config.environment);
 
-    worker_thread = std::jthread([this](std::stop_token stop_token)
-                                 {
-        bool is_restart = false;
-
-        while (!stop_token.stop_requested())
+    worker_thread = std::jthread(
+        [this](std::stop_token stop_token)
         {
-            if (config.use_existing_process && !is_restart)
+            bool is_restart = false;
+
+            while (!stop_token.stop_requested())
             {
-                handle_existing_process(stop_token, config.commandLine[0], logger);
-            }
-
-            if (is_restart)
-            {
-                logger->info("Auto-restarting process: {}", config.commandLine[0]);
-            }
-
-            is_restart = true;
-            restart_requested = false;
-
-            std::mutex process_mutex;
-            std::string stdout_buffer;
-            std::string stderr_buffer;
-
-            // aggregate stream chunks into complete lines
-            auto flush_lines = [](std::string &buffer, const char *bytes, size_t size,
-                                  const std::function<void(const std::string &)> &log_func)
-            {
-                buffer.append(bytes, size);
-                size_t pos;
-                while ((pos = buffer.find('\n')) != std::string::npos)
+                if (config.use_existing_process && !is_restart)
                 {
-                    std::string line = buffer.substr(0, pos);
-                    if (!line.empty() && line.back() == '\r')
-                    {
-                        line.pop_back(); // strip windows carriage return
-                    }
-                    log_func(line);
-                    buffer.erase(0, pos + 1);
+                    handle_existing_process(stop_token, config.commandLine[0], logger);
                 }
-            };
 
-            Process process(
-                config.commandLine,
-                config.working_directory,
-                env,
-                [&](const char *bytes, size_t n)
+                if (is_restart)
                 {
-                    std::scoped_lock lock(process_mutex);
+                    logger->info("Auto-restarting process: {}", config.commandLine[0]);
+                }
 
-                    flush_lines(stdout_buffer, bytes, n,
-                        [this](const std::string &msg)
-                        {
-                            logger->info(msg);
-                        });
-                },
-                [&](const char *bytes, size_t n)
+                is_restart = true;
+                restart_requested = false;
+
+                std::mutex process_mutex;
+                std::string stdout_buffer;
+                std::string stderr_buffer;
+
+                // aggregate stream chunks into complete lines
+                auto flush_lines = [](std::string &buffer, const char *bytes, size_t size,
+                                      const std::function<void(const std::string &)> &log_func)
                 {
-                    std::scoped_lock lock(process_mutex);
-
-                    flush_lines(stderr_buffer, bytes, n,
-                        [this](const std::string &msg)
+                    buffer.append(bytes, size);
+                    size_t pos;
+                    while ((pos = buffer.find('\n')) != std::string::npos)
+                    {
+                        std::string line = buffer.substr(0, pos);
+                        if (!line.empty() && line.back() == '\r')
                         {
-                            logger->error(msg);
-                        });
-                });
+                            line.pop_back(); // strip windows carriage return
+                        }
+                        log_func(line);
+                        buffer.erase(0, pos + 1);
+                    }
+                };
 
-            if (process.get_id() <= 0)
-            {
-                logger->error("Failed to start process: {}", config.commandLine[0]);
+                Process process(
+                    config.commandLine, config.working_directory, env,
+                    [&](const char *bytes, size_t n)
+                    {
+                        std::scoped_lock lock(process_mutex);
 
-                auto fail_delay = std::chrono::seconds(2);
+                        flush_lines(stdout_buffer, bytes, n,
+                                    [this](const std::string &msg) { logger->info(msg); });
+                    },
+                    [&](const char *bytes, size_t n)
+                    {
+                        std::scoped_lock lock(process_mutex);
+
+                        flush_lines(stderr_buffer, bytes, n,
+                                    [this](const std::string &msg) { logger->error(msg); });
+                    });
+
+                if (process.get_id() <= 0)
+                {
+                    logger->error("Failed to start process: {}", config.commandLine[0]);
+
+                    auto fail_delay = std::chrono::seconds(2);
+                    auto start_time = std::chrono::steady_clock::now();
+
+                    while (!stop_token.stop_requested() &&
+                           std::chrono::steady_clock::now() - start_time < fail_delay)
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+
+                    continue;
+                }
+
+                logger->info("Process started successfully. PID: {}, {}", process.get_id(),
+                             config.commandLine[0]);
+
+                int exit_status = -1;
+
+                while (!stop_token.stop_requested() && !restart_requested)
+                {
+                    if (process.try_get_exit_status(exit_status))
+                        break;
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+
+                if (stop_token.stop_requested() || restart_requested)
+                {
+                    logger->info("Stop requested. Worker thread is terminating child process: {}",
+                                 config.commandLine[0]);
+                    process.kill(true);
+                }
+
+                exit_status = process.get_exit_status();
+
+                logger->info("Process exited with status {}. {}", exit_status,
+                             config.commandLine[0]);
+
+                if (stop_token.stop_requested())
+                {
+                    break;
+                }
+
+                if (!config.auto_restart && !restart_requested)
+                {
+                    if (config.kill_parent_on_child_exit)
+                    {
+                        logger->warn(
+                            "Child process {} exited unexpectedly. Terminating main process.",
+                            config.commandLine[0]);
+                        SDL_Event quit_event;
+                        quit_event.type = SDL_EVENT_QUIT;
+                        SDL_PushEvent(&quit_event);
+                    }
+                    break;
+                }
+
+                logger->warn("Process {} exited unexpectedly. Auto-restarting in 1 second...",
+                             config.commandLine[0]);
+                auto restart_delay = std::chrono::seconds(1);
                 auto start_time = std::chrono::steady_clock::now();
-
                 while (!stop_token.stop_requested() &&
-                       std::chrono::steady_clock::now() - start_time < fail_delay)
+                       (std::chrono::steady_clock::now() - start_time) < restart_delay)
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
-
-                continue;
             }
-
-            logger->info(
-                "Process started successfully. PID: {}, {}",
-                process.get_id(),
-                config.commandLine[0]);
-
-
-            int exit_status = -1;
-
-            while (!stop_token.stop_requested() && !restart_requested)
-            {
-                if (process.try_get_exit_status(exit_status))
-                    break;
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            }
-
-            if (stop_token.stop_requested() || restart_requested)
-            {
-                logger->info("Stop requested. Worker thread is terminating child process: {}", config.commandLine[0]);
-                process.kill(true);
-            }
-
-            exit_status = process.get_exit_status();
-
-            logger->info(
-                "Process exited with status {}. {}",
-                exit_status,
-                config.commandLine[0]);
-
-            if (stop_token.stop_requested())
-            {
-                break;
-            }
-
-            if (!config.auto_restart && !restart_requested)
-            {
-                if (config.kill_parent_on_child_exit)
-                {
-                    logger->warn("Child process {} exited unexpectedly. Terminating main process.", config.commandLine[0]);
-                    SDL_Event quit_event;
-                    quit_event.type = SDL_EVENT_QUIT;
-                    SDL_PushEvent(&quit_event);
-                }
-                break;
-            }
-
-            logger->warn("Process {} exited unexpectedly. Auto-restarting in 1 second...", config.commandLine[0]);
-            auto restart_delay = std::chrono::seconds(1);
-            auto start_time = std::chrono::steady_clock::now();
-            while (!stop_token.stop_requested() && (std::chrono::steady_clock::now() - start_time) < restart_delay) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        } });
+        });
 
     return true;
 }

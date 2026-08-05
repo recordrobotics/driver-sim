@@ -17,7 +17,11 @@ namespace ui
     bool UnderlineTextButton(const char *text);
     bool CircularButton(const char *id, float radius);
 
-    bool IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon, float size, float borderSize, float rounding, float fontSize, float textOffset, float opacity, bool inverted = false);
+    bool IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon,
+                    float size, float borderSize, float rounding, float fontSize, float textOffset,
+                    float opacity, bool inverted = false);
 
-    bool ChoiceButton(ImFont *font, const char *id, std::string_view name, std::string_view description, ImTextureID icon, float width, float height, float globalScale, bool selected = false);
-}
+    bool ChoiceButton(ImFont *font, const char *id, std::string_view name,
+                      std::string_view description, ImTextureID icon, float width, float height,
+                      float globalScale, bool selected = false);
+} // namespace ui

@@ -1,6 +1,6 @@
+#include <SDL3/SDL.h>
 #include <bgfx/bgfx.h>
 #include <bgfx/embedded_shader.h>
-#include <SDL3/SDL.h>
 #include <imgui/imgui.h>
 
 #include <nlohmann/json.hpp>
@@ -11,9 +11,9 @@
 #include <bloom_dirt_mask.png.h>
 #include <lut.exr.h>
 
+#include <apriltag-36h11.png.h>
 #include <carpet_base_color.jpg.h>
 #include <carpet_bump.jpg.h>
-#include <apriltag-36h11.png.h>
 
 #include <ledmask.png.h>
 
@@ -25,52 +25,51 @@
 #include <shadow.png.h>
 
 #include <mainmenu.png.h>
+#include <restartjava.png.h>
 #include <settings.png.h>
 #include <viewmode.png.h>
-#include <restartjava.png.h>
 
 using namespace ui;
 using blackboard::gui::load_image;
 
-static const bgfx::EmbeddedShader s_embeddedShaders[] =
-    {
-        BGFX_EMBEDDED_SHADER(vs_pbr),
-        BGFX_EMBEDDED_SHADER(vs_pbr_instanced),
-        BGFX_EMBEDDED_SHADER(vs_pbr_led),
-        BGFX_EMBEDDED_SHADER(vs_pbr_apriltag),
-        BGFX_EMBEDDED_SHADER(fs_pbr),
-        BGFX_EMBEDDED_SHADER(fs_pbr_led),
-        BGFX_EMBEDDED_SHADER(fs_pbr_textured),
-        BGFX_EMBEDDED_SHADER(fs_pbr_apriltag),
-        BGFX_EMBEDDED_SHADER(fs_pbr_oit),
-        BGFX_EMBEDDED_SHADER(fs_oit_moments),
+static const bgfx::EmbeddedShader s_embeddedShaders[] = {
+    BGFX_EMBEDDED_SHADER(vs_pbr),
+    BGFX_EMBEDDED_SHADER(vs_pbr_instanced),
+    BGFX_EMBEDDED_SHADER(vs_pbr_led),
+    BGFX_EMBEDDED_SHADER(vs_pbr_apriltag),
+    BGFX_EMBEDDED_SHADER(fs_pbr),
+    BGFX_EMBEDDED_SHADER(fs_pbr_led),
+    BGFX_EMBEDDED_SHADER(fs_pbr_textured),
+    BGFX_EMBEDDED_SHADER(fs_pbr_apriltag),
+    BGFX_EMBEDDED_SHADER(fs_pbr_oit),
+    BGFX_EMBEDDED_SHADER(fs_oit_moments),
 
-        BGFX_EMBEDDED_SHADER(vs_pass),
-        BGFX_EMBEDDED_SHADER(fs_present),
+    BGFX_EMBEDDED_SHADER(vs_pass),
+    BGFX_EMBEDDED_SHADER(fs_present),
 
-        BGFX_EMBEDDED_SHADER(cs_blit),
-        BGFX_EMBEDDED_SHADER(cs_debug_normals),
-        BGFX_EMBEDDED_SHADER(cs_tonemap),
-        BGFX_EMBEDDED_SHADER(cs_exposure),
-        BGFX_EMBEDDED_SHADER(cs_oit_comp),
-        BGFX_EMBEDDED_SHADER(cs_taa_resolve),
-        BGFX_EMBEDDED_SHADER(cs_mb_velocity),
-        BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_max_x),
-        BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_max_y),
-        BGFX_EMBEDDED_SHADER(cs_mb_guertin_neighbor_max),
-        BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_variance),
-        BGFX_EMBEDDED_SHADER(cs_mb_guertin_experimental_blur),
+    BGFX_EMBEDDED_SHADER(cs_blit),
+    BGFX_EMBEDDED_SHADER(cs_debug_normals),
+    BGFX_EMBEDDED_SHADER(cs_tonemap),
+    BGFX_EMBEDDED_SHADER(cs_exposure),
+    BGFX_EMBEDDED_SHADER(cs_oit_comp),
+    BGFX_EMBEDDED_SHADER(cs_taa_resolve),
+    BGFX_EMBEDDED_SHADER(cs_mb_velocity),
+    BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_max_x),
+    BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_max_y),
+    BGFX_EMBEDDED_SHADER(cs_mb_guertin_neighbor_max),
+    BGFX_EMBEDDED_SHADER(cs_mb_guertin_tile_variance),
+    BGFX_EMBEDDED_SHADER(cs_mb_guertin_experimental_blur),
 
-        BGFX_EMBEDDED_SHADER(cs_bloom_downscale),
-        BGFX_EMBEDDED_SHADER(cs_bloom_upscale),
+    BGFX_EMBEDDED_SHADER(cs_bloom_downscale),
+    BGFX_EMBEDDED_SHADER(cs_bloom_upscale),
 
-        BGFX_EMBEDDED_SHADER(cs_XeGTAO_PrefilterDepths16x16),
-        BGFX_EMBEDDED_SHADER(cs_XeGTAO_MainPass),
-        BGFX_EMBEDDED_SHADER(cs_XeGTAO_Denoise),
-        BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugNormals),
-        BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugVisibility),
+    BGFX_EMBEDDED_SHADER(cs_XeGTAO_PrefilterDepths16x16),
+    BGFX_EMBEDDED_SHADER(cs_XeGTAO_MainPass),
+    BGFX_EMBEDDED_SHADER(cs_XeGTAO_Denoise),
+    BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugNormals),
+    BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugVisibility),
 
-        BGFX_EMBEDDED_SHADER_END()};
+    BGFX_EMBEDDED_SHADER_END()};
 
 enum class ModelRotationAxis
 {
@@ -201,28 +200,25 @@ static constexpr float DRIVER_STATION_CAMERA_HEIGHT = 64 * INCHES_TO_METERS;
 
 namespace nlohmann
 {
-    template <>
-    struct adl_serializer<ModelRotationConfig>
+    template <> struct adl_serializer<ModelRotationConfig>
     {
         static ModelRotationConfig from_json(const json &j)
         {
-            return {
-                axisFromString(j.at("axis").get<std::string>()),
-                j.at("degrees").get<float>()};
+            return {axisFromString(j.at("axis").get<std::string>()), j.at("degrees").get<float>()};
         }
     };
 
-    template <>
-    struct adl_serializer<bx::Vec3>
+    template <> struct adl_serializer<bx::Vec3>
     {
         static bx::Vec3 from_json(const json &j)
         {
             return {j.at(0).get<float>(), j.at(1).get<float>(), DRIVER_STATION_CAMERA_HEIGHT};
         }
     };
-}
+} // namespace nlohmann
 
-// from https://github.com/Unity-Technologies/Graphics/blob/master/com.unity.postprocessing/PostProcessing/Shaders/Colors.hlsl
+// from
+// https://github.com/Unity-Technologies/Graphics/blob/master/com.unity.postprocessing/PostProcessing/Shaders/Colors.hlsl
 inline float PositivePow(float base, float power)
 {
     return std::pow(std::max(std::abs(base), 1.192092896e-07f), power);
@@ -347,14 +343,16 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_ledData");
     }
 
-    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformFreq::Frame, bgfx::UniformType::Vec4, LIGHT_COUNT);
+    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformFreq::Frame,
+                                     bgfx::UniformType::Vec4, LIGHT_COUNT);
     if (!bgfx::isValid(u_lightPos))
     {
         logger->error("Failed to create uniform: u_lightPos");
         throw std::runtime_error("Failed to create uniform: u_lightPos");
     }
 
-    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformFreq::Frame, bgfx::UniformType::Vec4, LIGHT_COUNT);
+    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformFreq::Frame,
+                                       bgfx::UniformType::Vec4, LIGHT_COUNT);
     if (!bgfx::isValid(u_lightColor))
     {
         logger->error("Failed to create uniform: u_lightColor");
@@ -373,9 +371,9 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create PBR rendering program.");
     }
 
-    programPBRTextured =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_textured"), true);
+    programPBRTextured = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_textured"), true);
 
     if (!bgfx::isValid(programPBRTextured))
     {
@@ -393,9 +391,9 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create PBR instanced rendering program.");
     }
 
-    programPBRLed =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_led"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_led"), true);
+    programPBRLed = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_led"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_led"), true);
 
     if (!bgfx::isValid(programPBRLed))
     {
@@ -403,9 +401,9 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create PBR led rendering program.");
     }
 
-    programPBRApriltag =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_apriltag"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_apriltag"), true);
+    programPBRApriltag = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_apriltag"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_apriltag"), true);
 
     if (!bgfx::isValid(programPBRApriltag))
     {
@@ -413,9 +411,9 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create PBR apriltag rendering program.");
     }
 
-    programOit =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
+    programOit = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
 
     if (!bgfx::isValid(programOit))
     {
@@ -423,9 +421,9 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create OIT rendering program.");
     }
 
-    programOitInstanced =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
+    programOitInstanced = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_pbr_oit"), true);
 
     if (!bgfx::isValid(programOitInstanced))
     {
@@ -433,9 +431,9 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create OIT instanced rendering program.");
     }
 
-    programOitMoments =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_oit_moments"), true);
+    programOitMoments = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_oit_moments"), true);
 
     if (!bgfx::isValid(programOitMoments))
     {
@@ -443,9 +441,9 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create OIT moments program.");
     }
 
-    programOitMomentsInstanced =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_oit_moments"), true);
+    programOitMomentsInstanced = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pbr_instanced"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_oit_moments"), true);
 
     if (!bgfx::isValid(programOitMomentsInstanced))
     {
@@ -453,8 +451,8 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create OIT instanced moments program.");
     }
 
-    oitCompProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_oit_comp"), true);
+    oitCompProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_oit_comp"), true);
 
     if (!bgfx::isValid(oitCompProgram))
     {
@@ -462,89 +460,43 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create OIT composition program.");
     }
 
-    TEXTURE(
-        gAccumTex,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gAccumTex, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA16F,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    TEXTURE(
-        gMomentsTex,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA32F,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gMomentsTex, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA32F,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    TEXTURE(
-        gTotalDepthTex,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::R32F,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gTotalDepthTex, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::R32F,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    FRAMEBUFFER(
-        gOitFbo,
-        &gAccumTex, &gbufDepth);
+    FRAMEBUFFER(gOitFbo, &gAccumTex, &gbufDepth);
 
-    FRAMEBUFFER(
-        gOitMomentsFbo,
-        &gMomentsTex, &gTotalDepthTex, &gbufDepth);
+    FRAMEBUFFER(gOitMomentsFbo, &gMomentsTex, &gTotalDepthTex, &gbufDepth);
 
-    TEXTURE(
-        gOutputColor,
-        width, height,
-        1.0f, 1.0f,
-        true,
-        1,
-        bgfx::TextureFormat::RG11B10F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gOutputColor, width, height, 1.0f, 1.0f, true, 1, bgfx::TextureFormat::RG11B10F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     gOutputColor.mipCount = calculateBloomMipmapLevels(gOutputColor.width, gOutputColor.height);
 
-    TEXTURE_EMBEDDED(
-        carpetBaseColor,
-        carpet_base_color_jpg,
-        bimg::TextureFormat::BGRA8,
-        bgfx::TextureFormat::BGRA8,
-        0);
+    TEXTURE_EMBEDDED(carpetBaseColor, carpet_base_color_jpg, bimg::TextureFormat::BGRA8,
+                     bgfx::TextureFormat::BGRA8, 0);
 
-    TEXTURE_EMBEDDED(
-        carpetBump,
-        carpet_bump_jpg,
-        bimg::TextureFormat::BGRA8,
-        bgfx::TextureFormat::BGRA8,
-        0);
+    TEXTURE_EMBEDDED(carpetBump, carpet_bump_jpg, bimg::TextureFormat::BGRA8,
+                     bgfx::TextureFormat::BGRA8, 0);
 
-    TEXTURE_EMBEDDED(
-        apriltagTexture,
-        apriltag_36h11_png,
-        bimg::TextureFormat::R8,
-        bgfx::TextureFormat::R8,
-        0);
+    TEXTURE_EMBEDDED(apriltagTexture, apriltag_36h11_png, bimg::TextureFormat::R8,
+                     bgfx::TextureFormat::R8, 0);
 
     aprilTagMesh.material.texture = "apriltags";
     aprilTagMesh.material.baseColor = {1.0f, 1.0f, 1.0f, 1.0f};
     aprilTagMesh.material.roughness = 0.7f;
     float apriltag36h11ScaleRatio = 10.0f / 8.0f;
-    Mesh::addCube(
-        aprilTagMesh,
-        -0.01f / 2, 0.0f, 0.0f,
-        0.01f, apriltag36h11ScaleRatio, apriltag36h11ScaleRatio,
-        true /* apriltag texture is projected for the purposes of pose estimation */);
+    Mesh::addCube(aprilTagMesh, -0.01f / 2, 0.0f, 0.0f, 0.01f, apriltag36h11ScaleRatio,
+                  apriltag36h11ScaleRatio,
+                  true /* apriltag texture is projected for the purposes of pose estimation */);
 
-    TEXTURE_EMBEDDED(
-        ledMaskTexture,
-        ledmask_png,
-        bimg::TextureFormat::R8,
-        bgfx::TextureFormat::R8,
-        0);
+    TEXTURE_EMBEDDED(ledMaskTexture, ledmask_png, bimg::TextureFormat::R8, bgfx::TextureFormat::R8,
+                     0);
 }
 
 void FieldRenderer::initTonemap()
@@ -565,8 +517,8 @@ void FieldRenderer::initTonemap()
         throw std::runtime_error("Failed to create uniform: u_lutParams");
     }
 
-    exposureProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_exposure"), true);
+    exposureProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_exposure"), true);
 
     if (!bgfx::isValid(exposureProgram))
     {
@@ -574,8 +526,8 @@ void FieldRenderer::initTonemap()
         throw std::runtime_error("Failed to create exposure program.");
     }
 
-    tonemapProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_tonemap"), true);
+    tonemapProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_tonemap"), true);
 
     if (!bgfx::isValid(tonemapProgram))
     {
@@ -583,12 +535,8 @@ void FieldRenderer::initTonemap()
         throw std::runtime_error("Failed to create tonemap program.");
     }
 
-    TEXTURE_EMBEDDED(
-        tonemappingLut,
-        lut_exr,
-        bimg::TextureFormat::RGBA32F,
-        bgfx::TextureFormat::RGBA32F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE_EMBEDDED(tonemappingLut, lut_exr, bimg::TextureFormat::RGBA32F,
+                     bgfx::TextureFormat::RGBA32F, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
 void FieldRenderer::initTAA(uint16_t width, uint16_t height)
@@ -609,8 +557,8 @@ void FieldRenderer::initTAA(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_jitter");
     }
 
-    taaResolveProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
+    taaResolveProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_taa_resolve"), true);
 
     if (!bgfx::isValid(taaResolveProgram))
     {
@@ -618,23 +566,11 @@ void FieldRenderer::initTAA(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create TAA resolve program.");
     }
 
-    TEXTURE(
-        gTAABuffer0,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RG11B10F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gTAABuffer0, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RG11B10F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gTAABuffer1,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RG11B10F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gTAABuffer1, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RG11B10F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
 void FieldRenderer::initGBuffer(uint16_t width, uint16_t height)
@@ -643,72 +579,30 @@ void FieldRenderer::initGBuffer(uint16_t width, uint16_t height)
     s_velocity = bgfx::createUniform("s_velocity", bgfx::UniformType::Sampler);
     s_depth = bgfx::createUniform("s_depth", bgfx::UniformType::Sampler);
 
-    TEXTURE(
-        gbufAlbedo,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA8,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gbufAlbedo, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    TEXTURE(
-        gbufEmission,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RG11B10F,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gbufEmission, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RG11B10F,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    TEXTURE(
-        gbufNormal,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::R32U,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gbufNormal, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::R32U,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    TEXTURE(
-        gbufPBRData,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA8,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gbufPBRData, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    TEXTURE(
-        gbufVelocity,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gbufVelocity, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA16F,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP |
+                BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gFullVelocity,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gFullVelocity, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA16F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gbufDepth,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::D32F,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(gbufDepth, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::D32F,
+            BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
-    FRAMEBUFFER(
-        gBufFbo,
-        &gbufAlbedo, &gbufEmission, &gbufNormal, &gbufPBRData, &gbufVelocity, &gbufDepth);
+    FRAMEBUFFER(gBufFbo, &gbufAlbedo, &gbufEmission, &gbufNormal, &gbufPBRData, &gbufVelocity,
+                &gbufDepth);
 }
 
 void FieldRenderer::initMotionBlur(uint16_t width, uint16_t height)
@@ -720,14 +614,16 @@ void FieldRenderer::initMotionBlur(uint16_t width, uint16_t height)
     s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
     s_mbTileVariance = bgfx::createUniform("s_tilevariance", bgfx::UniformType::Sampler);
 
-    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
+    u_previousView =
+        bgfx::createUniform("u_previousView", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
     if (!bgfx::isValid(u_previousView))
     {
         logger->error("Failed to create uniform: u_previousView");
         throw std::runtime_error("Failed to create uniform: u_previousView");
     }
 
-    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
+    u_previousProj =
+        bgfx::createUniform("u_previousProj", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
     if (!bgfx::isValid(u_previousProj))
     {
         logger->error("Failed to create uniform: u_previousProj");
@@ -748,115 +644,76 @@ void FieldRenderer::initMotionBlur(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_mbBlurData");
     }
 
-    mbVelocityProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
+    mbVelocityProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_velocity"), true);
     if (!bgfx::isValid(mbVelocityProgram))
     {
         logger->error("Failed to create motion blur velocity program.");
         throw std::runtime_error("Failed to create motion blur velocity program.");
     }
 
-    mbGuertinTileMaxXProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_max_x"), true);
+    mbGuertinTileMaxXProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_max_x"), true);
     if (!bgfx::isValid(mbGuertinTileMaxXProgram))
     {
         logger->error("Failed to create motion blur tile max X program.");
         throw std::runtime_error("Failed to create motion blur tile max X program.");
     }
 
-    mbGuertinTileMaxYProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_max_y"), true);
+    mbGuertinTileMaxYProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_max_y"), true);
     if (!bgfx::isValid(mbGuertinTileMaxYProgram))
     {
         logger->error("Failed to create motion blur tile max Y program.");
         throw std::runtime_error("Failed to create motion blur tile max Y program.");
     }
 
-    mbGuertinNeighborMaxProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_neighbor_max"), true);
+    mbGuertinNeighborMaxProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_neighbor_max"), true);
     if (!bgfx::isValid(mbGuertinNeighborMaxProgram))
     {
         logger->error("Failed to create motion blur neighbor max program.");
         throw std::runtime_error("Failed to create motion blur neighbor max program.");
     }
 
-    mbGuertinTileVarianceProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_variance"), true);
+    mbGuertinTileVarianceProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_tile_variance"), true);
     if (!bgfx::isValid(mbGuertinTileVarianceProgram))
     {
         logger->error("Failed to create motion blur tile variance program.");
         throw std::runtime_error("Failed to create motion blur tile variance program.");
     }
 
-    mbGuertinExperimentalBlurProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_experimental_blur"), true);
+    mbGuertinExperimentalBlurProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_mb_guertin_experimental_blur"),
+        true);
     if (!bgfx::isValid(mbGuertinExperimentalBlurProgram))
     {
         logger->error("Failed to create motion blur experimental blur program.");
         throw std::runtime_error("Failed to create motion blur experimental blur program.");
     }
 
-    TEXTURE(
-        gMBTileMaxX,
-        width,
-        height,
-        1.0f / MB_TILE_SIZE,
-        1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gMBTileMaxX, width, height, 1.0f / MB_TILE_SIZE, 1.0f, false, 1,
+            bgfx::TextureFormat::RGBA16F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gMBTileMax,
-        width,
-        height,
-        1.0f / MB_TILE_SIZE,
-        1.0f / MB_TILE_SIZE,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gMBTileMax, width, height, 1.0f / MB_TILE_SIZE, 1.0f / MB_TILE_SIZE, false, 1,
+            bgfx::TextureFormat::RGBA16F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gMBNeighborMax,
-        width,
-        height,
-        1.0f / MB_TILE_SIZE,
-        1.0f / MB_TILE_SIZE,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gMBNeighborMax, width, height, 1.0f / MB_TILE_SIZE, 1.0f / MB_TILE_SIZE, false, 1,
+            bgfx::TextureFormat::RGBA16F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gMBTileVariance,
-        width,
-        height,
-        1.0f / MB_TILE_SIZE,
-        1.0f / MB_TILE_SIZE,
-        false,
-        1,
-        bgfx::TextureFormat::R16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gMBTileVariance, width, height, 1.0f / MB_TILE_SIZE, 1.0f / MB_TILE_SIZE, false, 1,
+            bgfx::TextureFormat::R16F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gMBOutputColor,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RG11B10F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gMBOutputColor, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RG11B10F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gMBVelocity,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA16F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gMBVelocity, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA16F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
 void FieldRenderer::initBloom(uint16_t width, uint16_t height)
@@ -896,28 +753,24 @@ void FieldRenderer::initBloom(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_bloomIntensity");
     }
 
-    bloomDownscaleProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_downscale"), true);
+    bloomDownscaleProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_downscale"), true);
     if (!bgfx::isValid(bloomDownscaleProgram))
     {
         logger->error("Failed to create bloom downscale program.");
         throw std::runtime_error("Failed to create bloom downscale program.");
     }
 
-    bloomUpscaleProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_upscale"), true);
+    bloomUpscaleProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_bloom_upscale"), true);
     if (!bgfx::isValid(bloomUpscaleProgram))
     {
         logger->error("Failed to create bloom upscale program.");
         throw std::runtime_error("Failed to create bloom upscale program.");
     }
 
-    TEXTURE_EMBEDDED(
-        bloomDirtMask,
-        bloom_dirt_mask_png,
-        bimg::TextureFormat::BGRA8,
-        bgfx::TextureFormat::BGRA8,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE_EMBEDDED(bloomDirtMask, bloom_dirt_mask_png, bimg::TextureFormat::BGRA8,
+                     bgfx::TextureFormat::BGRA8, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
 // From https://www.shadertoy.com/view/3tB3z3 - except we're using R2 here
@@ -973,73 +826,56 @@ void FieldRenderer::initGTAO(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: s_workingEdges");
     }
 
-    XeGTAO_PrefilterDepths16x16Program =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_PrefilterDepths16x16"), true);
+    XeGTAO_PrefilterDepths16x16Program = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_PrefilterDepths16x16"),
+        true);
     if (!bgfx::isValid(XeGTAO_PrefilterDepths16x16Program))
     {
         logger->error("Failed to create XeGTAO Prefilter Depths 16x16 program.");
         throw std::runtime_error("Failed to create XeGTAO Prefilter Depths 16x16 program.");
     }
 
-    XeGTAO_MainPassProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_MainPass"), true);
+    XeGTAO_MainPassProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_MainPass"), true);
     if (!bgfx::isValid(XeGTAO_MainPassProgram))
     {
         logger->error("Failed to create XeGTAO Main Pass program.");
         throw std::runtime_error("Failed to create XeGTAO Main Pass program.");
     }
 
-    XeGTAO_DenoiseProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_Denoise"), true);
+    XeGTAO_DenoiseProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_Denoise"), true);
     if (!bgfx::isValid(XeGTAO_DenoiseProgram))
     {
         logger->error("Failed to create XeGTAO Denoise program.");
         throw std::runtime_error("Failed to create XeGTAO Denoise program.");
     }
 
-    XeGTAO_debugNormalsProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_debugNormals"), true);
+    XeGTAO_debugNormalsProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_debugNormals"), true);
     if (!bgfx::isValid(XeGTAO_debugNormalsProgram))
     {
         logger->error("Failed to create XeGTAO Debug Normals program.");
         throw std::runtime_error("Failed to create XeGTAO Debug Normals program.");
     }
 
-    XeGTAO_debugVisibilityProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_debugVisibility"), true);
+    XeGTAO_debugVisibilityProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_XeGTAO_debugVisibility"), true);
     if (!bgfx::isValid(XeGTAO_debugVisibilityProgram))
     {
         logger->error("Failed to create XeGTAO Debug Visibility program.");
         throw std::runtime_error("Failed to create XeGTAO Debug Visibility program.");
     }
 
-    TEXTURE(
-        gGTAOWorkingDepth,
-        width, height,
-        1.0f, 1.0f,
-        true,
-        1,
-        bgfx::TextureFormat::R32F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gGTAOWorkingDepth, width, height, 1.0f, 1.0f, true, 1, bgfx::TextureFormat::R32F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
     gGTAOWorkingDepth.mipCount = XE_GTAO_DEPTH_MIP_LEVELS;
 
-    TEXTURE(
-        gGTAOWorkingAOTerm,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::R32U,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gGTAOWorkingAOTerm, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::R32U,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
-    TEXTURE(
-        gGTAOWorkingEdges,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::R32F,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gGTAOWorkingEdges, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::R32F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     // Hilbert look-up texture! It's a 64 x 64 uint16 texture generated using HilbertIndex
     {
@@ -1054,27 +890,15 @@ void FieldRenderer::initGTAO(uint16_t width, uint16_t height)
             }
         }
 
-        TEXTURE_MEMORY(
-            gGTAOHilbertLut,
-            64, 64,
-            1.0f, 1.0f,
-            false,
-            1,
-            bgfx::TextureFormat::R16U,
-            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
-            bgfx::copy(data, 64 * 64 * sizeof(uint16_t)));
+        TEXTURE_MEMORY(gGTAOHilbertLut, 64, 64, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::R16U,
+                       BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
+                       bgfx::copy(data, 64 * 64 * sizeof(uint16_t)));
 
         delete[] data;
     }
 
-    TEXTURE(
-        gGTAOFinalAOTerm,
-        width, height,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::R32U,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+    TEXTURE(gGTAOFinalAOTerm, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::R32U,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
 frc::Pose3d FieldRenderer::transformPose3dToLocalCoordinates(const frc::Pose3d &pose) const
@@ -1084,9 +908,9 @@ frc::Pose3d FieldRenderer::transformPose3dToLocalCoordinates(const frc::Pose3d &
     case WPILibCoordinateSystem::WallBlue:
         return frc::Pose3d(
             units::meter_t{fieldWidthMeters} / 2.0 - pose.X(),
-            units::meter_t{fieldHeightMeters} / 2.0 - pose.Y(),
-            pose.Z(),
-            frc::Rotation3d(units::degree_t{0.0}, units::degree_t{0.0}, units::degree_t{180.0}).RotateBy(-pose.Rotation()));
+            units::meter_t{fieldHeightMeters} / 2.0 - pose.Y(), pose.Z(),
+            frc::Rotation3d(units::degree_t{0.0}, units::degree_t{0.0}, units::degree_t{180.0})
+                .RotateBy(-pose.Rotation()));
     case WPILibCoordinateSystem::CenterRed:
         return pose;
     default:
@@ -1094,12 +918,10 @@ frc::Pose3d FieldRenderer::transformPose3dToLocalCoordinates(const frc::Pose3d &
     }
 }
 
-Transform::Transform()
-{
-    std::memset(this, 0, sizeof(Transform));
-}
+Transform::Transform() { std::memset(this, 0, sizeof(Transform)); }
 
-Transform::Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position, bx::Quaternion rotation)
+Transform::Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position,
+                     bx::Quaternion rotation)
 {
     float matrix[16];
     float rotationMatrix[16];
@@ -1164,7 +986,8 @@ struct UVVertex
 
 bgfx::VertexLayout UVVertex::layout;
 
-void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float deltaTime, bool freezeTemporalEffects)
+void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float deltaTime,
+                               bool freezeTemporalEffects)
 {
     if (!freezeTemporalEffects)
     {
@@ -1183,11 +1006,7 @@ void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float de
         lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
     }
 
-    instanceData.transform = {
-        modelMatrix,
-        parentMatrix,
-        lastPosition,
-        lastRotation};
+    instanceData.transform = {modelMatrix, parentMatrix, lastPosition, lastRotation};
 
     if (lastDataUpdate == -1)
     {
@@ -1200,23 +1019,22 @@ RobotData::RobotData(RobotModel *model)
 {
     uint16_t ledCount = static_cast<uint16_t>(floorf(model->ledCount));
     ledColorData = std::make_unique<uint8_t[]>(ledCount * 4);
-    TEXTURE(
-        ledColorTexture,
-        ledCount, 1,
-        1.0f, 1.0f,
-        false,
-        1,
-        bgfx::TextureFormat::RGBA8,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    TEXTURE(ledColorTexture, ledCount, 1, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA8,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
-void RobotData::update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects, std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates)
+void RobotData::update(
+    int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects,
+    std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates)
 {
-    if (poseSub.Exists() && (alwaysEnabled || (enabledSub.Exists() && enabledSub.GetAtomic().value)))
+    if (poseSub.Exists() &&
+        (alwaysEnabled || (enabledSub.Exists() && enabledSub.GetAtomic().value)))
     {
         auto robotPose = poseSub.GetAtomic();
         frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
-        dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+        dynamicData.position = {static_cast<float>(localPose.X().value()),
+                                static_cast<float>(localPose.Y().value()),
+                                static_cast<float>(localPose.Z().value())};
         dynamicData.rotation = rotation3dToQuaternion(localPose.Rotation());
         dynamicData.update(model->modelMatrix.data(), deltaTime, freezeTemporalEffects);
         dynamicData.lastDataUpdate = currentDataUpdateIndex;
@@ -1228,7 +1046,8 @@ void RobotData::update(int currentDataUpdateIndex, float deltaTime, bool freezeT
         float rotationMatrix[16];
         bx::mtxFromQuaternion(rotationMatrix, dynamicData.lastRotation);
         float translationMatrix[16];
-        bx::mtxTranslate(translationMatrix, dynamicData.lastPosition.x, dynamicData.lastPosition.y, dynamicData.lastPosition.z);
+        bx::mtxTranslate(translationMatrix, dynamicData.lastPosition.x, dynamicData.lastPosition.y,
+                         dynamicData.lastPosition.z);
         bx::mtxMul(robotOriginMtx, rotationMatrix, translationMatrix);
 
         for (size_t i = 0; i < components.size(); ++i)
@@ -1236,15 +1055,20 @@ void RobotData::update(int currentDataUpdateIndex, float deltaTime, bool freezeT
             if (componentPosesSub.Exists() && i < componentPoses.value.size())
             {
                 // invert rotation to match advscope
-                components[i].position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
-                components[i].rotation = rotation3dToQuaternionInverse(componentPoses.value[i].Rotation());
-                components[i].update(model->components[i].modelMatrix.data(), robotOriginMtx, deltaTime, freezeTemporalEffects);
+                components[i].position = {static_cast<float>(componentPoses.value[i].X().value()),
+                                          static_cast<float>(componentPoses.value[i].Y().value()),
+                                          static_cast<float>(componentPoses.value[i].Z().value())};
+                components[i].rotation =
+                    rotation3dToQuaternionInverse(componentPoses.value[i].Rotation());
+                components[i].update(model->components[i].modelMatrix.data(), robotOriginMtx,
+                                     deltaTime, freezeTemporalEffects);
             }
             else
             {
                 components[i].position = {0.0f, 0.0f, 0.0f};
                 components[i].rotation = rotation3dToQuaternion(frc::Rotation3d{});
-                components[i].update(model->modelMatrix.data(), robotOriginMtx, deltaTime, freezeTemporalEffects);
+                components[i].update(model->modelMatrix.data(), robotOriginMtx, deltaTime,
+                                     freezeTemporalEffects);
             }
 
             components[i].lastDataUpdate = currentDataUpdateIndex;
@@ -1253,18 +1077,21 @@ void RobotData::update(int currentDataUpdateIndex, float deltaTime, bool freezeT
         // Update RSL state
         if (rslStateSub.Exists())
         {
-            rslEmissionStrength = rslStateSub.GetAtomic().value ? model->rslOnEmissionStrength : 0.0f;
+            rslEmissionStrength =
+                rslStateSub.GetAtomic().value ? model->rslOnEmissionStrength : 0.0f;
         }
 
         // Update bumper color
         if (allianceStationSub.Exists())
         {
             int allianceStation = allianceStationSub.GetAtomic().value;
-            if ((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && model->bumperRedColor.has_value()) // Red
+            if ((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) &&
+                model->bumperRedColor.has_value()) // Red
             {
                 bumperBaseColor = model->bumperRedColor.value();
             }
-            else if ((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && model->bumperBlueColor.has_value()) // Blue
+            else if ((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) &&
+                     model->bumperBlueColor.has_value()) // Blue
             {
                 bumperBaseColor = model->bumperBlueColor.value();
             }
@@ -1324,7 +1151,9 @@ void RobotData::update(int currentDataUpdateIndex, float deltaTime, bool freezeT
     }
 }
 
-void GamePieceData::update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects, std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates)
+void GamePieceData::update(
+    int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects,
+    std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates)
 {
     bool hasObjects = poseObjectsSub.Exists();
     if (hasObjects || posesSub.Exists())
@@ -1332,7 +1161,9 @@ void GamePieceData::update(int currentDataUpdateIndex, float deltaTime, bool fre
         auto updateInstance = [&](DynamicObjectData &instance, const frc::Pose3d &pose)
         {
             auto localPose = transformPose3dToLocalCoordinates(pose);
-            instance.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+            instance.position = {static_cast<float>(localPose.X().value()),
+                                 static_cast<float>(localPose.Y().value()),
+                                 static_cast<float>(localPose.Z().value())};
             instance.rotation = rotation3dToQuaternion(localPose.Rotation());
             instance.update(modelMatrix.data(), deltaTime, freezeTemporalEffects);
             instance.lastDataUpdate = currentDataUpdateIndex;
@@ -1343,7 +1174,8 @@ void GamePieceData::update(int currentDataUpdateIndex, float deltaTime, bool fre
             auto gamePiecePoseObjects = poseObjectsSub.GetAtomic();
             for (size_t i = 0; i < gamePiecePoseObjects.value.size(); ++i)
             {
-                updateInstance(instances[gamePiecePoseObjects.value[i].identity], gamePiecePoseObjects.value[i].pose);
+                updateInstance(instances[gamePiecePoseObjects.value[i].identity],
+                               gamePiecePoseObjects.value[i].pose);
             }
         }
         else
@@ -1354,7 +1186,8 @@ void GamePieceData::update(int currentDataUpdateIndex, float deltaTime, bool fre
                 updateInstance(instances[i], gamePiecePoses.value[i]);
             }
         }
-        std::erase_if(instances, [currentDataUpdateIndex](const std::pair<int, DynamicObjectData> &pair)
+        std::erase_if(instances,
+                      [currentDataUpdateIndex](const std::pair<int, DynamicObjectData> &pair)
                       { return pair.second.lastDataUpdate != currentDataUpdateIndex; });
     }
     else
@@ -1384,7 +1217,8 @@ void FieldRenderer::updateOrbitCameraFromInput()
     if (io.MouseWheel != 0.0f)
     {
         orbitCamera.distance *= std::pow(0.9f, io.MouseWheel);
-        orbitCamera.distance = std::clamp(orbitCamera.distance, orbitCamera.minDistance, orbitCamera.maxDistance);
+        orbitCamera.distance =
+            std::clamp(orbitCamera.distance, orbitCamera.minDistance, orbitCamera.maxDistance);
     }
 
     if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
@@ -1397,14 +1231,16 @@ void FieldRenderer::updateOrbitCameraFromInput()
     }
     else if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
     {
-        bx::Vec3 forward{
-            std::cos(orbitCamera.pitch) * std::cos(orbitCamera.yaw),
-            -std::cos(orbitCamera.pitch) * std::sin(orbitCamera.yaw),
-            std::sin(orbitCamera.pitch)};
+        bx::Vec3 forward{std::cos(orbitCamera.pitch) * std::cos(orbitCamera.yaw),
+                         -std::cos(orbitCamera.pitch) * std::sin(orbitCamera.yaw),
+                         std::sin(orbitCamera.pitch)};
         bx::Vec3 right = bx::normalize(bx::cross({0.0f, 0.0f, 1.0f}, forward));
         bx::Vec3 up = bx::cross(forward, right);
 
-        orbitCamera.target = bx::add(orbitCamera.target, bx::mul(bx::add(bx::mul(right, -io.MouseDelta.x), bx::mul(up, io.MouseDelta.y)), orbitCamera.distance * 0.001f));
+        orbitCamera.target =
+            bx::add(orbitCamera.target,
+                    bx::mul(bx::add(bx::mul(right, -io.MouseDelta.x), bx::mul(up, io.MouseDelta.y)),
+                            orbitCamera.distance * 0.001f));
     }
 }
 
@@ -1442,9 +1278,11 @@ static void performRotationStack(float out[16], const std::vector<ModelRotationC
  * tags is a map of mesh-name:tag
  * meshes of the same material but different tags will stay separated and won't be merged.
  * this is useful for dynamically removing meshes based on tags.
- * additionally, meshes with same tag but different materials will also stay separated, since they can't be merged anyway.
+ * additionally, meshes with same tag but different materials will also stay separated, since they
+ * can't be merged anyway.
  */
-static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name, const std::unordered_map<std::string, std::string> &tags)
+static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name,
+                               const std::unordered_map<std::string, std::string> &tags)
 {
     std::filesystem::path glbPath = directory + name + ".glb";
     std::filesystem::path cachePath = directory + name + ".cache";
@@ -1459,13 +1297,21 @@ static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory,
         }
         catch (const std::exception &e)
         {
-            logger->warn("Failed to load meshes from cache: {}. Updating from GLTF model instead.", e.what());
+            logger->warn("Failed to load meshes from cache: {}. Updating from GLTF model instead.",
+                         e.what());
         }
     }
 
     logger->info("Loading {0} meshes from GLTF model.", directory + name);
     fastgltf::Parser parser(fastgltf::Extensions::KHR_materials_emissive_strength);
-    Mesh::fromGltfModel(meshes, parser.loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory, fastgltf::Options::LoadGLBBuffers | fastgltf::Options::DontRequireValidAssetMember).get(), tags);
+    Mesh::fromGltfModel(
+        meshes,
+        parser
+            .loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory,
+                            fastgltf::Options::LoadGLBBuffers |
+                                fastgltf::Options::DontRequireValidAssetMember)
+            .get(),
+        tags);
 
     if (settings::cacheModels)
     {
@@ -1498,7 +1344,8 @@ void FieldRenderer::loadFieldModel()
 
         logger->info("Loaded field config file: {0}", configFile);
 
-        performRotationStack(fieldModelMatrix[0], j["rotations"].get<std::vector<ModelRotationConfig>>());
+        performRotationStack(fieldModelMatrix[0],
+                             j["rotations"].get<std::vector<ModelRotationConfig>>());
         std::memcpy(fieldModelMatrix[1], fieldModelMatrix[0], sizeof(float) * 16);
 
         coordinateSystem = coordinateSystemFromString(j["coordinateSystem"].get<std::string>());
@@ -1514,9 +1361,11 @@ void FieldRenderer::loadFieldModel()
                 std::string name = gamePiece["name"];
                 auto position = gamePiece["position"];
                 float rotationMatrix[16];
-                performRotationStack(rotationMatrix, gamePiece["rotations"].get<std::vector<ModelRotationConfig>>());
+                performRotationStack(
+                    rotationMatrix, gamePiece["rotations"].get<std::vector<ModelRotationConfig>>());
                 float translationMatrix[16];
-                bx::mtxTranslate(translationMatrix, position[0].get<float>(), position[1].get<float>(), position[2].get<float>());
+                bx::mtxTranslate(translationMatrix, position[0].get<float>(),
+                                 position[1].get<float>(), position[2].get<float>());
                 float modelMatrix[16];
                 bx::mtxMul(modelMatrix, rotationMatrix, translationMatrix);
 
@@ -1525,7 +1374,8 @@ void FieldRenderer::loadFieldModel()
                     .modelMatrix = std::to_array(modelMatrix),
                 });
 
-                for (const auto &stagedObject : gamePiece["stagedObjects"].get<std::vector<std::string>>())
+                for (const auto &stagedObject :
+                     gamePiece["stagedObjects"].get<std::vector<std::string>>())
                 {
                     tags[stagedObject] = name;
                 }
@@ -1536,14 +1386,17 @@ void FieldRenderer::loadFieldModel()
         {
             for (const auto &aprilTag : j["aprilTags"])
             {
-                // Format as "FAMILY-SIZEin" where "FAMILY" is "36h11" or "16h5" and "SIZE" is the length of the black section
+                // Format as "FAMILY-SIZEin" where "FAMILY" is "36h11" or "16h5" and "SIZE" is the
+                // length of the black section
                 std::string variant = aprilTag["variant"];
                 std::string family = variant.substr(0, variant.find('-'));
-                std::string size = variant.substr(variant.find('-') + 1, variant.find("in") - variant.find('-') - 1);
+                std::string size = variant.substr(variant.find('-') + 1,
+                                                  variant.find("in") - variant.find('-') - 1);
 
                 if (family != "36h11")
                 {
-                    logger->warn("AprilTag family {} is not supported. Only 36h11 is supported.", family);
+                    logger->warn("AprilTag family {} is not supported. Only 36h11 is supported.",
+                                 family);
                     continue;
                 }
 
@@ -1553,7 +1406,8 @@ void FieldRenderer::loadFieldModel()
                 float scaleMtx[16];
                 bx::mtxScale(scaleMtx, 1.0f, tagSizeMeters, tagSizeMeters);
                 float rotationMtx[16];
-                performRotationStack(rotationMtx, aprilTag["rotations"].get<std::vector<ModelRotationConfig>>());
+                performRotationStack(rotationMtx,
+                                     aprilTag["rotations"].get<std::vector<ModelRotationConfig>>());
                 const auto &position = aprilTag["position"].get<std::vector<float>>();
                 float translationMtx[16];
                 bx::mtxTranslate(translationMtx, position[0], position[1], position[2]);
@@ -1587,7 +1441,8 @@ void FieldRenderer::loadFieldModel()
 
         for (size_t i = 0; i < gamePieces.size(); i++)
         {
-            loadAndCacheMeshes(gamePieces[i].meshes, fieldDirectory, "model_" + std::to_string(i), {});
+            loadAndCacheMeshes(gamePieces[i].meshes, fieldDirectory, "model_" + std::to_string(i),
+                               {});
             for (auto &mesh : gamePieces[i].meshes)
             {
                 mesh.material.writesObjectMotionVectors = true;
@@ -1598,7 +1453,8 @@ void FieldRenderer::loadFieldModel()
     }
     else
     {
-        logger->error("Could not open field config file: {0}, error: {1}", configFile, err.getMessage().getCPtr());
+        logger->error("Could not open field config file: {0}, error: {1}", configFile,
+                      err.getMessage().getCPtr());
     }
 }
 
@@ -1640,10 +1496,13 @@ void FieldRenderer::loadRobotModel()
         for (const auto &component : j["components"])
         {
             float componentRotationMtx[16];
-            performRotationStack(componentRotationMtx, component["zeroedRotations"].get<std::vector<ModelRotationConfig>>());
+            performRotationStack(
+                componentRotationMtx,
+                component["zeroedRotations"].get<std::vector<ModelRotationConfig>>());
             const auto &componentPosition = component["zeroedPosition"].get<std::vector<float>>();
             float componentTranslationMtx[16];
-            bx::mtxTranslate(componentTranslationMtx, componentPosition[0], componentPosition[1], componentPosition[2]);
+            bx::mtxTranslate(componentTranslationMtx, componentPosition[0], componentPosition[1],
+                             componentPosition[2]);
             float componentModelMatrix[16];
             bx::mtxMul(componentModelMatrix, componentRotationMtx, componentTranslationMtx);
 
@@ -1652,7 +1511,8 @@ void FieldRenderer::loadRobotModel()
             });
         }
 
-        RobotModel &robotModel = robotModels.emplace_back(robotName, std::to_array(robotModelMatrix), components);
+        RobotModel &robotModel =
+            robotModels.emplace_back(robotName, std::to_array(robotModelMatrix), components);
 
         std::vector<std::string> rslNodeNames = j.value("rsl", std::vector<std::string>());
 
@@ -1678,7 +1538,8 @@ void FieldRenderer::loadRobotModel()
                 }
                 else
                 {
-                    logger->warn("Bumper redColor field is not in the correct format: {}", redColorHex);
+                    logger->warn("Bumper redColor field is not in the correct format: {}",
+                                 redColorHex);
                 }
             }
 
@@ -1691,7 +1552,8 @@ void FieldRenderer::loadRobotModel()
                 }
                 else
                 {
-                    logger->warn("Bumper blueColor field is not in the correct format: {}", blueColorHex);
+                    logger->warn("Bumper blueColor field is not in the correct format: {}",
+                                 blueColorHex);
                 }
             }
         }
@@ -1752,7 +1614,8 @@ void FieldRenderer::loadRobotModel()
         }
         for (size_t i = 0; i < components.size(); i++)
         {
-            loadAndCacheMeshes(robotModel.components[i].meshes, robotDirectory, "model_" + std::to_string(i), {});
+            loadAndCacheMeshes(robotModel.components[i].meshes, robotDirectory,
+                               "model_" + std::to_string(i), {});
             for (auto &mesh : robotModel.components[i].meshes)
             {
                 mesh.material.writesObjectMotionVectors = true;
@@ -1763,7 +1626,8 @@ void FieldRenderer::loadRobotModel()
     }
     else
     {
-        logger->error("Could not open robot config file: {0}, error: {1}", configFile, err.getMessage().getCPtr());
+        logger->error("Could not open robot config file: {0}, error: {1}", configFile,
+                      err.getMessage().getCPtr());
     }
 }
 
@@ -1777,8 +1641,7 @@ void FieldRenderer::startLoadFieldModel()
     startedLoadingFieldModel = true;
 
     logger->info("Starting loading field model in background thread.");
-    fieldModelLoadingFuture = std::async(std::launch::async, [this]()
-                                         { loadFieldModel(); });
+    fieldModelLoadingFuture = std::async(std::launch::async, [this]() { loadFieldModel(); });
 }
 
 void FieldRenderer::startLoadRobotModel()
@@ -1791,27 +1654,24 @@ void FieldRenderer::startLoadRobotModel()
     startedLoadingRobotModel = true;
 
     logger->info("Starting loading robot model in background thread.");
-    robotModelLoadingFuture = std::async(std::launch::async, [this]()
-                                         { loadRobotModel(); });
+    robotModelLoadingFuture = std::async(std::launch::async, [this]() { loadRobotModel(); });
 }
 
 FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
 {
     skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
     lightColor = {
-        SRGBToLinear({1.0f, 0.25f, 0.25f, 432.0f}),
-        SRGBToLinear({1.0f, 0.85f, 0.85f, 332.0f}),
-        SRGBToLinear({1.0f, 1.0f, 1.0f, 432.0f}),
-        SRGBToLinear({1.0f, 1.0f, 1.0f, 332.0f}),
-        SRGBToLinear({0.25f, 0.45f, 1.0f, 432.0f}),
-        SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})};
+        SRGBToLinear({1.0f, 0.25f, 0.25f, 432.0f}), SRGBToLinear({1.0f, 0.85f, 0.85f, 332.0f}),
+        SRGBToLinear({1.0f, 1.0f, 1.0f, 432.0f}),   SRGBToLinear({1.0f, 1.0f, 1.0f, 332.0f}),
+        SRGBToLinear({0.25f, 0.45f, 1.0f, 432.0f}), SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})};
 
     MeshVertex::init();
     UVVertex::init();
 
     font = blackboard::gui::get_font("Inter_Regular_otf");
 
-    load_image((void *)shadow_png_bytes, sizeof(shadow_png_bytes), shadowTexture, BGFX_SAMPLER_UVW_CLAMP);
+    load_image((void *)shadow_png_bytes, sizeof(shadow_png_bytes), shadowTexture,
+               BGFX_SAMPLER_UVW_CLAMP);
 
     load_image((void *)mainmenu_png_bytes, sizeof(mainmenu_png_bytes), mainMenuTexture);
     load_image((void *)settings_png_bytes, sizeof(settings_png_bytes), settingsTexture);
@@ -1826,7 +1686,8 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create uniform for present texture.");
     }
 
-    u_previousViewProj = bgfx::createUniform("u_previousViewProj", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
+    u_previousViewProj = bgfx::createUniform("u_previousViewProj", bgfx::UniformFreq::Frame,
+                                             bgfx::UniformType::Mat4);
     if (!bgfx::isValid(u_previousViewProj))
     {
         logger->error("Failed to create uniform: u_previousViewProj");
@@ -1844,9 +1705,9 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create blit program.");
     }
 
-    presentProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
-                            bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_present"), true);
+    presentProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_pass"),
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_present"), true);
 
     if (!bgfx::isValid(presentProgram))
     {
@@ -1854,8 +1715,8 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create present program.");
     }
 
-    debugNormalsProgram =
-        bgfx::createProgram(bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_debug_normals"), true);
+    debugNormalsProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_debug_normals"), true);
 
     if (!bgfx::isValid(debugNormalsProgram))
     {
@@ -1876,18 +1737,23 @@ void FieldRenderer::startNTClient()
 {
     logger->info("Starting NetworkTables client");
     ntInst = nt::NetworkTableInstance::Create();
-    ntInst.AddConnectionListener(true, [](const nt::Event &event)
+    ntInst.AddConnectionListener(true,
+                                 [](const nt::Event &event)
                                  {
-                                    if (event.Is(nt::EventFlags::kConnected))
-                                    {
-                                        auto connInfo = std::get<nt::ConnectionInfo>(event.data);
-                                        logger->info("Connected to NetworkTables server at {}:{}", connInfo.remote_ip, connInfo.remote_port);
-                                    }
-                                    else if( event.Is(nt::EventFlags::kDisconnected))
-                                    {
-                                        auto connInfo = std::get<nt::ConnectionInfo>(event.data);
-                                        logger->warn("Disconnected from NetworkTables server at {}:{}", connInfo.remote_ip, connInfo.remote_port);
-                                    } });
+                                     if (event.Is(nt::EventFlags::kConnected))
+                                     {
+                                         auto connInfo = std::get<nt::ConnectionInfo>(event.data);
+                                         logger->info("Connected to NetworkTables server at {}:{}",
+                                                      connInfo.remote_ip, connInfo.remote_port);
+                                     }
+                                     else if (event.Is(nt::EventFlags::kDisconnected))
+                                     {
+                                         auto connInfo = std::get<nt::ConnectionInfo>(event.data);
+                                         logger->warn(
+                                             "Disconnected from NetworkTables server at {}:{}",
+                                             connInfo.remote_ip, connInfo.remote_port);
+                                     }
+                                 });
 
     fmsUI = std::make_unique<Rebuilt2026FMSUI>(ntInst);
 
@@ -1900,19 +1766,19 @@ constexpr float CAMERA_LINEAR_FAR = 100.0f;
 // assumes reverse z, infinite far
 void FieldRenderer::updateInfo(float cameraNear, float proj[16])
 {
-    float info[8] = {
-        cameraNear,
-        std::log(cameraNear),
-        CAMERA_LINEAR_FAR - cameraNear,
-        std::log(CAMERA_LINEAR_FAR) - std::log(cameraNear),
-        2.0f / proj[0],
-        -2.0f / proj[5],
-        -1.0f / proj[0],
-        1.0f / proj[5]};
+    float info[8] = {cameraNear,
+                     std::log(cameraNear),
+                     CAMERA_LINEAR_FAR - cameraNear,
+                     std::log(CAMERA_LINEAR_FAR) - std::log(cameraNear),
+                     2.0f / proj[0],
+                     -2.0f / proj[5],
+                     -1.0f / proj[0],
+                     1.0f / proj[5]};
     bgfx::setFrameUniform(u_info, info, 2);
 }
 
-void screenSpaceQuad(bool _originBottomLeft, bgfx::Encoder *encoder, float _width = 1.0f, float _height = 1.0f)
+void screenSpaceQuad(bool _originBottomLeft, bgfx::Encoder *encoder, float _width = 1.0f,
+                     float _height = 1.0f)
 {
     if (3 == bgfx::getAvailTransientVertexBuffer(3, UVVertex::layout))
     {
@@ -2061,19 +1927,16 @@ void FieldRenderer::ensureTextures(uint16_t width, uint16_t height)
 void FieldRenderer::setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepass)
 {
     float pbrData[4] = {
-        (mesh.material.writesObjectMotionVectors && settings::writeObjectMotionVectors) ? 1.0f : 0.0f,
-        mesh.material.metallic,
-        mesh.material.roughness,
-        0.0f};
+        (mesh.material.writesObjectMotionVectors && settings::writeObjectMotionVectors) ? 1.0f
+                                                                                        : 0.0f,
+        mesh.material.metallic, mesh.material.roughness, 0.0f};
 
     if (mesh.material.type == MaterialType::Transparent)
     {
-        encoder->setState(
-            BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-            BGFX_STATE_DEPTH_TEST_GREATER |
-            // Additive blending
-            BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE,
-                                  BGFX_STATE_BLEND_ONE));
+        encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                          BGFX_STATE_DEPTH_TEST_GREATER |
+                          // Additive blending
+                          BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE, BGFX_STATE_BLEND_ONE));
         if (!isTransparentPrepass)
         {
             // Use moments prepass for OIT
@@ -2083,12 +1946,8 @@ void FieldRenderer::setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isT
     }
     else
     {
-        encoder->setState(
-            BGFX_STATE_WRITE_RGB |
-            BGFX_STATE_WRITE_A |
-            BGFX_STATE_DEPTH_TEST_GREATER |
-            BGFX_STATE_WRITE_Z |
-            BGFX_STATE_CULL_CW);
+        encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                          BGFX_STATE_DEPTH_TEST_GREATER | BGFX_STATE_WRITE_Z | BGFX_STATE_CULL_CW);
     }
 
     encoder->setVertexBuffer(0, mesh.vertexBuffer);
@@ -2105,7 +1964,8 @@ void FieldRenderer::setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isT
     }
     else if (mesh.material.texture == "apriltags")
     {
-        encoder->setTexture(0, s_apriltags, apriltagTexture.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setTexture(0, s_apriltags, apriltagTexture.handle,
+                            BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
     }
     else if (mesh.material.texture == "led")
     {
@@ -2121,7 +1981,8 @@ void FieldRenderer::drawAprilTags(bgfx::Encoder *encoder)
     }
 
     // figure out how big of a buffer is available
-    uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(aprilTags.size(), sizeof(AprilTagInstanceData));
+    uint32_t instanceCount =
+        bgfx::getAvailInstanceDataBuffer(aprilTags.size(), sizeof(AprilTagInstanceData));
 
     bgfx::InstanceDataBuffer idb;
     bgfx::allocInstanceDataBuffer(&idb, instanceCount, sizeof(AprilTagInstanceData));
@@ -2133,20 +1994,24 @@ void FieldRenderer::drawAprilTags(bgfx::Encoder *encoder)
     encoder->submit(VIEW_GBUFFER, programPBRApriltag);
 }
 
-void FieldRenderer::addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic, std::string_view enabledTopic)
+void FieldRenderer::addRobot(std::string_view poseTopic, std::string_view componentPosesTopic,
+                             std::string_view rslStateTopic, std::string_view allianceStationTopic,
+                             std::string_view ledColorsTopic, std::string_view enabledTopic)
 {
     RobotData &robot = robots[&robotModels[0]].emplace_back(&robotModels[0]);
 
     robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>(poseTopic);
     robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::ntPeriodic});
     robot.componentPosesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>(componentPosesTopic);
-    robot.componentPosesSub = robot.componentPosesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+    robot.componentPosesSub =
+        robot.componentPosesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
 
     robot.rslStateTopic = ntInst.GetBooleanTopic(rslStateTopic);
     robot.rslStateSub = robot.rslStateTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
 
     robot.allianceStationTopic = ntInst.GetIntegerTopic(allianceStationTopic);
-    robot.allianceStationSub = robot.allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
+    robot.allianceStationSub =
+        robot.allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
 
     robot.ledColorsTopic = ntInst.GetStringArrayTopic(ledColorsTopic);
     robot.ledColorsSub = robot.ledColorsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
@@ -2215,7 +2080,8 @@ void FieldRenderer::drawDebugMenu()
     {
         for (int i = 0; i < DEBUG_VIEW_NAMES.size(); i++)
         {
-            if (ImGui::Selectable(DEBUG_VIEW_NAMES[i].c_str(), debugView == static_cast<DebugView>(i)))
+            if (ImGui::Selectable(DEBUG_VIEW_NAMES[i].c_str(),
+                                  debugView == static_cast<DebugView>(i)))
             {
                 debugView = static_cast<DebugView>(i);
             }
@@ -2237,8 +2103,7 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     ImGuiIO &io = ImGui::GetIO();
     if (!io.WantCaptureMouse)
     {
-        if (io.MousePos.x >= viewportPos.x &&
-            io.MousePos.x < viewportPos.x + viewportSize.x &&
+        if (io.MousePos.x >= viewportPos.x && io.MousePos.x < viewportPos.x + viewportSize.x &&
             io.MousePos.y >= viewportPos.y &&
             io.MousePos.y < viewportPos.y + 300.0f * globalScale &&
             (std::abs(io.MouseDelta.x) > 1.0f || std::abs(io.MouseDelta.y) > 1.0f))
@@ -2251,7 +2116,9 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
 
             lastTopUISummonTime = std::chrono::steady_clock::now();
         }
-        else if (std::chrono::duration<float>(std::chrono::steady_clock::now() - lastTopUISummonTime).count() >= stayDuration.count())
+        else if (std::chrono::duration<float>(std::chrono::steady_clock::now() -
+                                              lastTopUISummonTime)
+                     .count() >= stayDuration.count())
         {
             isTopUISummoned = false;
         }
@@ -2259,8 +2126,17 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
 
     const float inAnimationTime = 0.2f;
     const float outAnimationTime = 0.3f;
-    float inAnimationProgress = std::clamp(std::chrono::duration<float>(std::chrono::steady_clock::now() - firstTopUISummonTime).count() / inAnimationTime, 0.0f, 1.0f);
-    float outAnimationProgress = std::clamp((std::chrono::duration<float>(std::chrono::steady_clock::now() - lastTopUISummonTime).count() - stayDuration.count()) / outAnimationTime, 0.0f, 1.0f);
+    float inAnimationProgress = std::clamp(
+        std::chrono::duration<float>(std::chrono::steady_clock::now() - firstTopUISummonTime)
+                .count() /
+            inAnimationTime,
+        0.0f, 1.0f);
+    float outAnimationProgress = std::clamp(
+        (std::chrono::duration<float>(std::chrono::steady_clock::now() - lastTopUISummonTime)
+             .count() -
+         stayDuration.count()) /
+            outAnimationTime,
+        0.0f, 1.0f);
     bool isTopUIVisible = inAnimationProgress < 1.0f || outAnimationProgress < 1.0f;
 
     if (!isTopUIVisible)
@@ -2293,8 +2169,7 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     float u0 = overflow / shadowWidth;
     float u1 = std::min(1.0f, (overflow + viewportSize.x) / shadowWidth);
     drawList->AddImage(
-        shadowTexture.id,
-        ImVec2(viewportPos.x, viewportPos.y + shadowYOffset),
+        shadowTexture.id, ImVec2(viewportPos.x, viewportPos.y + shadowYOffset),
         ImVec2(viewportPos.x + viewportSize.x, viewportPos.y + shadowHeight + shadowYOffset),
         ImVec2(u0, 0.0f), ImVec2(u1, 1.0f),
         IM_COL32(255, 255, 255, static_cast<uint8_t>(255.0f * animationProgressLateExp)));
@@ -2302,15 +2177,11 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     float xOffset = viewportPos.x + (viewportSize.x - totalWidth) / 2;
     float yOffset = viewportPos.y + 20.0f * globalScale + shadowYOffset;
 
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                             ImGuiWindowFlags_NoBackground |
-                             ImGuiWindowFlags_NoMove |
-                             ImGuiWindowFlags_NoResize |
-                             ImGuiWindowFlags_NoSavedSettings |
-                             ImGuiWindowFlags_NoFocusOnAppearing |
-                             ImGuiWindowFlags_NoBringToFrontOnFocus |
-                             ImGuiWindowFlags_NoNav |
-                             ImGuiWindowFlags_NoDocking;
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking;
 
     ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowPos(ImVec2(xOffset, yOffset));
@@ -2320,7 +2191,9 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     ImDrawList *draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    if (IconButton(font, "##mainmenu", "Main Menu", mainMenuTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp) && !exitingFlag)
+    if (IconButton(font, "##mainmenu", "Main Menu", mainMenuTexture.id, buttonSize, borderSize,
+                   rounding, fontSize, textOffset, animationProgressLateExp) &&
+        !exitingFlag)
     {
         exitingFlag = true;
     }
@@ -2336,7 +2209,8 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    if (IconButton(font, "##settings", "Settings", settingsTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp, showSettings))
+    if (IconButton(font, "##settings", "Settings", settingsTexture.id, buttonSize, borderSize,
+                   rounding, fontSize, textOffset, animationProgressLateExp, showSettings))
     {
         showSettings = !showSettings;
     }
@@ -2352,7 +2226,8 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    if (IconButton(font, "##viewmode", "View Mode", viewModeTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp, showViewMode))
+    if (IconButton(font, "##viewmode", "View Mode", viewModeTexture.id, buttonSize, borderSize,
+                   rounding, fontSize, textOffset, animationProgressLateExp, showViewMode))
     {
         showViewMode = !showViewMode;
     }
@@ -2368,7 +2243,8 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    if (IconButton(font, "##restartjava", "Restart Java", restartJavaTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp))
+    if (IconButton(font, "##restartjava", "Restart Java", restartJavaTexture.id, buttonSize,
+                   borderSize, rounding, fontSize, textOffset, animationProgressLateExp))
     {
         if (restartSimulationCallback)
         {
@@ -2393,9 +2269,12 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
 
     ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowSize(ImVec2(0, 0));
-    ImGui::SetNextWindowPos(ImVec2(viewportPos.x + viewportSize.x - 64.0f * globalScale, viewportPos.y + viewportSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(1.0f, 0.5f));
+    ImGui::SetNextWindowPos(ImVec2(viewportPos.x + viewportSize.x - 64.0f * globalScale,
+                                   viewportPos.y + viewportSize.y * 0.5f),
+                            ImGuiCond_Appearing, ImVec2(1.0f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.92f);
-    if (ImGui::Begin("View Mode", &showViewMode, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings))
+    if (ImGui::Begin("View Mode", &showViewMode,
+                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings))
     {
         ImDrawList *drawList = ImGui::GetWindowDrawList();
 
@@ -2405,14 +2284,15 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
         ImVec2 size = ImGui::GetWindowSize();
 
         ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
-        ImVec2 textPos(
-            pos.x + (size.x - textSize.x) * 0.5f,
-            pos.y + 12.0f * globalScale);
+        ImVec2 textPos(pos.x + (size.x - textSize.x) * 0.5f, pos.y + 12.0f * globalScale);
         drawList->AddText(font, fontSize, textPos, IM_COL32_WHITE, text);
 
         ImGui::Dummy(ImVec2(0, textSize.y + 2 * 12.0f * globalScale - 24.0f * globalScale));
 
-        if (ChoiceButton(font, "##field", "Orbit Field", "Position your view around the field in a fixed location.", viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale, settings::viewMode == CameraView::Field))
+        if (ChoiceButton(font, "##field", "Orbit Field",
+                         "Position your view around the field in a fixed location.",
+                         viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale,
+                         settings::viewMode == CameraView::Field))
         {
             settings::viewMode = CameraView::Field;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
@@ -2421,7 +2301,10 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
 
         ImGui::SameLine(0, 14.0f * globalScale);
 
-        if (ChoiceButton(font, "##robot", "Orbit Robot", "Position your view around the robot. Camera follows it as you drive.", viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale, settings::viewMode == CameraView::Robot))
+        if (ChoiceButton(font, "##robot", "Orbit Robot",
+                         "Position your view around the robot. Camera follows it as you drive.",
+                         viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale,
+                         settings::viewMode == CameraView::Robot))
         {
             settings::viewMode = CameraView::Robot;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
@@ -2430,7 +2313,11 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
 
         ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
 
-        if (ChoiceButton(font, "##robotrelative", "Robot Relative", "Position your view relative to the robot. Camera acts as if its part of the robot when its moving.", viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale, settings::viewMode == CameraView::RobotRelative))
+        if (ChoiceButton(font, "##robotrelative", "Robot Relative",
+                         "Position your view relative to the robot. Camera acts as if its part of "
+                         "the robot when its moving.",
+                         viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale,
+                         settings::viewMode == CameraView::RobotRelative))
         {
             settings::viewMode = CameraView::RobotRelative;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
@@ -2439,7 +2326,11 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
 
         ImGui::SameLine(0, 14.0f * globalScale);
 
-        if (ChoiceButton(font, "##driverstation", "Driver Station", "Automatically position your view at the current alliance station and follow the robot by rotating the camera.", viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale, settings::viewMode == CameraView::DriverStation))
+        if (ChoiceButton(font, "##driverstation", "Driver Station",
+                         "Automatically position your view at the current alliance station and "
+                         "follow the robot by rotating the camera.",
+                         viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale,
+                         settings::viewMode == CameraView::DriverStation))
         {
             settings::viewMode = CameraView::DriverStation;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
@@ -2467,21 +2358,27 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
 
         if (!ImGui::IsItemActive())
         {
-            std::string cameraTargetStr = std::to_string(settings::cameraTarget[0]) + "," + std::to_string(settings::cameraTarget[1]);
+            std::string cameraTargetStr = std::to_string(settings::cameraTarget[0]) + "," +
+                                          std::to_string(settings::cameraTarget[1]);
             strncpy(buffer, cameraTargetStr.c_str(), sizeof(buffer));
             buffer[sizeof(buffer) - 1] = '\0';
         }
 
-        bool changed = ImGui::InputText("##robottargetinput", buffer, sizeof(buffer), ImGuiInputTextFlags_CharsNoBlank, ImGuiInputTextCallback([](ImGuiInputTextCallbackData *data) -> int
-                                                                                                                                               {
-                                   if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
-                                   {
-                                       if ((data->EventChar < '0' || data->EventChar > '9') && data->EventChar != ',')
-                                       {
-                                           return 1;
-                                       }
-                                   }
-                                   return 0; }));
+        bool changed = ImGui::InputText(
+            "##robottargetinput", buffer, sizeof(buffer), ImGuiInputTextFlags_CharsNoBlank,
+            ImGuiInputTextCallback(
+                [](ImGuiInputTextCallbackData *data) -> int
+                {
+                    if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
+                    {
+                        if ((data->EventChar < '0' || data->EventChar > '9') &&
+                            data->EventChar != ',')
+                        {
+                            return 1;
+                        }
+                    }
+                    return 0;
+                }));
 
         if (changed || ImGui::IsItemDeactivatedAfterEdit())
         {
@@ -2495,8 +2392,10 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
             if (tokens.size() == 2)
             {
                 uint32_t modelIndex, instanceIndex;
-                auto [ptr, ec] = std::from_chars(tokens[0].data(), tokens[0].data() + tokens[0].size(), modelIndex);
-                auto [ptr2, ec2] = std::from_chars(tokens[1].data(), tokens[1].data() + tokens[1].size(), instanceIndex);
+                auto [ptr, ec] = std::from_chars(tokens[0].data(),
+                                                 tokens[0].data() + tokens[0].size(), modelIndex);
+                auto [ptr2, ec2] = std::from_chars(
+                    tokens[1].data(), tokens[1].data() + tokens[1].size(), instanceIndex);
                 if (ec == std::errc{} && ec2 == std::errc{})
                 {
                     settings::cameraTarget = {modelIndex, instanceIndex};
@@ -2515,7 +2414,8 @@ void FieldRenderer::drawSettingsWindow(ImGuiID viewportId, ImVec2 viewportPos, I
     settings::draw(font, viewportId, viewportPos, viewportSize);
 }
 
-void FieldRenderer::render(const blackboard::app::Window &window, const std::shared_ptr<Discord> &discord)
+void FieldRenderer::render(const blackboard::app::Window &window,
+                           const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
     if (settings::enableDebugMenu)
@@ -2528,7 +2428,8 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     auto viewport = ImGui::GetMainViewport();
     float sidebarWidth = 650.0f * globalScale;
 
-    uint16_t m_width = showSettings ? static_cast<uint16_t>(std::round(window.width - sidebarWidth)) : window.width;
+    uint16_t m_width = showSettings ? static_cast<uint16_t>(std::round(window.width - sidebarWidth))
+                                    : window.width;
     uint16_t m_height = window.height;
     ImVec2 fieldViewportSize = ImVec2(m_width, m_height);
 
@@ -2546,7 +2447,10 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
 
     if (showSettings)
     {
-        drawSettingsWindow(viewport->ID, ImVec2(viewport->Pos.x + viewport->Size.x - sidebarWidth, viewport->Pos.y), ImVec2(sidebarWidth, viewport->Size.y));
+        drawSettingsWindow(
+            viewport->ID,
+            ImVec2(viewport->Pos.x + viewport->Size.x - sidebarWidth, viewport->Pos.y),
+            ImVec2(sidebarWidth, viewport->Size.y));
     }
 
     if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
@@ -2554,10 +2458,14 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     {
         for (auto &gamePiece : gamePieces)
         {
-            gamePiece.posesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>("/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Positions");
-            gamePiece.posesSub = gamePiece.posesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
-            gamePiece.poseObjectsTopic = ntInst.GetStructArrayTopic<Pose3dObject>("/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Objects");
-            gamePiece.poseObjectsSub = gamePiece.poseObjectsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+            gamePiece.posesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>(
+                "/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Positions");
+            gamePiece.posesSub =
+                gamePiece.posesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+            gamePiece.poseObjectsTopic = ntInst.GetStructArrayTopic<Pose3dObject>(
+                "/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Objects");
+            gamePiece.poseObjectsSub =
+                gamePiece.poseObjectsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
             Mesh::createBuffersForMeshes(gamePiece.meshes);
         }
 
@@ -2573,22 +2481,23 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     {
         if (robotModels.size() > 0)
         {
-            addRobot(
-                "/AdvantageKit/RealOutputs/RobotModel/Robot",
-                "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses",
-                "/AdvantageKit/SystemStats/RSLState",
-                "/AdvantageKit/DriverStation/AllianceStation",
-                "/AdvantageKit/RealOutputs/LedManager/HexStrings");
+            addRobot("/AdvantageKit/RealOutputs/RobotModel/Robot",
+                     "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses",
+                     "/AdvantageKit/SystemStats/RSLState",
+                     "/AdvantageKit/DriverStation/AllianceStation",
+                     "/AdvantageKit/RealOutputs/LedManager/HexStrings");
 
             for (size_t i = 0; i < 6; ++i)
             {
-                addRobot(
-                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Pose",
-                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/MechanismPoses",
-                    "/AdvantageKit/SystemStats/RSLState",
-                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/AllianceStation",
-                    "/AdvantageKit/RealOutputs/LedManager/HexStrings",
-                    "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Enabled");
+                addRobot("/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Pose",
+                         "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) +
+                             "/MechanismPoses",
+                         "/AdvantageKit/SystemStats/RSLState",
+                         "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) +
+                             "/AllianceStation",
+                         "/AdvantageKit/RealOutputs/LedManager/HexStrings",
+                         "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) +
+                             "/Enabled");
             }
         }
 
@@ -2618,7 +2527,9 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
                 model.ledMaterial->texture = "led";
             }
 
-            logger->info("Post-processed robot meshes for materials: rsl={},bumper={},led={}", (model.rslMaterial != nullptr), (model.bumperMaterial != nullptr), (model.ledMaterial != nullptr));
+            logger->info("Post-processed robot meshes for materials: rsl={},bumper={},led={}",
+                         (model.rslMaterial != nullptr), (model.bumperMaterial != nullptr),
+                         (model.ledMaterial != nullptr));
         }
 
         createdRobotMeshBuffers = true;
@@ -2654,15 +2565,21 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
             if (robotModels.size() > modelIndex)
             {
                 auto &robotInstances = robots[&robotModels[modelIndex]];
-                if (robotInstances.size() > instanceIndex && robotInstances[instanceIndex].dynamicData.lastDataUpdate == currentDataUpdateIndex)
+                if (robotInstances.size() > instanceIndex &&
+                    robotInstances[instanceIndex].dynamicData.lastDataUpdate ==
+                        currentDataUpdateIndex)
                 {
                     float translationMtx[16];
-                    bx::mtxTranslate(translationMtx, robotInstances[instanceIndex].dynamicData.lastPosition.x, robotInstances[instanceIndex].dynamicData.lastPosition.y, robotInstances[instanceIndex].dynamicData.lastPosition.z);
+                    bx::mtxTranslate(translationMtx,
+                                     robotInstances[instanceIndex].dynamicData.lastPosition.x,
+                                     robotInstances[instanceIndex].dynamicData.lastPosition.y,
+                                     robotInstances[instanceIndex].dynamicData.lastPosition.z);
                     if (settings::viewMode == CameraView::RobotRelative)
                     {
                         // also apply rotation
                         float rotationMtx[16];
-                        bx::mtxFromQuaternion(rotationMtx, robotInstances[instanceIndex].dynamicData.lastRotation);
+                        bx::mtxFromQuaternion(
+                            rotationMtx, robotInstances[instanceIndex].dynamicData.lastRotation);
                         float transformMtx[16];
                         bx::mtxMul(transformMtx, rotationMtx, translationMtx);
                         bx::mtxInverse(orbitCamera.originTransform, transformMtx);
@@ -2689,28 +2606,39 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
             if (robotModels.size() > modelIndex)
             {
                 auto &robotInstances = robots[&robotModels[modelIndex]];
-                if (robotInstances.size() > instanceIndex && robotInstances[instanceIndex].allianceStationSub.Exists())
+                if (robotInstances.size() > instanceIndex &&
+                    robotInstances[instanceIndex].allianceStationSub.Exists())
                 {
-                    allianceStation = robotInstances[instanceIndex].allianceStationSub.GetAtomic().value;
+                    allianceStation =
+                        robotInstances[instanceIndex].allianceStationSub.GetAtomic().value;
                     if (settings::viewMode == CameraView::DriverStation)
                     {
                         // 6 elements ordered [B1, B2, B3, R1, R2, R3]
-                        int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation >= 4 && allianceStation <= 6 ? allianceStation - 4
-                                                                                                                                                             : 0 /* fallback to 0 */;
-                        const bx::Vec3 at = bx::add(robotInstances[instanceIndex].dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
+                        int stationIndex =
+                            allianceStation >= 1 && allianceStation <= 3   ? allianceStation + 2
+                            : allianceStation >= 4 && allianceStation <= 6 ? allianceStation - 4
+                                                                           : 0 /* fallback to 0 */;
+                        const bx::Vec3 at =
+                            bx::add(robotInstances[instanceIndex].dynamicData.lastPosition,
+                                    bx::Vec3{0.0f, 0.0f, 0.5f});
                         const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
 
                         const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
                         lastDriverStationCameraTarget = at;
 
                         float cameraDistance = bx::distance(eye, at);
-                        float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
+                        float targetDistance =
+                            bx::distance(driverStationCameraTarget, at) / cameraDistance;
                         if (targetDistance > 0.2f)
                         {
-                            driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
+                            driverStationCameraTarget = bx::lerp(
+                                driverStationCameraTarget, at,
+                                6.0f * (targetDistance - 0.2f) *
+                                    std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
                         }
 
-                        bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+                        bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f},
+                                      bx::Handedness::Right);
 
                         return;
                     }
@@ -2736,16 +2664,13 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     if (now - lastDiscordUpdateTime > DISCORD_UPDATE_INTERVAL)
     {
         lastDiscordUpdateTime = now;
-        discord->setField(
-            GAME_YEAR,
-            allianceStation,
-            fmsUI ? fmsUI->getDriverScore() : 0,
-            fmsUI ? fmsUI->getOpponentScore() : 0,
-            robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
-            fmsUI ? fmsUI->getDriveMode() : "<Unknown>",
-            "https://github.com/recordrobotics/2026-robot",
-            "https://github.com/recordrobotics/2026-robot/releases/latest",
-            fmsUI ? fmsUI->getMatchEndTime() : 0);
+        discord->setField(GAME_YEAR, allianceStation, fmsUI ? fmsUI->getDriverScore() : 0,
+                          fmsUI ? fmsUI->getOpponentScore() : 0,
+                          robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
+                          fmsUI ? fmsUI->getDriveMode() : "<Unknown>",
+                          "https://github.com/recordrobotics/2026-robot",
+                          "https://github.com/recordrobotics/2026-robot/releases/latest",
+                          fmsUI ? fmsUI->getMatchEndTime() : 0);
     }
 
     ensureTextures(m_width, m_height);
@@ -2767,7 +2692,8 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     }
 
     float proj[16];
-    bx::mtxProjInf(proj, settings::cameraFov, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
+    bx::mtxProjInf(proj, settings::cameraFov, float(m_width) / float(m_height), 0.1f,
+                   bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
     proj[8] -= jitterX;
     proj[9] -= jitterY;
 
@@ -2813,9 +2739,7 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
     bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo.handle);
-    bgfx::setViewClear(VIEW_GBUFFER,
-                       BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
-                       0x00000000,
+    bgfx::setViewClear(VIEW_GBUFFER, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x00000000,
                        bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
 
     // GTAO PASS
@@ -2831,11 +2755,7 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     bgfx::setViewRect(VIEW_OIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_OIT, gOitFbo.handle);
     bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear accum to 0
-    bgfx::setViewClear(VIEW_OIT,
-                       BGFX_CLEAR_COLOR,
-                       0.0f,
-                       0,
-                       0);
+    bgfx::setViewClear(VIEW_OIT, BGFX_CLEAR_COLOR, 0.0f, 0, 0);
 
     // Transparent moments
     bgfx::setViewName(VIEW_OIT_MOMENTS, "Field - OIT Moments");
@@ -2843,12 +2763,7 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     bgfx::setViewRect(VIEW_OIT_MOMENTS, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_OIT_MOMENTS, gOitMomentsFbo.handle);
     bgfx::setPaletteColor(0, 0, 0, 0, 0); // Clear moments and totalDepth to 0
-    bgfx::setViewClear(VIEW_OIT_MOMENTS,
-                       BGFX_CLEAR_COLOR,
-                       0.0f,
-                       0,
-                       0,
-                       0);
+    bgfx::setViewClear(VIEW_OIT_MOMENTS, BGFX_CLEAR_COLOR, 0.0f, 0, 0, 0);
 
     // Post processing
     bgfx::setViewName(VIEW_POSTPROCESS, "Field - Post Process");
@@ -2870,8 +2785,10 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
         for (auto &gamePiece : gamePieces)
         {
             std::vector<InstanceData> instanceData;
-            auto filtered = gamePiece.instances | std::views::filter([this](const std::pair<int, DynamicObjectData> &pair)
-                                                                     { return pair.second.lastDataUpdate == currentDataUpdateIndex; });
+            auto filtered = gamePiece.instances |
+                            std::views::filter(
+                                [this](const std::pair<int, DynamicObjectData> &pair)
+                                { return pair.second.lastDataUpdate == currentDataUpdateIndex; });
             instanceData.reserve(std::ranges::distance(filtered));
             std::ranges::transform(filtered, std::back_inserter(instanceData),
                                    [](const std::pair<int, DynamicObjectData> &pair)
@@ -2883,8 +2800,16 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
             }
         }
 
-        drawMeshes(encoder, fieldMeshes | std::views::filter([&drawnGamePieces](const Mesh &mesh)
-                                                             { return std::find(drawnGamePieces.begin(), drawnGamePieces.end(), mesh.tag) == drawnGamePieces.end(); /* only draw meshes that haven't been drawn by game pieces */ }),
+        drawMeshes(encoder,
+                   fieldMeshes |
+                       std::views::filter(
+                           [&drawnGamePieces](const Mesh &mesh)
+                           {
+                               return std::find(drawnGamePieces.begin(), drawnGamePieces.end(),
+                                                mesh.tag) ==
+                                      drawnGamePieces.end(); /* only draw meshes that haven't been
+                                                                drawn by game pieces */
+                           }),
                    fieldModelMatrix);
 
         drawAprilTags(encoder);
@@ -2894,10 +2819,14 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     {
         for (auto &[robotModel, instances] : robots)
         {
-            drawRobot(encoder, robotModel, instances | std::views::filter([this](const RobotData &robot)
-                                                                          { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; }),
-                      [this](const DynamicObjectData &component)
-                      { return component.lastDataUpdate == currentDataUpdateIndex; });
+            drawRobot(
+                encoder, robotModel,
+                instances |
+                    std::views::filter(
+                        [this](const RobotData &robot)
+                        { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; }),
+                [this](const DynamicObjectData &component)
+                { return component.lastDataUpdate == currentDataUpdateIndex; });
         }
     }
 
@@ -2914,21 +2843,20 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
         // force unbind gbuffer view fbo
         encoder->touch(VIEW_GTAO);
 
-        float XeGTAOData[12] = {
-            gtaoEffectRadius,
-            gtaoRadiusMultiplier,
-            gtaoEffectFalloffRange,
-            float(gtaoNoiseIndex) + 0.5f,
+        float XeGTAOData[12] = {gtaoEffectRadius,
+                                gtaoRadiusMultiplier,
+                                gtaoEffectFalloffRange,
+                                float(gtaoNoiseIndex) + 0.5f,
 
-            gtaoSampleDistributionPower,
-            gtaoThinOccluderCompensation,
-            2.0f / (proj[0] * float(m_width)),
-            -2.0f / (proj[5] * float(m_height)),
+                                gtaoSampleDistributionPower,
+                                gtaoThinOccluderCompensation,
+                                2.0f / (proj[0] * float(m_width)),
+                                -2.0f / (proj[5] * float(m_height)),
 
-            gtaoDepthMipSamplingOffset,
-            gtaoFinalValuePower,
-            gtaoDenoiseBlurBeta,
-            0.0f};
+                                gtaoDepthMipSamplingOffset,
+                                gtaoFinalValuePower,
+                                gtaoDenoiseBlurBeta,
+                                0.0f};
 
         if (!freezeTemporalEffects)
         {
@@ -2937,25 +2865,30 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
 
         encoder->setUniform(u_XeGTAOData, XeGTAOData, 3);
 
-        encoder->setTexture(0, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setTexture(0, s_depth, gbufDepth.handle,
+                            BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
         for (int i = 0; i < XE_GTAO_DEPTH_MIP_LEVELS; ++i)
         {
             encoder->setImage(i + 1, gGTAOWorkingDepth.handle, i, bgfx::Access::Write);
         }
         encoder->dispatch(VIEW_GTAO, XeGTAO_PrefilterDepths16x16Program, xGroups, yGroups);
 
-        encoder->setTexture(0, s_depth, gGTAOWorkingDepth.handle, 0, 1, 0, XE_GTAO_DEPTH_MIP_LEVELS, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setTexture(0, s_depth, gGTAOWorkingDepth.handle, 0, 1, 0, XE_GTAO_DEPTH_MIP_LEVELS,
+                            BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
         encoder->setImage(1, gbufNormal.handle, 0, bgfx::Access::Read);
         encoder->setImage(2, gGTAOHilbertLut.handle, 0, bgfx::Access::Read);
         encoder->setImage(3, gGTAOWorkingAOTerm.handle, 0, bgfx::Access::Write);
         encoder->setImage(4, gGTAOWorkingEdges.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_GTAO, XeGTAO_MainPassProgram, xGroups, yGroups);
 
-        xGroups = (int)floorf(((float)m_width - 1) / 32 + 1); // denoise computes 2 horizontal pixels at a time
+        xGroups = (int)floorf(((float)m_width - 1) / 32 +
+                              1); // denoise computes 2 horizontal pixels at a time
         yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
-        encoder->setTexture(0, s_workingAOTerm, gGTAOWorkingAOTerm.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
-        encoder->setTexture(1, s_workingEdges, gGTAOWorkingEdges.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setTexture(0, s_workingAOTerm, gGTAOWorkingAOTerm.handle,
+                            BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+        encoder->setTexture(1, s_workingEdges, gGTAOWorkingEdges.handle,
+                            BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
         encoder->setImage(2, gGTAOFinalAOTerm.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_GTAO, XeGTAO_DenoiseProgram, xGroups, yGroups);
     }
@@ -2970,8 +2903,7 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     float gtaoIntensityField[4] = {
         settings::enableGTAO ? gtaoIntensity : 0.0f,
         settings::enableGTAO ? (gtaoIntensity * gtaoDirectIntensity) : 0.0f,
-        settings::enableGTAO ? (gtaoIntensity * gtaoBentNormalIntensity) : 0.0f,
-        0.0f};
+        settings::enableGTAO ? (gtaoIntensity * gtaoBentNormalIntensity) : 0.0f, 0.0f};
 
     encoder->setUniform(u_skyColor, skyColor.data());
     encoder->setUniform(u_gtaoIntensity, gtaoIntensityField);
@@ -3002,18 +2934,18 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     }
 
     // Velocity generation
-    float mbVelocityData[12] = {
-        MB_CAMERA_ROTATION_COMPONENT.multiplier,
-        MB_CAMERA_MOVEMENT_COMPONENT.multiplier,
-        MB_OBJECT_MOVEMENT_COMPONENT.multiplier,
-        MB_CAMERA_ROTATION_COMPONENT.lowerThreshold,
-        MB_CAMERA_MOVEMENT_COMPONENT.lowerThreshold,
-        MB_OBJECT_MOVEMENT_COMPONENT.lowerThreshold,
-        MB_CAMERA_ROTATION_COMPONENT.upperThreshold,
-        MB_CAMERA_MOVEMENT_COMPONENT.upperThreshold,
-        MB_OBJECT_MOVEMENT_COMPONENT.upperThreshold,
-        temp_intensity,
-        0.0f, 0.0f};
+    float mbVelocityData[12] = {MB_CAMERA_ROTATION_COMPONENT.multiplier,
+                                MB_CAMERA_MOVEMENT_COMPONENT.multiplier,
+                                MB_OBJECT_MOVEMENT_COMPONENT.multiplier,
+                                MB_CAMERA_ROTATION_COMPONENT.lowerThreshold,
+                                MB_CAMERA_MOVEMENT_COMPONENT.lowerThreshold,
+                                MB_OBJECT_MOVEMENT_COMPONENT.lowerThreshold,
+                                MB_CAMERA_ROTATION_COMPONENT.upperThreshold,
+                                MB_CAMERA_MOVEMENT_COMPONENT.upperThreshold,
+                                MB_OBJECT_MOVEMENT_COMPONENT.upperThreshold,
+                                temp_intensity,
+                                0.0f,
+                                0.0f};
     encoder->setUniform(u_mbVelocityData, &mbVelocityData, 3);
     encoder->setTexture(0, s_depth, gbufDepth.handle);
     encoder->setTexture(1, s_velocity, gbufVelocity.handle);
@@ -3039,9 +2971,11 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
         else
         {
             encoder->setImage(0, gFullVelocity.handle, 0, bgfx::Access::Read);
-            encoder->setTexture(1, s_depth, gbufDepth.handle, BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
+            encoder->setTexture(1, s_depth, gbufDepth.handle,
+                                BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);
             encoder->setImage(2, gOutputColor.handle, 0, bgfx::Access::Read);
-            encoder->setTexture(3, s_taaHistory, taaUseBuffer1 ? gTAABuffer0.handle : gTAABuffer1.handle);
+            encoder->setTexture(3, s_taaHistory,
+                                taaUseBuffer1 ? gTAABuffer0.handle : gTAABuffer1.handle);
             encoder->setImage(4, taaOutput.handle, 0, bgfx::Access::Write);
             encoder->dispatch(VIEW_POSTPROCESS, taaResolveProgram, xGroups, yGroups);
 
@@ -3055,15 +2989,14 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     // Motion blur
     if (settings::enableMotionBlur)
     {
-        float mbBlurData[8] = {
-            0.0f,
-            0.0f,
-            MB_MAXIMUM_JITTER_VALUE,
-            temp_intensity,
-            float(MB_TILE_SIZE),
-            float(MB_SAMPLE_COUNT),
-            float(mbIndex),
-            0.0f};
+        float mbBlurData[8] = {0.0f,
+                               0.0f,
+                               MB_MAXIMUM_JITTER_VALUE,
+                               temp_intensity,
+                               float(MB_TILE_SIZE),
+                               float(MB_SAMPLE_COUNT),
+                               float(mbIndex),
+                               0.0f};
 
         if (!freezeTemporalEffects)
         {
@@ -3117,7 +3050,10 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     // Exposure
     xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
-    float lutParams[4] = {1.0f / static_cast<float>(tonemappingLut.width), 1.0f / static_cast<float>(tonemappingLut.height), static_cast<float>(tonemappingLut.height - 1), powf(2.0f, tonemappingExposure)};
+    float lutParams[4] = {1.0f / static_cast<float>(tonemappingLut.width),
+                          1.0f / static_cast<float>(tonemappingLut.height),
+                          static_cast<float>(tonemappingLut.height - 1),
+                          powf(2.0f, tonemappingExposure)};
     encoder->setUniform(u_lutParams, lutParams);
     encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::ReadWrite);
     encoder->dispatch(VIEW_POSTPROCESS, exposureProgram, xGroups, yGroups);
@@ -3125,7 +3061,8 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     // Bloom
     if (settings::enableBloom)
     {
-        float bloomThresholdField[4] = {bloomThreshold, bloomThreshold - bloomKnee, 2 * bloomKnee, 0.25f * bloomKnee};
+        float bloomThresholdField[4] = {bloomThreshold, bloomThreshold - bloomKnee, 2 * bloomKnee,
+                                        0.25f * bloomKnee};
 
         float mipSizeX = (float)m_width / 2;
         float mipSizeY = (float)m_height / 2;
@@ -3138,7 +3075,8 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
             xGroups = (int)floorf((mipSizeX - 1) / 8 + 1);
             yGroups = (int)floorf((mipSizeY - 1) / 8 + 1);
 
-            float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i), 0.0f};
+            float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i),
+                                       0.0f};
             encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
 
             encoder->setImage(1, gOutputColor.handle, i + 1, bgfx::Access::Write);
@@ -3163,7 +3101,8 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
             xGroups = (int)floorf((mipSizeX - 1) / 8 + 1);
             yGroups = (int)floorf((mipSizeY - 1) / 8 + 1);
 
-            float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i), 0.0f};
+            float bloomTexelSize[4] = {1.0f / mipSizeX, 1.0f / mipSizeY, static_cast<float>(i),
+                                       0.0f};
             encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
 
             encoder->setImage(1, gOutputColor.handle, i - 1, bgfx::Access::ReadWrite);
@@ -3319,10 +3258,7 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     }
 }
 
-bool FieldRenderer::isExiting()
-{
-    return exitingFlag;
-}
+bool FieldRenderer::isExiting() { return exitingFlag; }
 
 FieldRenderer::~FieldRenderer()
 {

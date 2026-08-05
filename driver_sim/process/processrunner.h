@@ -1,16 +1,16 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <thread>
-#include <memory>
 #include <functional>
+#include <memory>
 #include <spdlog/spdlog.h>
+#include <string>
+#include <thread>
 #include <tiny-process-library/process.hpp>
+#include <vector>
 
 class ProcessRunner
 {
-public:
+  public:
     struct Config
     {
         std::vector<std::string> commandLine;
@@ -22,12 +22,11 @@ public:
     };
 
     ProcessRunner(Config config, std::shared_ptr<spdlog::logger> logger)
-        : config(std::move(config)), logger(std::move(logger)) {}
-
-    ~ProcessRunner()
+        : config(std::move(config)), logger(std::move(logger))
     {
-        stop();
     }
+
+    ~ProcessRunner() { stop(); }
 
     ProcessRunner(const ProcessRunner &) = delete;
     ProcessRunner &operator=(const ProcessRunner &) = delete;
@@ -38,7 +37,7 @@ public:
     void restart();
     void stop();
 
-private:
+  private:
     Config config;
     std::shared_ptr<spdlog::logger> logger;
     TinyProcessLib::Process::environment_type env;

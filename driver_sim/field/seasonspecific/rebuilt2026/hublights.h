@@ -1,9 +1,9 @@
 #pragma once
 
-#include <unordered_map>
+#include "../../../utils.h"
 #include <array>
 #include <string>
-#include "../../../utils.h"
+#include <unordered_map>
 
 namespace Rebuilt2026
 {
@@ -26,4 +26,4 @@ namespace Rebuilt2026
         tags["GE-26311_Hub_Side_Diffuser_3"] = blueHubLedTag;
         tags["GE-26310_Hub_Rear_Diffuser_1"] = blueHubLedTag;
     }
-};
+}; // namespace Rebuilt2026

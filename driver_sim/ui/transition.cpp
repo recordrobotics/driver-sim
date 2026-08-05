@@ -1,5 +1,5 @@
-#include <imgui/imgui.h>
 #include <blackboard_app/gui.h>
+#include <imgui/imgui.h>
 
 #include <algorithm>
 
@@ -7,7 +7,8 @@
 
 using blackboard::gui::string_hex_to_rgba_float;
 
-ui::Transition::Transition(int startingPage, float duration) : currentPage(startingPage), targetPage(startingPage), duration(duration)
+ui::Transition::Transition(int startingPage, float duration)
+    : currentPage(startingPage), targetPage(startingPage), duration(duration)
 {
 }
 
@@ -80,8 +81,6 @@ void ui::Transition::draw()
     const ImVec2 windowSize = ImGui::GetWindowSize();
     const ImVec2 windowMax(windowPos.x + windowSize.x, windowPos.y + windowSize.y);
 
-    ImGui::GetWindowDrawList()->AddRectFilled(
-        windowPos,
-        windowMax,
-        ImGui::ColorConvertFloat4ToU32(overlayColor));
+    ImGui::GetWindowDrawList()->AddRectFilled(windowPos, windowMax,
+                                              ImGui::ColorConvertFloat4ToU32(overlayColor));
 }

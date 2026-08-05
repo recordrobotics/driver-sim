@@ -1,6 +1,6 @@
 #include "javalogmanager.h"
-#include <blackboard_app/logger.h>
 #include <SDL3/SDL.h>
+#include <blackboard_app/logger.h>
 
 #include "settings/settingsstore.h"
 
@@ -37,7 +37,9 @@ void java_log_manager::enforceFolderLimits()
             }
 
             auto lastWriteTime = std::filesystem::last_write_time(entry);
-            auto ageSeconds = std::chrono::duration_cast<std::chrono::seconds>(std::filesystem::file_time_type::clock::now() - lastWriteTime).count();
+            auto ageSeconds = std::chrono::duration_cast<std::chrono::seconds>(
+                                  std::filesystem::file_time_type::clock::now() - lastWriteTime)
+                                  .count();
             if (ageSeconds > stats.oldestFileAgeSeconds)
             {
                 stats.oldestFileAgeSeconds = ageSeconds;
@@ -54,12 +56,15 @@ void java_log_manager::enforceFolderLimits()
         }
     }
 
-    logger->info("Java log folder usage: {} bytes across {} files. Oldest file age: {} seconds. Largest file size: {} bytes. Max allowed bytes: {}",
-                 stats.totalBytes, stats.totalFiles, stats.oldestFileAgeSeconds, stats.largestFileBytes, stats.maxAllowedBytes);
+    logger->info("Java log folder usage: {} bytes across {} files. Oldest file age: {} seconds. "
+                 "Largest file size: {} bytes. Max allowed bytes: {}",
+                 stats.totalBytes, stats.totalFiles, stats.oldestFileAgeSeconds,
+                 stats.largestFileBytes, stats.maxAllowedBytes);
 
     if (stats.totalBytes > stats.maxAllowedBytes)
     {
-        logger->warn("Java log folder size {} bytes exceeds the maximum allowed {} bytes. Deleting oldest files until under limit.",
+        logger->warn("Java log folder size {} bytes exceeds the maximum allowed {} bytes. Deleting "
+                     "oldest files until under limit.",
                      stats.totalBytes, stats.maxAllowedBytes);
 
         uint64_t bytesDeleted = 0;
@@ -72,11 +77,13 @@ void java_log_manager::enforceFolderLimits()
             if (!ec)
             {
                 bytesDeleted += fileSize;
-                logger->info("Deleted overflowed Java log file {} of size {} bytes", file.path().string(), fileSize);
+                logger->info("Deleted overflowed Java log file {} of size {} bytes",
+                             file.path().string(), fileSize);
             }
             else
             {
-                logger->error("Failed to delete overflowed Java log file {}: {}", file.path().string(), ec.message());
+                logger->error("Failed to delete overflowed Java log file {}: {}",
+                              file.path().string(), ec.message());
             }
 
             if (stats.totalBytes - bytesDeleted <= stats.maxAllowedBytes)
@@ -89,9 +96,11 @@ void java_log_manager::enforceFolderLimits()
         {
             // sort by last write time, oldest first
             std::sort(logFiles.begin(), logFiles.end(),
-                      [](const std::filesystem::directory_entry &a, const std::filesystem::directory_entry &b)
+                      [](const std::filesystem::directory_entry &a,
+                         const std::filesystem::directory_entry &b)
                       {
-                          return std::filesystem::last_write_time(a) < std::filesystem::last_write_time(b);
+                          return std::filesystem::last_write_time(a) <
+                                 std::filesystem::last_write_time(b);
                       });
 
             for (const auto &file : logFiles)
@@ -102,11 +111,13 @@ void java_log_manager::enforceFolderLimits()
                 if (!ec)
                 {
                     bytesDeleted += fileSize;
-                    logger->info("Deleted Java log file {} of size {} bytes", file.path().string(), fileSize);
+                    logger->info("Deleted Java log file {} of size {} bytes", file.path().string(),
+                                 fileSize);
                 }
                 else
                 {
-                    logger->error("Failed to delete Java log file {}: {}", file.path().string(), ec.message());
+                    logger->error("Failed to delete Java log file {}: {}", file.path().string(),
+                                  ec.message());
                 }
 
                 if (stats.totalBytes - bytesDeleted <= stats.maxAllowedBytes)
@@ -120,7 +131,4 @@ void java_log_manager::enforceFolderLimits()
     lastUsageStats = stats;
 }
 
-java_log_manager::UsageStats java_log_manager::getUsageStats()
-{
-    return lastUsageStats;
-}
+java_log_manager::UsageStats java_log_manager::getUsageStats() { return lastUsageStats; }

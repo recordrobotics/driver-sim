@@ -1,13 +1,13 @@
 #pragma once
 
-#include <unordered_map>
+#include <atomic>
+#include <bimg/decode.h>
+#include <blackboard_app/gui.h>
+#include <filesystem>
+#include <mutex>
 #include <queue>
 #include <thread>
-#include <atomic>
-#include <mutex>
-#include <filesystem>
-#include <blackboard_app/gui.h>
-#include <bimg/decode.h>
+#include <unordered_map>
 
 enum class LogoState
 {
@@ -19,7 +19,7 @@ enum class LogoState
 
 class TeamLogoCache
 {
-public:
+  public:
     TeamLogoCache();
     ~TeamLogoCache();
 
@@ -31,7 +31,7 @@ public:
     blackboard::gui::ImTexture getTeamLogo(int teamNumber);
     void update();
 
-private:
+  private:
     std::filesystem::path logoCacheDirectory;
 
     std::unordered_map<int, blackboard::gui::ImTexture> logoCache;

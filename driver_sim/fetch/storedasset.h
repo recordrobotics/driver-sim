@@ -1,15 +1,14 @@
 #pragma once
 
-#include <filesystem>
-#include <string>
 #include <atomic>
-#include <thread>
-#include <stop_token>
-#include <mutex>
+#include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <span>
-#include <vector>
+#include <stop_token>
 #include <string>
+#include <thread>
+#include <vector>
 
 enum class AssetState
 {
@@ -25,7 +24,7 @@ enum class AssetState
 
 class StoredAsset
 {
-protected:
+  protected:
     std::filesystem::path localExtractPath;
     std::filesystem::path localHashPath;
     std::filesystem::path localTempZipPath;
@@ -51,8 +50,9 @@ protected:
     void extractZip(const std::filesystem::path &zipPath, const std::filesystem::path &extractTo);
     void cleanupExtractedFiles();
 
-public:
-    StoredAsset(const std::string &relativeExtractPath, const std::string &hash, const std::string &sdlPrefPath);
+  public:
+    StoredAsset(const std::string &relativeExtractPath, const std::string &hash,
+                const std::string &sdlPrefPath);
 
     virtual ~StoredAsset();
 

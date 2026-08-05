@@ -4,14 +4,10 @@
 
 class TeamAssigner
 {
-public:
-    TeamAssigner()
-    {
-    }
+  public:
+    TeamAssigner() {}
 
-    ~TeamAssigner()
-    {
-    }
+    ~TeamAssigner() {}
 
     TeamAssigner(const TeamAssigner &) = delete;
     TeamAssigner &operator=(const TeamAssigner &) = delete;
@@ -22,7 +18,7 @@ public:
 
     inline std::array<uint32_t, 6> getTeamNumbers() const { return teamNumbers; }
 
-private:
+  private:
     int lastAllianceStation = 0;
     std::array<uint32_t, 6> teamNumbers = {0, 0, 0, 0, 0, 0};
 };

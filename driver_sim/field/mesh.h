@@ -1,8 +1,8 @@
 #pragma once
 
+#include "../utils.h"
 #include <bgfx/bgfx.h>
 #include <cstddef>
-#include "../utils.h"
 #include <vector>
 
 #include <spdlog/fmt/fmt.h>
@@ -27,11 +27,9 @@ enum class MaterialType
 
 namespace fmt
 {
-    template <>
-    struct formatter<MaterialType> : formatter<string_view>
+    template <> struct formatter<MaterialType> : formatter<string_view>
     {
-        template <typename FormatContext>
-        auto format(MaterialType type, FormatContext &ctx) const
+        template <typename FormatContext> auto format(MaterialType type, FormatContext &ctx) const
         {
             string_view name = "Unknown";
             switch (type)
@@ -58,7 +56,10 @@ typedef struct Material
     float roughness;
     std::string texture;
 
-    Material() : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f}, emissionColor{0.0f, 0.0f, 0.0f, 0.0f}, writesObjectMotionVectors(false), metallic(0.0f), roughness(0.5f), texture("")
+    Material()
+        : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f},
+          emissionColor{0.0f, 0.0f, 0.0f, 0.0f}, writesObjectMotionVectors(false), metallic(0.0f),
+          roughness(0.5f), texture("")
     {
     }
 
@@ -77,7 +78,8 @@ typedef struct Material
         emissionColor[2] = emission[2];
         emissionColor[3] = m.emissiveStrength;
 
-        type = m.alphaMode == fastgltf::AlphaMode::Blend ? MaterialType::Transparent : MaterialType::Opaque;
+        type = m.alphaMode == fastgltf::AlphaMode::Blend ? MaterialType::Transparent
+                                                         : MaterialType::Opaque;
         writesObjectMotionVectors = false;
 
         // cad export pbrData is wrong, base it off the node name instead
@@ -110,10 +112,8 @@ typedef struct Material
                bit_equal(emissionColor[1], other.emissionColor[1]) &&
                bit_equal(emissionColor[2], other.emissionColor[2]) &&
                bit_equal(emissionColor[3], other.emissionColor[3]) &&
-               bit_equal(metallic, other.metallic) &&
-               bit_equal(roughness, other.roughness) &&
-               texture == other.texture &&
-               type == other.type;
+               bit_equal(metallic, other.metallic) && bit_equal(roughness, other.roughness) &&
+               texture == other.texture && type == other.type;
     }
 } Material;
 
@@ -143,15 +143,11 @@ typedef struct MaterialHash
 
 namespace std
 {
-    template <>
-    struct hash<Material>
+    template <> struct hash<Material>
     {
-        size_t operator()(Material m) const noexcept
-        {
-            return MaterialHash{}(m);
-        }
+        size_t operator()(Material m) const noexcept { return MaterialHash{}(m); }
     };
-}
+} // namespace std
 
 typedef struct MeshVertex
 {
@@ -197,7 +193,8 @@ typedef struct Mesh
         if (!indices.empty())
         {
             indexBuffer = bgfx::createIndexBuffer(
-                bgfx::makeRef(indices.data(), indices.size() * sizeof(uint32_t)), BGFX_BUFFER_INDEX32);
+                bgfx::makeRef(indices.data(), indices.size() * sizeof(uint32_t)),
+                BGFX_BUFFER_INDEX32);
         }
 
         return bgfx::isValid(vertexBuffer) && bgfx::isValid(indexBuffer);
@@ -225,9 +222,11 @@ typedef struct Mesh
      * tags is a map of mesh-name:tag
      * meshes of the same material but different tags will stay separated and won't be merged.
      * this is useful for dynamically removing meshes based on tags.
-     * additionally, meshes with same tag but different materials will also stay separated, since they can't be merged anyway.
+     * additionally, meshes with same tag but different materials will also stay separated, since
+     * they can't be merged anyway.
      */
-    static void fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset, const std::unordered_map<std::string, std::string> &tags);
+    static void fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset,
+                              const std::unordered_map<std::string, std::string> &tags);
     static void fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path);
     static void toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path);
     static void createBuffersForMeshes(std::vector<Mesh> &meshes);
@@ -242,11 +241,14 @@ typedef struct Mesh
      * @param width The width of the cube.
      * @param height The height of the cube.
      * @param depth The depth of the cube.
-     * @param projectedUVs Whether to use projected UV coordinates from the +x face (useful if world space orientation of the uvs matters).
+     * @param projectedUVs Whether to use projected UV coordinates from the +x face (useful if world
+     * space orientation of the uvs matters).
      */
-    static void addCube(Mesh& mesh, float cx, float cy, float cz, float width, float height, float depth, bool projectedUVs = false);
+    static void addCube(Mesh &mesh, float cx, float cy, float cz, float width, float height,
+                        float depth, bool projectedUVs = false);
 
-    static inline Material *getTaggedMaterial(std::vector<Mesh> &meshes, const std::string_view &tag)
+    static inline Material *getTaggedMaterial(std::vector<Mesh> &meshes,
+                                              const std::string_view &tag)
     {
         for (auto &mesh : meshes)
         {

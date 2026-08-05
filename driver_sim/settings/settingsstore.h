@@ -60,4 +60,4 @@ namespace settings
     extern CameraView viewMode;
     extern float cameraFov;
     extern std::vector<uint32_t> cameraTarget;
-}
+} // namespace settings
