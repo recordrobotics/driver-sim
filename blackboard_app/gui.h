@@ -72,7 +72,7 @@ namespace blackboard::gui
             hex_byte(color[5], color[6]) / 255.0f,
             hex_byte(color[7], color[8]) / 255.0f};
     }
-    
+
     // Input format: #RRGGBBAA
     constexpr std::array<float, 4> string_hex_to_rgba_float_array(std::string_view color)
     {
@@ -96,6 +96,13 @@ namespace blackboard::gui
             hex_byte(color[3], color[4]),
             hex_byte(color[5], color[6]),
             hex_byte(color[7], color[8]));
+    }
+
+    constexpr ImU32 u32_multiply_alpha(ImU32 color, float alpha)
+    {
+        float colorAlpha = ((color >> 24) & 0xFF) / 255.0f;
+        float newAlpha = colorAlpha * alpha;
+        return (color & 0x00FFFFFF) | (static_cast<ImU32>(newAlpha * 255.0f) << 24);
     }
 
     extern std::string imgui_ini_path;

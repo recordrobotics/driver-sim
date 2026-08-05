@@ -2252,6 +2252,49 @@ void FieldRenderer::drawTopUI()
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
+
+    const std::chrono::duration<float> stayDuration = std::chrono::seconds(5);
+
+    ImGuiIO &io = ImGui::GetIO();
+    if (!io.WantCaptureMouse)
+    {
+        if (io.MousePos.x >= viewport->Pos.x &&
+            io.MousePos.x < viewport->Pos.x + viewport->Size.x &&
+            io.MousePos.y >= viewport->Pos.y &&
+            io.MousePos.y < viewport->Pos.y + 300.0f * globalScale &&
+            (std::abs(io.MouseDelta.x) > 1.0f || std::abs(io.MouseDelta.y) > 1.0f))
+        {
+            if (!isTopUISummoned)
+            {
+                firstTopUISummonTime = std::chrono::steady_clock::now();
+                isTopUISummoned = true;
+            }
+
+            lastTopUISummonTime = std::chrono::steady_clock::now();
+        }
+        else if (std::chrono::duration<float>(std::chrono::steady_clock::now() - lastTopUISummonTime).count() >= stayDuration.count())
+        {
+            isTopUISummoned = false;
+        }
+    }
+
+    const float inAnimationTime = 0.2f;
+    const float outAnimationTime = 0.3f;
+    float inAnimationProgress = std::clamp(std::chrono::duration<float>(std::chrono::steady_clock::now() - firstTopUISummonTime).count() / inAnimationTime, 0.0f, 1.0f);
+    float outAnimationProgress = std::clamp((std::chrono::duration<float>(std::chrono::steady_clock::now() - lastTopUISummonTime).count() - stayDuration.count()) / outAnimationTime, 0.0f, 1.0f);
+    bool isTopUIVisible = inAnimationProgress < 1.0f || outAnimationProgress < 1.0f;
+
+    if (!isTopUIVisible)
+    {
+        return;
+    }
+
+    bool isAnimatingIn = inAnimationProgress < 1.0f;
+    float animationProgress = isAnimatingIn ? inAnimationProgress : (1.0f - outAnimationProgress);
+
+    float animationProgressSuddenExp = std::pow(animationProgress, 0.4f);
+    float animationProgressLateExp = std::pow(animationProgress, 1.0f);
 
     float buttonSize = 50.0f * globalScale;
     float borderSize = 2.0f * globalScale;
@@ -2263,19 +2306,23 @@ void FieldRenderer::drawTopUI()
     int numButtons = 4;
     float totalWidth = numButtons * buttonSize + (numButtons - 1) * buttonSpacing;
 
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
-
     ImDrawList *drawList = ImGui::GetBackgroundDrawList(viewport);
 
     float shadowWidth = 920.0f * globalScale;
     float shadowHeight = 135.0f * globalScale;
+    float shadowYOffset = std::lerp(-shadowHeight / 2.0f, 0.0f, animationProgressSuddenExp);
     float overflow = std::max(0.0f, shadowWidth - viewport->Size.x) / 2.0f;
     float u0 = overflow / shadowWidth;
     float u1 = std::min(1.0f, (overflow + viewport->Size.x) / shadowWidth);
-    drawList->AddImage(shadowTexture.id, ImVec2(viewport->Pos.x, viewport->Pos.y), ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + shadowHeight), ImVec2(u0, 0.0f), ImVec2(u1, 1.0f));
+    drawList->AddImage(
+        shadowTexture.id,
+        ImVec2(viewport->Pos.x, viewport->Pos.y + shadowYOffset),
+        ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + shadowHeight + shadowYOffset),
+        ImVec2(u0, 0.0f), ImVec2(u1, 1.0f),
+        IM_COL32(255, 255, 255, static_cast<uint8_t>(255.0f * animationProgressLateExp)));
 
     float xOffset = viewport->Pos.x + (viewport->Size.x - totalWidth) / 2;
-    float yOffset = viewport->Pos.y + 20.0f * globalScale;
+    float yOffset = viewport->Pos.y + 20.0f * globalScale + shadowYOffset;
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
                              ImGuiWindowFlags_NoBackground |
@@ -2287,6 +2334,7 @@ void FieldRenderer::drawTopUI()
                              ImGuiWindowFlags_NoNav |
                              ImGuiWindowFlags_NoDocking;
 
+    ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::SetNextWindowPos(ImVec2(xOffset, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.mainmenu", nullptr, flags);
@@ -2294,7 +2342,7 @@ void FieldRenderer::drawTopUI()
     ImDrawList *draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    if (IconButton(font, "##mainmenu", "Main Menu", mainMenuTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset) && !exitingFlag)
+    if (IconButton(font, "##mainmenu", "Main Menu", mainMenuTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp) && !exitingFlag)
     {
         exitingFlag = true;
     }
@@ -2302,6 +2350,7 @@ void FieldRenderer::drawTopUI()
     draw->PopClipRect();
     ImGui::End();
 
+    ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::SetNextWindowPos(ImVec2(xOffset + buttonSize + buttonSpacing, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.settings", nullptr, flags);
@@ -2310,7 +2359,7 @@ void FieldRenderer::drawTopUI()
     draw->PushClipRectFullScreen();
 
     static bool showSettings = false;
-    if (IconButton(font, "##settings", "Settings", settingsTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, showSettings))
+    if (IconButton(font, "##settings", "Settings", settingsTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp, showSettings))
     {
         showSettings = !showSettings;
     }
@@ -2318,6 +2367,7 @@ void FieldRenderer::drawTopUI()
     draw->PopClipRect();
     ImGui::End();
 
+    ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::SetNextWindowPos(ImVec2(xOffset + (buttonSize + buttonSpacing) * 2, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.viewmode", nullptr, flags);
@@ -2326,7 +2376,7 @@ void FieldRenderer::drawTopUI()
     draw->PushClipRectFullScreen();
 
     static bool showViewMode = false;
-    if (IconButton(font, "##viewmode", "View Mode", viewModeTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, showViewMode))
+    if (IconButton(font, "##viewmode", "View Mode", viewModeTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp, showViewMode))
     {
         showViewMode = !showViewMode;
     }
@@ -2334,6 +2384,7 @@ void FieldRenderer::drawTopUI()
     draw->PopClipRect();
     ImGui::End();
 
+    ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::SetNextWindowPos(ImVec2(xOffset + (buttonSize + buttonSpacing) * 3, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.restartjava", nullptr, flags);
@@ -2341,7 +2392,7 @@ void FieldRenderer::drawTopUI()
     draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    if (IconButton(font, "##restartjava", "Restart Java", restartJavaTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset))
+    if (IconButton(font, "##restartjava", "Restart Java", restartJavaTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp))
     {
         if (restartSimulationCallback)
         {

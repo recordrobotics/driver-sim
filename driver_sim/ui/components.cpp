@@ -5,6 +5,7 @@
 
 using blackboard::gui::string_hex_to_rgba_float;
 using blackboard::gui::string_hex_to_rgba_u32;
+using blackboard::gui::u32_multiply_alpha;
 
 void ui::DrawCenteredText(const char *text, float yOffset)
 {
@@ -272,7 +273,7 @@ bool ui::CircularButton(const char *id, float radius)
     return pressed;
 }
 
-bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon, float size, float borderSize, float rounding, float fontSize, float textOffset, bool inverted)
+bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon, float size, float borderSize, float rounding, float fontSize, float textOffset, float opacity, bool inverted)
 {
     ImVec2 pos = ImGui::GetCursorScreenPos();
     ImDrawList *draw = ImGui::GetWindowDrawList();
@@ -302,6 +303,11 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
                                                                       : string_hex_to_rgba_u32("#ffffff00");
         iconColor = string_hex_to_rgba_u32("#ffffffff");
     }
+
+    fill = u32_multiply_alpha(fill, opacity);
+    border = u32_multiply_alpha(border, opacity);
+    iconColor = u32_multiply_alpha(iconColor, opacity);
+
     draw->AddRectFilled(
         pos,
         ImVec2(pos.x + size, pos.y + size),
@@ -322,7 +328,7 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
 
     ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text.data(), text.data() + text.size());
 
-    draw->AddText(ImVec2(center.x - textSize.x / 2.0f, pos.y + size + textOffset), string_hex_to_rgba_u32("#FFFFFFFF"), text.data(), text.data() + text.size());
+    draw->AddText(ImVec2(center.x - textSize.x / 2.0f, pos.y + size + textOffset), u32_multiply_alpha(string_hex_to_rgba_u32("#FFFFFFFF"), opacity), text.data(), text.data() + text.size());
 
     return pressed;
 }

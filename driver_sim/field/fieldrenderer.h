@@ -799,4 +799,8 @@ private:
     bool createdFieldMeshBuffers = false;
     bool createdRobotMeshBuffers = false;
     int currentDataUpdateIndex = 0;
+
+    bool isTopUISummoned = false;
+    std::chrono::steady_clock::time_point firstTopUISummonTime;
+    std::chrono::steady_clock::time_point lastTopUISummonTime;
 };
