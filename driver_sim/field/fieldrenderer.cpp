@@ -20,6 +20,7 @@
 #include "../ui/components.h"
 
 #include "../settings/settingsstore.h"
+#include "../settings/settingsui.h"
 
 #include <shadow.png.h>
 
@@ -2226,21 +2227,20 @@ void FieldRenderer::drawDebugMenu()
     ImGui::End();
 }
 
-void FieldRenderer::drawTopUI()
+void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
 
     const std::chrono::duration<float> stayDuration = std::chrono::seconds(5);
 
     ImGuiIO &io = ImGui::GetIO();
     if (!io.WantCaptureMouse)
     {
-        if (io.MousePos.x >= viewport->Pos.x &&
-            io.MousePos.x < viewport->Pos.x + viewport->Size.x &&
-            io.MousePos.y >= viewport->Pos.y &&
-            io.MousePos.y < viewport->Pos.y + 300.0f * globalScale &&
+        if (io.MousePos.x >= viewportPos.x &&
+            io.MousePos.x < viewportPos.x + viewportSize.x &&
+            io.MousePos.y >= viewportPos.y &&
+            io.MousePos.y < viewportPos.y + 300.0f * globalScale &&
             (std::abs(io.MouseDelta.x) > 1.0f || std::abs(io.MouseDelta.y) > 1.0f))
         {
             if (!isTopUISummoned)
@@ -2284,23 +2284,23 @@ void FieldRenderer::drawTopUI()
     int numButtons = 4;
     float totalWidth = numButtons * buttonSize + (numButtons - 1) * buttonSpacing;
 
-    ImDrawList *drawList = ImGui::GetBackgroundDrawList(viewport);
+    ImDrawList *drawList = ImGui::GetBackgroundDrawList(ImGui::GetMainViewport());
 
     float shadowWidth = 920.0f * globalScale;
     float shadowHeight = 135.0f * globalScale;
     float shadowYOffset = std::lerp(-shadowHeight / 2.0f, 0.0f, animationProgressSuddenExp);
-    float overflow = std::max(0.0f, shadowWidth - viewport->Size.x) / 2.0f;
+    float overflow = std::max(0.0f, shadowWidth - viewportSize.x) / 2.0f;
     float u0 = overflow / shadowWidth;
-    float u1 = std::min(1.0f, (overflow + viewport->Size.x) / shadowWidth);
+    float u1 = std::min(1.0f, (overflow + viewportSize.x) / shadowWidth);
     drawList->AddImage(
         shadowTexture.id,
-        ImVec2(viewport->Pos.x, viewport->Pos.y + shadowYOffset),
-        ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + shadowHeight + shadowYOffset),
+        ImVec2(viewportPos.x, viewportPos.y + shadowYOffset),
+        ImVec2(viewportPos.x + viewportSize.x, viewportPos.y + shadowHeight + shadowYOffset),
         ImVec2(u0, 0.0f), ImVec2(u1, 1.0f),
         IM_COL32(255, 255, 255, static_cast<uint8_t>(255.0f * animationProgressLateExp)));
 
-    float xOffset = viewport->Pos.x + (viewport->Size.x - totalWidth) / 2;
-    float yOffset = viewport->Pos.y + 20.0f * globalScale + shadowYOffset;
+    float xOffset = viewportPos.x + (viewportSize.x - totalWidth) / 2;
+    float yOffset = viewportPos.y + 20.0f * globalScale + shadowYOffset;
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
                              ImGuiWindowFlags_NoBackground |
@@ -2312,7 +2312,7 @@ void FieldRenderer::drawTopUI()
                              ImGuiWindowFlags_NoNav |
                              ImGuiWindowFlags_NoDocking;
 
-    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowPos(ImVec2(xOffset, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.mainmenu", nullptr, flags);
@@ -2328,7 +2328,7 @@ void FieldRenderer::drawTopUI()
     draw->PopClipRect();
     ImGui::End();
 
-    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowPos(ImVec2(xOffset + buttonSize + buttonSpacing, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.settings", nullptr, flags);
@@ -2344,7 +2344,7 @@ void FieldRenderer::drawTopUI()
     draw->PopClipRect();
     ImGui::End();
 
-    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowPos(ImVec2(xOffset + (buttonSize + buttonSpacing) * 2, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.viewmode", nullptr, flags);
@@ -2360,7 +2360,7 @@ void FieldRenderer::drawTopUI()
     draw->PopClipRect();
     ImGui::End();
 
-    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowPos(ImVec2(xOffset + (buttonSize + buttonSpacing) * 3, yOffset));
     ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
     ImGui::Begin("topui.restartjava", nullptr, flags);
@@ -2380,7 +2380,7 @@ void FieldRenderer::drawTopUI()
     ImGui::End();
 }
 
-void FieldRenderer::drawViewModeWindow()
+void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
@@ -2391,11 +2391,9 @@ void FieldRenderer::drawViewModeWindow()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f * globalScale);
     ImGui::PushStyleColor(ImGuiCol_Border, string_hex_to_rgba_u32("#797878ff"));
 
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
-
-    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowSize(ImVec2(0, 0));
-    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x - 64.0f * globalScale, viewport->Pos.y + viewport->Size.y * 0.5f), ImGuiCond_Appearing, ImVec2(1.0f, 0.5f));
+    ImGui::SetNextWindowPos(ImVec2(viewportPos.x + viewportSize.x - 64.0f * globalScale, viewportPos.y + viewportSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(1.0f, 0.5f));
     ImGui::SetNextWindowBgAlpha(0.92f);
     if (ImGui::Begin("View Mode", &showViewMode, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings))
     {
@@ -2512,6 +2510,11 @@ void FieldRenderer::drawViewModeWindow()
     ImGui::PopStyleColor(1);
 }
 
+void FieldRenderer::drawSettingsWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
+{
+    settings::draw(font, viewportId, viewportPos, viewportSize);
+}
+
 void FieldRenderer::render(const blackboard::app::Window &window, const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
@@ -2520,16 +2523,30 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
         drawDebugMenu();
     }
 
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+    auto viewport = ImGui::GetMainViewport();
+    float sidebarWidth = 650.0f * globalScale;
+
+    uint16_t m_width = showSettings ? static_cast<uint16_t>(std::round(window.width - sidebarWidth)) : window.width;
+    uint16_t m_height = window.height;
+    ImVec2 fieldViewportSize = ImVec2(m_width, m_height);
+
     if (fmsUI)
     {
-        fmsUI->render(ImGui::GetMainViewport()->Size);
+        fmsUI->render(fieldViewportSize);
     }
 
-    drawTopUI();
+    drawTopUI(viewport->ID, viewport->Pos, fieldViewportSize);
 
     if (showViewMode)
     {
-        drawViewModeWindow();
+        drawViewModeWindow(viewport->ID, viewport->Pos, fieldViewportSize);
+    }
+
+    if (showSettings)
+    {
+        drawSettingsWindow(viewport->ID, ImVec2(viewport->Pos.x + viewport->Size.x - sidebarWidth, viewport->Pos.y), ImVec2(sidebarWidth, viewport->Size.y));
     }
 
     if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
@@ -2658,9 +2675,6 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
             }
         }
     }
-
-    uint16_t m_width = window.width;
-    uint16_t m_height = window.height;
 
     float view[16];
     int allianceStation = 0;

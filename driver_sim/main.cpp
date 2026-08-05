@@ -41,6 +41,7 @@
 #include <code.zip.h>
 
 #include "settings/settingsstore.h"
+#include "settings/settingsui.h"
 #include "process/processrunner.h"
 #include "javalogmanager.h"
 
@@ -162,6 +163,8 @@ void initApp()
     load_image((void *)logo_png_bytes, sizeof(logo_png_bytes), logo);
 
     fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->main_window);
+
+    settings::init(logo);
 
     std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
     javaAsset = std::make_unique<RemoteStoredAsset>("jdk", "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5", prefPath, "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/eclipse?project=jdk");
@@ -572,6 +575,7 @@ void app_cleanup()
     javaLogEnforceFuture = std::async(std::launch::async, java_log_manager::enforceFolderLimits);
     logo.destroy();
     cleanupFieldView();
+    settings::cleanup();
     settings::saveSettings();
     javaLogEnforceFuture.wait();
 }

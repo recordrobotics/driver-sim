@@ -558,8 +558,9 @@ private:
     void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic, std::string_view enabledTopic = "");
 
     void drawDebugMenu();
-    void drawTopUI();
-    void drawViewModeWindow();
+    void drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
+    void drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
+    void drawSettingsWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
 
     bool exitingFlag = false;
     bool startedLoadingFieldModel = false;
