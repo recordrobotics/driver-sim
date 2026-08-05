@@ -8,8 +8,6 @@
 #include "fieldrenderer.h"
 #include "shaders.h"
 
-#include "../settings/settingsstore.h"
-
 #include <bloom_dirt_mask.png.h>
 #include <lut.exr.h>
 
@@ -20,6 +18,8 @@
 #include <ledmask.png.h>
 
 #include "../ui/components.h"
+
+#include "../settings/settingsstore.h"
 
 #include <shadow.png.h>
 
@@ -110,12 +110,6 @@ static WPILibCoordinateSystem coordinateSystemFromString(const std::string &s)
     throw std::runtime_error("Invalid coordinate system in config: " + s);
 }
 
-static const std::array<std::string, static_cast<size_t>(CameraView::Count)> CAMERA_VIEW_NAMES = {
-    "Field",
-    "Robot",
-    "Robot Relative",
-    "Driver Station"};
-
 static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBUG_VIEW_NAMES = {
     "None",
     "Albedo",
@@ -198,6 +192,7 @@ static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {20.0f, 0.0f
 
 using namespace blackboard::logger;
 using blackboard::gui::string_hex_to_rgba_float_array;
+using blackboard::gui::string_hex_to_rgba_u32;
 
 static constexpr uint8_t XE_GTAO_DEPTH_MIP_LEVELS = 5;
 
@@ -2228,23 +2223,6 @@ void FieldRenderer::drawDebugMenu()
         ImGui::EndCombo();
     }
 
-    ImGui::Separator();
-
-    if (ImGui::BeginCombo("Camera View", CAMERA_VIEW_NAMES[static_cast<int>(cameraView)].c_str()))
-    {
-        for (int i = 0; i < CAMERA_VIEW_NAMES.size(); i++)
-        {
-            if (ImGui::Selectable(CAMERA_VIEW_NAMES[i].c_str(), cameraView == static_cast<CameraView>(i)))
-            {
-                cameraView = static_cast<CameraView>(i);
-                orbitCamera.target = {0.0f, 0.0f, 0.25f};
-                bx::mtxIdentity(orbitCamera.originTransform);
-            }
-        }
-
-        ImGui::EndCombo();
-    }
-
     ImGui::End();
 }
 
@@ -2299,7 +2277,7 @@ void FieldRenderer::drawTopUI()
     float buttonSize = 50.0f * globalScale;
     float borderSize = 2.0f * globalScale;
     float rounding = 16.0f * globalScale;
-    float fontSize = 12.0f * globalScale;
+    float fontSize = 13.0f * globalScale;
     float textOffset = 5.0f * globalScale;
 
     float buttonSpacing = 30.0f * globalScale;
@@ -2358,7 +2336,6 @@ void FieldRenderer::drawTopUI()
     draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    static bool showSettings = false;
     if (IconButton(font, "##settings", "Settings", settingsTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp, showSettings))
     {
         showSettings = !showSettings;
@@ -2375,7 +2352,6 @@ void FieldRenderer::drawTopUI()
     draw = ImGui::GetWindowDrawList();
     draw->PushClipRectFullScreen();
 
-    static bool showViewMode = false;
     if (IconButton(font, "##viewmode", "View Mode", viewModeTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, animationProgressLateExp, showViewMode))
     {
         showViewMode = !showViewMode;
@@ -2404,6 +2380,138 @@ void FieldRenderer::drawTopUI()
     ImGui::End();
 }
 
+void FieldRenderer::drawViewModeWindow()
+{
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    const ImVec2 p = ImVec2(24.0f * globalScale, 24.0f * globalScale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, p);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * globalScale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f * globalScale);
+    ImGui::PushStyleColor(ImGuiCol_Border, string_hex_to_rgba_u32("#797878ff"));
+
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
+
+    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowSize(ImVec2(0, 0));
+    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x - 64.0f * globalScale, viewport->Pos.y + viewport->Size.y * 0.5f), ImGuiCond_Appearing, ImVec2(1.0f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    if (ImGui::Begin("View Mode", &showViewMode, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings))
+    {
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+
+        const char *text = "View Mode";
+        float fontSize = 13 * globalScale;
+        ImVec2 pos = ImGui::GetWindowPos();
+        ImVec2 size = ImGui::GetWindowSize();
+
+        ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
+        ImVec2 textPos(
+            pos.x + (size.x - textSize.x) * 0.5f,
+            pos.y + 12.0f * globalScale);
+        drawList->AddText(font, fontSize, textPos, IM_COL32_WHITE, text);
+
+        ImGui::Dummy(ImVec2(0, textSize.y + 2 * 12.0f * globalScale - 24.0f * globalScale));
+
+        if (ChoiceButton(font, "##field", "Orbit Field", "Position your view around the field in a fixed location.", viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale, settings::viewMode == CameraView::Field))
+        {
+            settings::viewMode = CameraView::Field;
+            orbitCamera.target = {0.0f, 0.0f, 0.25f};
+            bx::mtxIdentity(orbitCamera.originTransform);
+        }
+
+        ImGui::SameLine(0, 14.0f * globalScale);
+
+        if (ChoiceButton(font, "##robot", "Orbit Robot", "Position your view around the robot. Camera follows it as you drive.", viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale, settings::viewMode == CameraView::Robot))
+        {
+            settings::viewMode = CameraView::Robot;
+            orbitCamera.target = {0.0f, 0.0f, 0.25f};
+            bx::mtxIdentity(orbitCamera.originTransform);
+        }
+
+        ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
+
+        if (ChoiceButton(font, "##robotrelative", "Robot Relative", "Position your view relative to the robot. Camera acts as if its part of the robot when its moving.", viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale, settings::viewMode == CameraView::RobotRelative))
+        {
+            settings::viewMode = CameraView::RobotRelative;
+            orbitCamera.target = {0.0f, 0.0f, 0.25f};
+            bx::mtxIdentity(orbitCamera.originTransform);
+        }
+
+        ImGui::SameLine(0, 14.0f * globalScale);
+
+        if (ChoiceButton(font, "##driverstation", "Driver Station", "Automatically position your view at the current alliance station and follow the robot by rotating the camera.", viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale, settings::viewMode == CameraView::DriverStation))
+        {
+            settings::viewMode = CameraView::DriverStation;
+            orbitCamera.target = {0.0f, 0.0f, 0.25f};
+            bx::mtxIdentity(orbitCamera.originTransform);
+        }
+
+        ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
+
+        ImGui::SetNextItemWidth(90.0f * globalScale);
+        ImGui::LabelText("##fov", "Field of View");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::SliderFloat("##fovslider", &settings::cameraFov, 10.0f, 160.0f, "%.1f");
+
+        ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
+
+        ImGui::SetNextItemWidth(90.0f * globalScale);
+        ImGui::LabelText("##robottarget", "Robot Target");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-1);
+
+        static char buffer[256];
+
+        if (!ImGui::IsItemActive())
+        {
+            std::string cameraTargetStr = std::to_string(settings::cameraTarget[0]) + "," + std::to_string(settings::cameraTarget[1]);
+            strncpy(buffer, cameraTargetStr.c_str(), sizeof(buffer));
+            buffer[sizeof(buffer) - 1] = '\0';
+        }
+
+        bool changed = ImGui::InputText("##robottargetinput", buffer, sizeof(buffer), ImGuiInputTextFlags_CharsNoBlank, ImGuiInputTextCallback([](ImGuiInputTextCallbackData *data) -> int
+                                                                                                                                               {
+                                   if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
+                                   {
+                                       if ((data->EventChar < '0' || data->EventChar > '9') && data->EventChar != ',')
+                                       {
+                                           return 1;
+                                       }
+                                   }
+                                   return 0; }));
+
+        if (changed || ImGui::IsItemDeactivatedAfterEdit())
+        {
+            std::vector<std::string> tokens;
+            std::stringstream ss(buffer);
+            std::string token;
+            while (std::getline(ss, token, ','))
+            {
+                tokens.push_back(token);
+            }
+            if (tokens.size() == 2)
+            {
+                uint32_t modelIndex, instanceIndex;
+                auto [ptr, ec] = std::from_chars(tokens[0].data(), tokens[0].data() + tokens[0].size(), modelIndex);
+                auto [ptr2, ec2] = std::from_chars(tokens[1].data(), tokens[1].data() + tokens[1].size(), instanceIndex);
+                if (ec == std::errc{} && ec2 == std::errc{})
+                {
+                    settings::cameraTarget = {modelIndex, instanceIndex};
+                }
+            }
+        }
+    }
+    ImGui::End();
+
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(1);
+}
+
 void FieldRenderer::render(const blackboard::app::Window &window, const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
@@ -2418,6 +2526,11 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     }
 
     drawTopUI();
+
+    if (showViewMode)
+    {
+        drawViewModeWindow();
+    }
 
     if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
         fieldModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
@@ -2515,27 +2628,32 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
         gamePiece.update(currentDataUpdateIndex, deltaTime, freezeTemporalEffects, coordTransform);
     }
 
-    if (cameraView == CameraView::Robot || cameraView == CameraView::RobotRelative)
+    if (settings::viewMode == CameraView::Robot || settings::viewMode == CameraView::RobotRelative)
     {
-        if (robotModels.size() > 0)
+        if (settings::cameraTarget.size() == 2)
         {
-            auto &robotInstances = robots[&robotModels[0]];
-            if (robotInstances.size() > 0 && robotInstances[0].dynamicData.lastDataUpdate == currentDataUpdateIndex)
+            uint32_t modelIndex = settings::cameraTarget[0];
+            uint32_t instanceIndex = settings::cameraTarget[1];
+            if (robotModels.size() > modelIndex)
             {
-                float translationMtx[16];
-                bx::mtxTranslate(translationMtx, robotInstances[0].dynamicData.lastPosition.x, robotInstances[0].dynamicData.lastPosition.y, robotInstances[0].dynamicData.lastPosition.z);
-                if (cameraView == CameraView::RobotRelative)
+                auto &robotInstances = robots[&robotModels[modelIndex]];
+                if (robotInstances.size() > instanceIndex && robotInstances[instanceIndex].dynamicData.lastDataUpdate == currentDataUpdateIndex)
                 {
-                    // also apply rotation
-                    float rotationMtx[16];
-                    bx::mtxFromQuaternion(rotationMtx, robotInstances[0].dynamicData.lastRotation);
-                    float transformMtx[16];
-                    bx::mtxMul(transformMtx, rotationMtx, translationMtx);
-                    bx::mtxInverse(orbitCamera.originTransform, transformMtx);
-                }
-                else
-                {
-                    bx::mtxInverse(orbitCamera.originTransform, translationMtx);
+                    float translationMtx[16];
+                    bx::mtxTranslate(translationMtx, robotInstances[instanceIndex].dynamicData.lastPosition.x, robotInstances[instanceIndex].dynamicData.lastPosition.y, robotInstances[instanceIndex].dynamicData.lastPosition.z);
+                    if (settings::viewMode == CameraView::RobotRelative)
+                    {
+                        // also apply rotation
+                        float rotationMtx[16];
+                        bx::mtxFromQuaternion(rotationMtx, robotInstances[instanceIndex].dynamicData.lastRotation);
+                        float transformMtx[16];
+                        bx::mtxMul(transformMtx, rotationMtx, translationMtx);
+                        bx::mtxInverse(orbitCamera.originTransform, transformMtx);
+                    }
+                    else
+                    {
+                        bx::mtxInverse(orbitCamera.originTransform, translationMtx);
+                    }
                 }
             }
         }
@@ -2547,62 +2665,45 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     float view[16];
     int allianceStation = 0;
 
-    if (robotModels.size() > 0)
+    auto updateCameraLambda = [this, &view, &allianceStation](float deltaTime)
     {
-        auto &robotInstances = robots[&robotModels[0]];
-        if (robotInstances.size() > 0 && robotInstances[0].allianceStationSub.Exists())
+        if (settings::cameraTarget.size() == 2)
         {
-            allianceStation = robotInstances[0].allianceStationSub.GetAtomic().value;
-            if (cameraView == CameraView::DriverStation)
+            uint32_t modelIndex = settings::cameraTarget[0];
+            uint32_t instanceIndex = settings::cameraTarget[1];
+
+            if (robotModels.size() > modelIndex)
             {
-                // 6 elements ordered [B1, B2, B3, R1, R2, R3]
-                int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation >= 4 && allianceStation <= 6 ? allianceStation - 4
-                                                                                                                                                     : 0 /* fallback to 0 */;
-                const bx::Vec3 at = bx::add(robotInstances[0].dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
-                const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
-
-                const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
-                lastDriverStationCameraTarget = at;
-
-                float cameraDistance = bx::distance(eye, at);
-                float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
-                if (targetDistance > 0.2f)
+                auto &robotInstances = robots[&robotModels[modelIndex]];
+                if (robotInstances.size() > instanceIndex && robotInstances[instanceIndex].allianceStationSub.Exists())
                 {
-                    driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
+                    allianceStation = robotInstances[instanceIndex].allianceStationSub.GetAtomic().value;
+                    if (settings::viewMode == CameraView::DriverStation)
+                    {
+                        // 6 elements ordered [B1, B2, B3, R1, R2, R3]
+                        int stationIndex = allianceStation >= 1 && allianceStation <= 3 ? allianceStation + 2 : allianceStation >= 4 && allianceStation <= 6 ? allianceStation - 4
+                                                                                                                                                             : 0 /* fallback to 0 */;
+                        const bx::Vec3 at = bx::add(robotInstances[instanceIndex].dynamicData.lastPosition, bx::Vec3{0.0f, 0.0f, 0.5f});
+                        const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
+
+                        const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
+                        lastDriverStationCameraTarget = at;
+
+                        float cameraDistance = bx::distance(eye, at);
+                        float targetDistance = bx::distance(driverStationCameraTarget, at) / cameraDistance;
+                        if (targetDistance > 0.2f)
+                        {
+                            driverStationCameraTarget = bx::lerp(driverStationCameraTarget, at, 6.0f * (targetDistance - 0.2f) * std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
+                        }
+
+                        bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
+
+                        return;
+                    }
                 }
-
-                bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
-            }
-            else
-            {
-                updateOrbitCameraFromInput();
-                const bx::Vec3 at = orbitCamera.target;
-                const bx::Vec3 eye = orbitCamera.getEye();
-
-                driverStationCameraTarget = at;
-                lastDriverStationCameraTarget = at;
-
-                float lookAt[16];
-                bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
-                bx::mtxMul(view, orbitCamera.originTransform, lookAt);
             }
         }
-        else
-        {
-            updateOrbitCameraFromInput();
-            const bx::Vec3 at = orbitCamera.target;
-            const bx::Vec3 eye = orbitCamera.getEye();
 
-            driverStationCameraTarget = at;
-            lastDriverStationCameraTarget = at;
-
-            float lookAt[16];
-            bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
-            bx::mtxMul(view, orbitCamera.originTransform, lookAt);
-        }
-    }
-    else
-    {
         updateOrbitCameraFromInput();
         const bx::Vec3 at = orbitCamera.target;
         const bx::Vec3 eye = orbitCamera.getEye();
@@ -2613,7 +2714,9 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
         float lookAt[16];
         bx::mtxLookAt(lookAt, eye, at, {0.0f, 0.0f, 1.0f}, bx::Handedness::Right);
         bx::mtxMul(view, orbitCamera.originTransform, lookAt);
-    }
+    };
+
+    updateCameraLambda(deltaTime);
 
     auto now = std::chrono::high_resolution_clock::now();
     if (now - lastDiscordUpdateTime > DISCORD_UPDATE_INTERVAL)
@@ -2650,7 +2753,7 @@ void FieldRenderer::render(const blackboard::app::Window &window, const std::sha
     }
 
     float proj[16];
-    bx::mtxProjInf(proj, 60.0f, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
+    bx::mtxProjInf(proj, settings::cameraFov, float(m_width) / float(m_height), 0.1f, bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
     proj[8] -= jitterX;
     proj[9] -= jitterY;
 

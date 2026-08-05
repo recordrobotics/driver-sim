@@ -1,4 +1,5 @@
 #include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>
 #include <blackboard_app/gui.h>
 
 #include "components.h"
@@ -328,7 +329,153 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
 
     ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text.data(), text.data() + text.size());
 
-    draw->AddText(ImVec2(center.x - textSize.x / 2.0f, pos.y + size + textOffset), u32_multiply_alpha(string_hex_to_rgba_u32("#FFFFFFFF"), opacity), text.data(), text.data() + text.size());
+    draw->AddText(font, fontSize, ImVec2(center.x - textSize.x / 2.0f, pos.y + size + textOffset), u32_multiply_alpha(string_hex_to_rgba_u32("#FFFFFFFF"), opacity), text.data(), text.data() + text.size());
+
+    return pressed;
+}
+
+inline float AddCenteredWrappedText(
+    ImDrawList *draw,
+    ImFont *font,
+    float fontSize,
+    const ImVec2 &pos,
+    float wrapWidth,
+    ImU32 color,
+    const char *text,
+    const char *textEnd = nullptr)
+{
+    if (!text)
+        return 0.0f;
+
+    if (!textEnd)
+        textEnd = text + std::strlen(text);
+
+    float y = pos.y;
+    const float lineHeight = fontSize;
+
+    while (text < textEnd)
+    {
+        const char *lineEnd = font->CalcWordWrapPosition(
+            fontSize,
+            text,
+            textEnd,
+            wrapWidth);
+
+        for (const char *s = text; s < lineEnd; ++s)
+        {
+            if (*s == '\n')
+            {
+                lineEnd = s;
+                break;
+            }
+        }
+
+        if (lineEnd == text)
+        {
+            if (*text == '\n')
+            {
+                ++text;
+                y += lineHeight;
+                continue;
+            }
+
+            unsigned int c;
+            lineEnd = text + ImTextCharFromUtf8(&c, text, textEnd);
+        }
+
+        const float lineWidth = font->CalcTextSizeA(
+                                        fontSize,
+                                        FLT_MAX,
+                                        0.0f,
+                                        text,
+                                        lineEnd)
+                                    .x;
+
+        draw->AddText(
+            font,
+            fontSize,
+            ImVec2(pos.x + (wrapWidth - lineWidth) * 0.5f, y),
+            color,
+            text,
+            lineEnd);
+
+        y += lineHeight;
+
+        text = lineEnd;
+
+        if (text < textEnd && *text == '\n')
+            ++text;
+
+        while (text < textEnd && ImCharIsBlankA(*text))
+            ++text;
+    }
+
+    return y - pos.y;
+}
+
+bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name, std::string_view description, ImTextureID icon, float width, float height, float globalScale, bool selected)
+{
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+
+    bool pressed = ImGui::InvisibleButton(id, ImVec2(width, height));
+
+    bool hovered = ImGui::IsItemHovered();
+    bool active = ImGui::IsItemActive();
+
+    if (hovered && !selected)
+    {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    ImU32 border = string_hex_to_rgba_u32("#BCBCBCFF");
+    ImU32 iconColor = string_hex_to_rgba_u32("#D9D9D9FF");
+    ImU32 nameColor = string_hex_to_rgba_u32("#FFFFFFFF");
+    ImU32 descriptionColor = string_hex_to_rgba_u32("#CECECEFF");
+
+    float opacity = selected ? 1.0f : active ? 0.85f
+                                  : hovered  ? 0.7f
+                                             : 0.5f;
+
+    border = u32_multiply_alpha(border, opacity);
+    iconColor = u32_multiply_alpha(iconColor, opacity);
+    nameColor = u32_multiply_alpha(nameColor, opacity);
+    descriptionColor = u32_multiply_alpha(descriptionColor, opacity);
+
+    float rounding = 8.0f * globalScale;
+    float borderSize = 1.0f * globalScale;
+    float nameFontSize = 13.0f * globalScale;
+    float descriptionFontSize = 12.0f * globalScale;
+
+    draw->AddRect(
+        ImVec2(pos.x + borderSize / 2.0f - 1, pos.y + borderSize / 2.0f - 1),
+        ImVec2(pos.x + width - borderSize / 2.0f + 1, pos.y + height - borderSize / 2.0f + 1),
+        border,
+        rounding,
+        borderSize);
+
+    const ImVec2 center(pos.x + width * 0.5f, pos.y + height * 0.5f);
+    const float imageSize = 64.0f * globalScale;
+
+    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, pos.y + 10.0f * globalScale), ImVec2(center.x + imageSize * 0.5f, pos.y + 10.0f * globalScale + imageSize), ImVec2(0, 0), ImVec2(1, 1), iconColor);
+
+    ImVec2 nameSize = font->CalcTextSizeA(nameFontSize, FLT_MAX, 0.0f, name.data(), name.data() + name.size());
+    draw->AddText(font, nameFontSize, ImVec2(center.x - nameSize.x / 2.0f, pos.y + 10.0f * globalScale + imageSize + 1.0f * globalScale), nameColor, name.data(), name.data() + name.size());
+
+    const float textWidth = width - 35.0f * globalScale;
+
+    AddCenteredWrappedText(
+        draw,
+        font,
+        descriptionFontSize,
+        ImVec2(
+            center.x - textWidth * 0.5f,
+            pos.y + 10.0f * globalScale + imageSize +
+                1.0f * globalScale + nameSize.y + 5.0f * globalScale),
+        textWidth,
+        descriptionColor,
+        description.data(),
+        description.data() + description.size());
 
     return pressed;
 }

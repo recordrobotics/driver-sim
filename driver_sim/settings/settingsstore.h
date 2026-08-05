@@ -3,6 +3,14 @@
 #include <string>
 #include <unordered_set>
 
+enum class CameraView
+{
+    Field,
+    Robot,
+    RobotRelative,
+    DriverStation
+};
+
 namespace settings
 {
     void loadDefaultSettings();
@@ -48,4 +56,8 @@ namespace settings
     } Rebuilt2026;
 
     extern Rebuilt2026 rebuilt2026;
+
+    extern CameraView viewMode;
+    extern float cameraFov;
+    extern std::vector<uint32_t> cameraTarget;
 }

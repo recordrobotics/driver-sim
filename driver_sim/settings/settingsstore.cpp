@@ -28,6 +28,54 @@ namespace nlohmann
                 j.at("superchargedRPThreshold").get<int>()};
         }
     };
+
+    template <>
+    struct adl_serializer<CameraView>
+    {
+        static void to_json(json &j, const CameraView &value)
+        {
+            switch (value)
+            {
+            case CameraView::Field:
+                j = "field";
+                break;
+            case CameraView::Robot:
+                j = "robot";
+                break;
+            case CameraView::RobotRelative:
+                j = "robot-relative";
+                break;
+            case CameraView::DriverStation:
+                j = "driverstation";
+                break;
+            }
+        }
+
+        static CameraView from_json(const json &j)
+        {
+            std::string view = j.get<std::string>();
+            if (view == "field")
+            {
+                return CameraView::Field;
+            }
+            else if (view == "robot")
+            {
+                return CameraView::Robot;
+            }
+            else if (view == "robot-relative")
+            {
+                return CameraView::RobotRelative;
+            }
+            else if (view == "driverstation")
+            {
+                return CameraView::DriverStation;
+            }
+            else
+            {
+                throw std::invalid_argument("Invalid camera view");
+            }
+        }
+    };
 }
 
 namespace settings
@@ -72,6 +120,10 @@ namespace settings
     Rebuilt2026 rebuilt2026 = {
         .energizedRPThreshold = 100,
         .superchargedRPThreshold = 360};
+
+    CameraView viewMode = CameraView::Field;
+    float cameraFov = 60.0f;
+    std::vector<uint32_t> cameraTarget = {0, 0};
 
     void loadDefaultSettings()
     {
@@ -123,6 +175,10 @@ namespace settings
         rebuilt2026 = {
             .energizedRPThreshold = 100,
             .superchargedRPThreshold = 360};
+
+        viewMode = CameraView::Field;
+        cameraFov = 60.0f;
+        cameraTarget = {0, 0};
     }
 
     uint64_t parseHumanSizeToBytes(const std::string &sizeStr)
@@ -234,6 +290,10 @@ namespace settings
 
             rebuilt2026 = j.value("rebuilt2026", rebuilt2026);
 
+            viewMode = j.value("viewMode", viewMode);
+            cameraFov = j.value("cameraFov", cameraFov);
+            cameraTarget = j.value("cameraTarget", cameraTarget);
+
             logger->info("Settings loaded successfully from {0}", settingsPath);
         }
         else
@@ -280,6 +340,10 @@ namespace settings
         j["updateWhileMinimized"] = updateWhileMinimized;
 
         j["rebuilt2026"] = rebuilt2026;
+
+        j["viewMode"] = viewMode;
+        j["cameraFov"] = cameraFov;
+        j["cameraTarget"] = cameraTarget;
 
         std::string jsonString = j.dump(4);
         bx::Error error;

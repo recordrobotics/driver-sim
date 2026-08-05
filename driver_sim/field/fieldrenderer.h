@@ -297,15 +297,6 @@ struct OrbitCamera
     }
 };
 
-enum class CameraView
-{
-    Field,
-    Robot,
-    RobotRelative,
-    DriverStation,
-    Count
-};
-
 enum class DebugView
 {
     None,
@@ -568,6 +559,7 @@ private:
 
     void drawDebugMenu();
     void drawTopUI();
+    void drawViewModeWindow();
 
     bool exitingFlag = false;
     bool startedLoadingFieldModel = false;
@@ -765,7 +757,6 @@ private:
     std::unique_ptr<Rebuilt2026FMSUI> fmsUI;
 #endif
 
-    CameraView cameraView = CameraView::Field;
     DebugView debugView = DebugView::None;
 
     bool freezeTemporalEffects = false;
@@ -803,4 +794,7 @@ private:
     bool isTopUISummoned = false;
     std::chrono::steady_clock::time_point firstTopUISummonTime;
     std::chrono::steady_clock::time_point lastTopUISummonTime;
+
+    bool showSettings = false;
+    bool showViewMode = false;
 };
