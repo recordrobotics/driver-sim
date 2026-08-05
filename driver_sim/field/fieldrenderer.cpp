@@ -659,7 +659,7 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_gtaoIntensity");
     }
 
-    u_info = bgfx::createUniform("u_info", bgfx::UniformType::Vec4, 2);
+    u_info = bgfx::createUniform("u_info", bgfx::UniformFreq::Frame, bgfx::UniformType::Vec4, 2);
 
     if (!bgfx::isValid(u_info))
     {
@@ -681,14 +681,14 @@ void initPBROIT(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform: u_ledData");
     }
 
-    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformType::Vec4, LIGHT_COUNT);
+    u_lightPos = bgfx::createUniform("u_lightPos", bgfx::UniformFreq::Frame, bgfx::UniformType::Vec4, LIGHT_COUNT);
     if (!bgfx::isValid(u_lightPos))
     {
         logger->error("Failed to create uniform: u_lightPos");
         throw std::runtime_error("Failed to create uniform: u_lightPos");
     }
 
-    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4, LIGHT_COUNT);
+    u_lightColor = bgfx::createUniform("u_lightColor", bgfx::UniformFreq::Frame, bgfx::UniformType::Vec4, LIGHT_COUNT);
     if (!bgfx::isValid(u_lightColor))
     {
         logger->error("Failed to create uniform: u_lightColor");
@@ -936,7 +936,7 @@ void initTAA(uint16_t width, uint16_t height)
         throw std::runtime_error("Failed to create uniform for TAA history texture.");
     }
 
-    u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformType::Vec4);
+    u_jitter = bgfx::createUniform("u_jitter", bgfx::UniformFreq::Frame, bgfx::UniformType::Vec4);
     if (!bgfx::isValid(u_jitter))
     {
         logger->error("Failed to create uniform: u_jitter");
@@ -1054,14 +1054,14 @@ void initMotionBlur(uint16_t width, uint16_t height)
     s_mbNeighborMax = bgfx::createUniform("s_neighbormax", bgfx::UniformType::Sampler);
     s_mbTileVariance = bgfx::createUniform("s_tilevariance", bgfx::UniformType::Sampler);
 
-    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformType::Mat4);
+    u_previousView = bgfx::createUniform("u_previousView", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
     if (!bgfx::isValid(u_previousView))
     {
         logger->error("Failed to create uniform: u_previousView");
         throw std::runtime_error("Failed to create uniform: u_previousView");
     }
 
-    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformType::Mat4);
+    u_previousProj = bgfx::createUniform("u_previousProj", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
     if (!bgfx::isValid(u_previousProj))
     {
         logger->error("Failed to create uniform: u_previousProj");
@@ -2332,7 +2332,7 @@ void field::init(const blackboard::app::Window &window)
         throw std::runtime_error("Failed to create uniform for present texture.");
     }
 
-    u_previousViewProj = bgfx::createUniform("u_previousViewProj", bgfx::UniformType::Mat4);
+    u_previousViewProj = bgfx::createUniform("u_previousViewProj", bgfx::UniformFreq::Frame, bgfx::UniformType::Mat4);
     if (!bgfx::isValid(u_previousViewProj))
     {
         logger->error("Failed to create uniform: u_previousViewProj");
@@ -2404,7 +2404,7 @@ void field::startNTClient()
 constexpr float CAMERA_LINEAR_FAR = 100.0f;
 
 // assumes reverse z, infinite far
-void updateInfo(bgfx::Encoder *encoder, float cameraNear, float proj[16])
+void updateInfo(float cameraNear, float proj[16])
 {
     float info[8] = {
         cameraNear,
@@ -2415,7 +2415,7 @@ void updateInfo(bgfx::Encoder *encoder, float cameraNear, float proj[16])
         -2.0f / proj[5],
         -1.0f / proj[0],
         1.0f / proj[5]};
-    encoder->setUniform(u_info, info, 2);
+    bgfx::setFrameUniform(u_info, info, 2);
 }
 
 void screenSpaceQuad(bool _originBottomLeft, bgfx::Encoder *encoder, float _width = 1.0f, float _height = 1.0f)
@@ -2474,7 +2474,7 @@ void screenSpaceQuad(bool _originBottomLeft, bgfx::Encoder *encoder, float _widt
 float previousViewProj[16] = {0};
 float previousView[16] = {0};
 float previousProj[16] = {0};
-std::array<float, 4> jitterData;
+
 float curTime = 0.0f;
 float previousJitterX = 0.0f;
 float previousJitterY = 0.0f;
@@ -2619,9 +2619,7 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepa
 
     encoder->setUniform(u_baseColor, SRGBToLinear(mesh.material.baseColor).data());
     encoder->setUniform(u_emissionColor, SRGBToLinear(mesh.material.emissionColor).data());
-    encoder->setUniform(u_previousViewProj, previousViewProj);
     encoder->setUniform(u_pbrData, pbrData);
-    encoder->setUniform(u_jitter, jitterData.data());
 
     if (mesh.material.texture == "carpet")
     {
@@ -3248,16 +3246,19 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         firstFrame = false;
     }
 
-    bgfx::Encoder *encoder = bgfx::begin();
-
-    updateInfo(encoder, 0.1f, proj);
+    updateInfo(0.1f, proj);
 
     if (!freezeTemporalEffects)
     {
         jitterIndex = (jitterIndex + 1) % HALTON_SAMPLES;
     }
 
-    jitterData = {jitterX, jitterY, previousJitterX, previousJitterY};
+    float jitterData[4] = {jitterX, jitterY, previousJitterX, previousJitterY};
+    bgfx::setFrameUniform(u_jitter, jitterData);
+
+    bgfx::setFrameUniform(u_previousViewProj, previousViewProj);
+    bgfx::setFrameUniform(u_previousView, previousView);
+    bgfx::setFrameUniform(u_previousProj, previousProj);
 
     // Light uniforms
     Vec3Padded lightPos[LIGHT_COUNT] = {
@@ -3268,8 +3269,8 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, -fieldHeightMeters / 2.5f, 6.0f}, view)),
         Vec3Padded(bx::mul({fieldWidthMeters / 2.6f, fieldHeightMeters / 2.5f, 6.0f}, view))};
 
-    encoder->setUniform(u_lightPos, lightPos, LIGHT_COUNT);
-    encoder->setUniform(u_lightColor, lightColor.data(), LIGHT_COUNT);
+    bgfx::setFrameUniform(u_lightPos, lightPos, LIGHT_COUNT);
+    bgfx::setFrameUniform(u_lightColor, lightColor.data(), LIGHT_COUNT);
 
     // OPAQUE PASS
     bgfx::setViewName(VIEW_GBUFFER, "Field - GBuffer");
@@ -3324,6 +3325,8 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     bgfx::setViewFrameBuffer(VIEW_BLIT, BGFX_INVALID_HANDLE);
     bgfx::setViewName(VIEW_BLIT, "Field - Blit");
     bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
+
+    bgfx::Encoder *encoder = bgfx::begin();
 
     if (createdFieldMeshBuffers)
     {
@@ -3423,8 +3426,6 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
 
     // Post processing
 
-    encoder->setUniform(u_previousViewProj, previousViewProj);
-
     xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
@@ -3438,7 +3439,6 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
 
     encoder->setUniform(u_skyColor, skyColor.data());
     encoder->setUniform(u_gtaoIntensity, gtaoIntensityField);
-    encoder->setUniform(u_jitter, jitterData.data());
     encoder->setImage(0, gAccumTex.handle, 0, bgfx::Access::Read);
     encoder->setImage(1, gbufAlbedo.handle, 0, bgfx::Access::Read);
     encoder->setImage(2, gbufEmission.handle, 0, bgfx::Access::Read);
@@ -3479,9 +3479,6 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         temp_intensity,
         0.0f, 0.0f};
     encoder->setUniform(u_mbVelocityData, &mbVelocityData, 3);
-    encoder->setUniform(u_previousView, previousView);
-    encoder->setUniform(u_previousProj, previousProj);
-    encoder->setUniform(u_jitter, jitterData.data());
     encoder->setTexture(0, s_depth, gbufDepth.handle);
     encoder->setTexture(1, s_velocity, gbufVelocity.handle);
     encoder->setImage(2, gMBVelocity.handle, 0, bgfx::Access::Write);
