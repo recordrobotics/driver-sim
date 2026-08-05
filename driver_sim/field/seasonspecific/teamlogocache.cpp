@@ -59,6 +59,16 @@ TeamLogoCache::~TeamLogoCache()
     placeholderTexture.destroy();
 }
 
+bool isPng(const void *data, size_t size)
+{
+    static constexpr uint8_t pngHeader[8] = {
+        0x89, 0x50, 0x4E, 0x47,
+        0x0D, 0x0A, 0x1A, 0x0A};
+
+    return size >= sizeof(pngHeader) &&
+           std::memcmp(data, pngHeader, sizeof(pngHeader)) == 0;
+}
+
 bimg::ImageContainer *readImage(const char *path)
 {
     bx::FileReader reader;
@@ -68,7 +78,7 @@ bimg::ImageContainer *readImage(const char *path)
     {
         uint32_t size = (uint32_t)bx::getSize(&reader);
 
-        if(size == 0)
+        if (size == 0)
         {
             logger->error("Image file is empty: {}", path);
             bx::close(&reader);
@@ -77,6 +87,14 @@ bimg::ImageContainer *readImage(const char *path)
 
         char *data = (char *)bx::alloc(&allocator, size);
         bx::read(&reader, data, size, &err);
+
+        if (!isPng(data, size))
+        {
+            logger->error("Image file is not a valid PNG: {}", path);
+            bx::close(&reader);
+            bx::free(&allocator, data);
+            return nullptr;
+        }
 
         bimg::ImageContainer *image = bimg::imageParse(
             &allocator,
@@ -164,7 +182,11 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                     return;
                 } else {
                     logger->error("Failed to load cached logo for team {}.", teamNumber);
-                    std::filesystem::remove(localPath);
+                    try{
+                        std::filesystem::remove(localPath);
+                    } catch (const std::filesystem::filesystem_error& e) {
+                        logger->error("Failed to delete corrupted image file {}: {}", localPath.string(), e.what());
+                    }
                     logoStates[teamNumber] = LogoState::Error;
                 }
             }
@@ -225,14 +247,22 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                     processQueue.push({teamNumber, image});
                 } else {
                     logger->error("Failed to read downloaded image for team {}.", teamNumber);
+                    try{
                     std::filesystem::remove(localPath);
+                    } catch (const std::filesystem::filesystem_error& e) {
+                        logger->error("Failed to delete corrupted image file {}: {}", localPath.string(), e.what());
+                    }
                     logoStates[teamNumber] = LogoState::Error;
                 }
             }
             else
             {
                 logger->error("Failed to download team logo from {}: HTTP {} - {}", remoteUrl, r.status_code, r.error.message);
-                std::filesystem::remove(localPath); // Delete potential files
+                try {
+                    std::filesystem::remove(localPath); // Delete potential files
+                } catch (const std::filesystem::filesystem_error& e) {
+                    logger->error("Failed to delete corrupted image file {}: {}", localPath.string(), e.what());
+                }
 
                 if (r.error.code != cpr::ErrorCode::OK)
                 {
@@ -241,6 +271,11 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                 else
                 {
                     logger->error("HTTP Error {} from: {}", std::to_string(r.status_code), remoteUrl);
+                }
+                try {
+                    std::filesystem::remove(localPath); // Delete potential files
+                } catch (const std::filesystem::filesystem_error& e) {
+                    logger->error("Failed to delete corrupted image file {}: {}", localPath.string(), e.what());
                 }
 
                 logoStates[teamNumber] = LogoState::Error;

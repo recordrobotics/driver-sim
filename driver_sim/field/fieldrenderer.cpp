@@ -1,46 +1,12 @@
 #include <bgfx/bgfx.h>
 #include <bgfx/embedded_shader.h>
 #include <SDL3/SDL.h>
-#include <bx/file.h>
-#include <bx/error.h>
-#include <bx/pixelformat.h>
-#include <bimg/decode.h>
 #include <imgui/imgui.h>
-
-#include <vector>
-#include <algorithm>
-#include <cstring>
-#include <cmath>
-#include <unordered_map>
-#include <random>
-#include <optional>
 
 #include <nlohmann/json.hpp>
 
-#include <blackboard_app/logger.h>
-#include <blackboard_app/gui.h>
-
-#include <cassert>
-
-#include "texture.h"
-
 #include "fieldrenderer.h"
 #include "shaders.h"
-#include "mesh.h"
-#include <future>
-
-#include <networktables/NetworkTable.h>
-#include <networktables/NetworkTableInstance.h>
-#include <networktables/StructTopic.h>
-#include <networktables/StructArrayTopic.h>
-#include <networktables/BooleanTopic.h>
-#include <networktables/IntegerTopic.h>
-#include <networktables/StringArrayTopic.h>
-
-#include <wpi/struct/Struct.h>
-
-#include <frc/geometry/Pose3d.h>
-#include <frc/geometry/struct/Pose3dStruct.h>
 
 #include "../settings/settingsstore.h"
 
@@ -55,64 +21,15 @@
 
 #include "../ui/components.h"
 
-#if GAME_YEAR == 2026
-#include "seasonspecific/rebuilt2026/fmsui.h"
-#include "seasonspecific/rebuilt2026/hublights.h"
-#endif
+#include <shadow.png.h>
 
-using namespace std::chrono_literals;
+#include <mainmenu.png.h>
+#include <settings.png.h>
+#include <viewmode.png.h>
+#include <restartjava.png.h>
+
 using namespace ui;
-
-struct Pose3dObject
-{
-    frc::Pose3d pose;
-    int identity;
-
-    Pose3dObject(const frc::Pose3d &p, int id) : pose(p), identity(id) {}
-
-    Pose3dObject() : pose(frc::Pose3d()), identity(0) {}
-};
-
-namespace
-{
-    constexpr size_t kPoseOff = 0;
-    constexpr size_t kIdentityOff =
-        kPoseOff + wpi::GetStructSize<frc::Pose3d>();
-} // namespace
-
-template <>
-struct wpi::Struct<Pose3dObject>
-{
-    static constexpr std::string_view GetTypeName() { return "Pose3dObject"; }
-    static constexpr size_t GetSize()
-    {
-        return wpi::GetStructSize<frc::Pose3d>() + 4;
-    }
-    static constexpr std::string_view GetSchema()
-    {
-        return "Pose3d pose;int identity";
-    }
-
-    static Pose3dObject Unpack(std::span<const uint8_t> data)
-    {
-        return Pose3dObject{
-            wpi::UnpackStruct<frc::Pose3d, kPoseOff>(data),
-            wpi::UnpackStruct<int, kIdentityOff>(data)};
-    }
-    static void Pack(std::span<uint8_t> data, const Pose3dObject &value)
-    {
-        wpi::PackStruct<kPoseOff>(data, value.pose);
-        wpi::PackStruct<kIdentityOff>(data, value.identity);
-    }
-    static void ForEachNested(
-        std::invocable<std::string_view, std::string_view> auto fn)
-    {
-        wpi::ForEachStructSchema<frc::Pose3d>(fn);
-    }
-};
-
-static_assert(wpi::StructSerializable<Pose3dObject>);
-static_assert(wpi::HasNestedStruct<Pose3dObject>);
+using blackboard::gui::load_image;
 
 static const bgfx::EmbeddedShader s_embeddedShaders[] =
     {
@@ -181,12 +98,6 @@ static ModelRotationAxis axisFromString(const std::string &s)
     throw std::runtime_error("Invalid rotation axis in config: " + s);
 }
 
-enum class WPILibCoordinateSystem
-{
-    WallBlue,
-    CenterRed
-};
-
 static WPILibCoordinateSystem coordinateSystemFromString(const std::string &s)
 {
     std::string sLower = s;
@@ -199,50 +110,11 @@ static WPILibCoordinateSystem coordinateSystemFromString(const std::string &s)
     throw std::runtime_error("Invalid coordinate system in config: " + s);
 }
 
-enum class CameraView
-{
-    Field,
-    Robot,
-    RobotRelative,
-    DriverStation,
-    Count
-};
-
 static const std::array<std::string, static_cast<size_t>(CameraView::Count)> CAMERA_VIEW_NAMES = {
     "Field",
     "Robot",
     "Robot Relative",
     "Driver Station"};
-
-enum class DebugView
-{
-    None,
-    Albedo,
-    Normal,
-    Emission,
-    PBRData,
-    Velocity,
-    Depth,
-    OITMoments,
-    OITTotalDepth,
-    OITAccum,
-    MotionBlurVelocity,
-    MotionBlurTileMaxX,
-    MotionBlurTileMaxY,
-    MotionBlurNeighborMax,
-    MotionBlurTileVariance,
-    GTAOWorkingDepth0,
-    GTAOWorkingDepth1,
-    GTAOWorkingDepth2,
-    GTAOWorkingDepth3,
-    GTAOWorkingDepth4,
-    GTAOWorkingAOTermNormals,
-    GTAOWorkingAOTermVisibility,
-    GTAOWorkingEdges,
-    GTAOFinalAOTermNormals,
-    GTAOFinalAOTermVisibility,
-    Count
-};
 
 static const std::array<std::string, static_cast<size_t>(DebugView::Count)> DEBUG_VIEW_NAMES = {
     "None",
@@ -327,20 +199,9 @@ static constexpr MBVelocityComponent MB_OBJECT_MOVEMENT_COMPONENT = {20.0f, 0.0f
 using namespace blackboard::logger;
 using blackboard::gui::string_hex_to_rgba_float_array;
 
-static constexpr uint16_t VIEW_GBUFFER = 0;
-static constexpr uint16_t VIEW_GTAO = 1;
-static constexpr uint16_t VIEW_OIT_MOMENTS = 2;
-static constexpr uint16_t VIEW_OIT = 3;
-static constexpr uint16_t VIEW_POSTPROCESS = 4;
-static constexpr uint16_t VIEW_BLIT = 5;
-
-static constexpr uint8_t LIGHT_COUNT = 6;
-
 static constexpr uint8_t XE_GTAO_DEPTH_MIP_LEVELS = 5;
 
 static constexpr float DRIVER_STATION_CAMERA_HEIGHT = 64 * INCHES_TO_METERS;
-
-static constexpr auto DISCORD_UPDATE_INTERVAL = 5s;
 
 namespace nlohmann
 {
@@ -385,198 +246,7 @@ inline std::array<float, 4> SRGBToLinear(const std::array<float, 4> &srgb)
     return linear;
 }
 
-bgfx::UniformHandle u_baseColor;
-bgfx::UniformHandle u_emissionColor;
-bgfx::UniformHandle u_skyColor;
-bgfx::UniformHandle u_gtaoIntensity;
-bgfx::UniformHandle u_info;
-bgfx::UniformHandle u_previousViewProj;
-bgfx::UniformHandle u_previousView;
-bgfx::UniformHandle u_previousProj;
-bgfx::UniformHandle u_jitter;
-bgfx::UniformHandle u_pbrData;
-bgfx::UniformHandle u_ledData;
-
-bgfx::UniformHandle u_lightPos;
-bgfx::UniformHandle u_lightColor;
-
-bgfx::UniformHandle u_mbVelocityData;
-bgfx::UniformHandle u_mbBlurData;
-
-bgfx::UniformHandle u_bloomThreshold;
-bgfx::UniformHandle u_bloomTexelSize;
-bgfx::UniformHandle u_bloomIntensity;
-
-bgfx::UniformHandle u_lutParams;
-
-bgfx::UniformHandle u_XeGTAOData;
-
-bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programPBRTextured = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programPBRInstanced = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programPBRLed = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programPBRApriltag = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programOit = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programOitInstanced = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programOitMoments = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle programOitMomentsInstanced = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle oitCompProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle tonemapProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle exposureProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle blitProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle presentProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle debugNormalsProgram = BGFX_INVALID_HANDLE;
-
-bgfx::ProgramHandle taaResolveProgram = BGFX_INVALID_HANDLE;
-
-bgfx::ProgramHandle mbVelocityProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbGuertinTileMaxXProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbGuertinTileMaxYProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbGuertinNeighborMaxProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbGuertinTileVarianceProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle mbGuertinExperimentalBlurProgram = BGFX_INVALID_HANDLE;
-
-bgfx::ProgramHandle bloomDownscaleProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle bloomUpscaleProgram = BGFX_INVALID_HANDLE;
-
-bgfx::ProgramHandle XeGTAO_PrefilterDepths16x16Program = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle XeGTAO_MainPassProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle XeGTAO_DenoiseProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle XeGTAO_debugNormalsProgram = BGFX_INVALID_HANDLE;
-bgfx::ProgramHandle XeGTAO_debugVisibilityProgram = BGFX_INVALID_HANDLE;
-
-Texture gMomentsTex;
-Texture gTotalDepthTex;
-Texture gAccumTex;
-
-Texture gbufAlbedo;
-Texture gbufEmission;
-Texture gbufNormal;
-Texture gbufPBRData;
-Texture gbufVelocity;
-Texture gFullVelocity;
-Texture gbufDepth;
-
-Texture gOutputColor;
-
-Texture gTAABuffer0;
-Texture gTAABuffer1;
-
-Texture gMBTileMaxX;
-Texture gMBTileMax;
-Texture gMBNeighborMax;
-Texture gMBTileVariance;
-Texture gMBVelocity;
-Texture gMBOutputColor;
-
-Texture gGTAOWorkingDepth;
-Texture gGTAOWorkingAOTerm;
-Texture gGTAOWorkingEdges;
-Texture gGTAOHilbertLut;
-Texture gGTAOFinalAOTerm;
-
-Texture bloomDirtMask;
-
-Texture carpetBaseColor;
-Texture carpetBump;
-Texture apriltagTexture;
-Texture ledMaskTexture;
-
-Texture tonemappingLut;
-
-FrameBuffer gBufFbo;
-FrameBuffer gOitFbo;
-FrameBuffer gOitMomentsFbo;
-
-bgfx::UniformHandle s_texPresent;
-
-bgfx::UniformHandle s_taaHistory;
-
-bgfx::UniformHandle s_color;
-bgfx::UniformHandle s_velocity;
-bgfx::UniformHandle s_depth;
-
-bgfx::UniformHandle s_momentsTex;
-bgfx::UniformHandle s_totalDepthTex;
-
-bgfx::UniformHandle s_mbTileMaxX;
-bgfx::UniformHandle s_mbTileMax;
-bgfx::UniformHandle s_mbNeighborMax;
-bgfx::UniformHandle s_mbTileVariance;
-
-bgfx::UniformHandle s_bloomInput;
-bgfx::UniformHandle s_bloomDirt;
-
-bgfx::UniformHandle s_lut;
-
-bgfx::UniformHandle s_baseColor;
-bgfx::UniformHandle s_bump;
-bgfx::UniformHandle s_apriltags;
-bgfx::UniformHandle s_ledMask;
-bgfx::UniformHandle s_ledColors;
-
-bgfx::UniformHandle s_workingAOTerm;
-bgfx::UniformHandle s_workingEdges;
-
-float bloomThreshold = 2.0f;
-float bloomKnee = 0.1f;
-float bloomIntensity = 1.0f;
-float bloomDirtIntensity = 1.1f;
-
-float tonemappingExposure = -2.0f;
-
-float gtaoEffectRadius = 0.5f;
-float gtaoRadiusMultiplier = 1.457f;
-float gtaoEffectFalloffRange = 0.615f;
-float gtaoSampleDistributionPower = 2.0f;
-float gtaoThinOccluderCompensation = 0.0f;
-float gtaoDepthMipSamplingOffset = 3.30f;
-float gtaoFinalValuePower = 2.2f;
-float gtaoDenoiseBlurBeta = 1.2f;
-
-float gtaoIntensity = 1.0f;
-float gtaoDirectIntensity = 1.0f;
-float gtaoBentNormalIntensity = 0.7f; // 0.7 looks a bit better than 1.0 with metallic materials
-
-float fieldModelMatrix[2][16];
-
-WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
-float fieldWidthMeters = 1.0f;
-float fieldHeightMeters = 1.0f;
-
-auto lastDiscordUpdateTime = std::chrono::steady_clock::now() - DISCORD_UPDATE_INTERVAL;
-
-struct AprilTagInstanceData
-{
-    std::array<float, 16> modelMatrix{};
-
-    float &id() { return modelMatrix[15]; }
-    const float &id() const { return modelMatrix[15]; }
-};
-
-std::vector<AprilTagInstanceData> aprilTags;
-
-Mesh aprilTagMesh{};
-
-std::vector<bx::Vec3> driverStationCameraPositions;
-bx::Vec3 driverStationCameraTarget{0.0f, 0.0f, 0.5f};
-bx::Vec3 lastDriverStationCameraTarget{0.0f, 0.0f, 0.5f};
-
-std::future<void> fieldModelLoadingFuture;
-std::future<void> robotModelLoadingFuture;
-
-nt::NetworkTableInstance ntInst;
-
-#if GAME_YEAR == 2026
-std::unique_ptr<Rebuilt2026FMSUI> fmsUI;
-#endif
-
-CameraView cameraView = CameraView::Field;
-DebugView debugView = DebugView::None;
-
-bool freezeTemporalEffects = false;
-
-void initPBROIT(uint16_t width, uint16_t height)
+void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
 {
     s_baseColor = bgfx::createUniform("s_baseColor", bgfx::UniformType::Sampler);
     if (!bgfx::isValid(s_baseColor))
@@ -881,7 +551,7 @@ void initPBROIT(uint16_t width, uint16_t height)
         0);
 }
 
-void initTonemap()
+void FieldRenderer::initTonemap()
 {
     const auto type = bgfx::getRendererType();
 
@@ -925,7 +595,7 @@ void initTonemap()
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 }
 
-void initTAA(uint16_t width, uint16_t height)
+void FieldRenderer::initTAA(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
@@ -971,7 +641,7 @@ void initTAA(uint16_t width, uint16_t height)
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
-void initGBuffer(uint16_t width, uint16_t height)
+void FieldRenderer::initGBuffer(uint16_t width, uint16_t height)
 {
     s_color = bgfx::createUniform("s_color", bgfx::UniformType::Sampler);
     s_velocity = bgfx::createUniform("s_velocity", bgfx::UniformType::Sampler);
@@ -1045,7 +715,7 @@ void initGBuffer(uint16_t width, uint16_t height)
         &gbufAlbedo, &gbufEmission, &gbufNormal, &gbufPBRData, &gbufVelocity, &gbufDepth);
 }
 
-void initMotionBlur(uint16_t width, uint16_t height)
+void FieldRenderer::initMotionBlur(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
@@ -1193,7 +863,7 @@ void initMotionBlur(uint16_t width, uint16_t height)
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
-void initBloom(uint16_t width, uint16_t height)
+void FieldRenderer::initBloom(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
@@ -1282,7 +952,7 @@ inline uint32_t HilbertIndex(uint32_t posX, uint32_t posY)
     return index;
 }
 
-void initGTAO(uint16_t width, uint16_t height)
+void FieldRenderer::initGTAO(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
@@ -1411,25 +1081,7 @@ void initGTAO(uint16_t width, uint16_t height)
         BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 }
 
-inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
-{
-    const frc::Quaternion &frcQuat = rotation.GetQuaternion();
-    return {static_cast<float>(frcQuat.X()),
-            static_cast<float>(frcQuat.Y()),
-            static_cast<float>(frcQuat.Z()),
-            static_cast<float>(frcQuat.W())};
-}
-
-inline constexpr bx::Quaternion rotation3dToQuaternionInverse(const frc::Rotation3d &rotation)
-{
-    const frc::Quaternion frcQuat = rotation.GetQuaternion().Inverse();
-    return {static_cast<float>(frcQuat.X()),
-            static_cast<float>(frcQuat.Y()),
-            static_cast<float>(frcQuat.Z()),
-            static_cast<float>(frcQuat.W())};
-}
-
-static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
+frc::Pose3d FieldRenderer::transformPose3dToLocalCoordinates(const frc::Pose3d &pose) const
 {
     switch (coordinateSystem)
     {
@@ -1446,74 +1098,57 @@ static frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose)
     }
 }
 
-/**
- *
- */
-typedef struct Transform
+Transform::Transform()
 {
-    // partial TRS matrix, row major
-    float mRow0[4];
-    float mRow1[4];
-    float mRow2[4];
+    std::memset(this, 0, sizeof(Transform));
+}
 
-    Transform()
+Transform::Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position, bx::Quaternion rotation)
+{
+    float matrix[16];
+    float rotationMatrix[16];
+    bx::mtxFromQuaternion(rotationMatrix, rotation);
+    float translationMatrix[16];
+    bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
+    if (modelMatrix == nullptr && parentMatrix == nullptr)
     {
-        std::memset(this, 0, sizeof(Transform));
+        bx::mtxMul(matrix, rotationMatrix, translationMatrix);
     }
-
-    Transform(float *modelMatrix, float *parentMatrix, bx::Vec3 position, bx::Quaternion rotation)
+    else
     {
-        float matrix[16];
-        float rotationMatrix[16];
-        bx::mtxFromQuaternion(rotationMatrix, rotation);
-        float translationMatrix[16];
-        bx::mtxTranslate(translationMatrix, position.x, position.y, position.z);
-        if (modelMatrix == nullptr && parentMatrix == nullptr)
+        float relativeMatrix[16];
+        bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
+        if (modelMatrix == nullptr)
         {
-            bx::mtxMul(matrix, rotationMatrix, translationMatrix);
+            bx::mtxMul(matrix, relativeMatrix, parentMatrix);
+        }
+        else if (parentMatrix == nullptr)
+        {
+            bx::mtxMul(matrix, modelMatrix, relativeMatrix);
         }
         else
         {
-            float relativeMatrix[16];
-            bx::mtxMul(relativeMatrix, rotationMatrix, translationMatrix);
-            if (modelMatrix == nullptr)
-            {
-                bx::mtxMul(matrix, relativeMatrix, parentMatrix);
-            }
-            else if (parentMatrix == nullptr)
-            {
-                bx::mtxMul(matrix, modelMatrix, relativeMatrix);
-            }
-            else
-            {
-                float finalMatrix[16];
-                bx::mtxMul(finalMatrix, modelMatrix, relativeMatrix);
-                bx::mtxMul(matrix, finalMatrix, parentMatrix);
-            }
+            float finalMatrix[16];
+            bx::mtxMul(finalMatrix, modelMatrix, relativeMatrix);
+            bx::mtxMul(matrix, finalMatrix, parentMatrix);
         }
-
-        float transpose[16];
-        bx::mtxTranspose(transpose, matrix);
-        std::memcpy(this, transpose, sizeof(Transform));
     }
 
-    void toMatrix(float *outMatrix) const
-    {
-        float transpose[16];
-        std::memcpy(transpose, this, sizeof(Transform));
-        transpose[12] = 0.0f;
-        transpose[13] = 0.0f;
-        transpose[14] = 0.0f;
-        transpose[15] = 1.0f;
-        bx::mtxTranspose(outMatrix, transpose);
-    }
-} Transform;
+    float transpose[16];
+    bx::mtxTranspose(transpose, matrix);
+    std::memcpy(this, transpose, sizeof(Transform));
+}
 
-typedef struct InstanceData
+void Transform::toMatrix(float *outMatrix) const
 {
-    Transform transform;
-    Transform previousTransform;
-} InstanceData;
+    float transpose[16];
+    std::memcpy(transpose, this, sizeof(Transform));
+    transpose[12] = 0.0f;
+    transpose[13] = 0.0f;
+    transpose[14] = 0.0f;
+    transpose[15] = 1.0f;
+    bx::mtxTranspose(outMatrix, transpose);
+}
 
 struct UVVertex
 {
@@ -1533,247 +1168,137 @@ struct UVVertex
 
 bgfx::VertexLayout UVVertex::layout;
 
-std::vector<Mesh> fieldMeshes;
-
-typedef struct DynamicObjectData
+void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float deltaTime, bool freezeTemporalEffects)
 {
-    int lastDataUpdate = -1;
-    bx::Vec3 position = {0.0f, 0.0f, 0.0f};
-    bx::Quaternion rotation = rotation3dToQuaternion(frc::Rotation3d());
-
-    bx::Vec3 lastPosition = {0.0f, 0.0f, 0.0f};
-    bx::Quaternion lastRotation = rotation3dToQuaternion(frc::Rotation3d());
-
-    InstanceData instanceData = {};
-
-    void update(float *modelMatrix, float *parentMatrix, float deltaTime)
+    if (!freezeTemporalEffects)
     {
-        if (!freezeTemporalEffects)
-        {
-            instanceData.previousTransform = instanceData.transform;
-        }
-
-        if (lastDataUpdate == -1)
-        {
-            lastPosition = position;
-            lastRotation = rotation;
-        }
-        else
-        {
-            float interpolationFactor = deltaTime / settings::ntPeriodic;
-            lastPosition = bx::lerp(lastPosition, position, interpolationFactor);
-            lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
-        }
-
-        instanceData.transform = {
-            modelMatrix,
-            parentMatrix,
-            lastPosition,
-            lastRotation};
-
-        if (lastDataUpdate == -1)
-        {
-            instanceData.previousTransform = instanceData.transform;
-        }
+        instanceData.previousTransform = instanceData.transform;
     }
 
-    void update(float *modelMatrix, float deltaTime)
+    if (lastDataUpdate == -1)
     {
-        update(modelMatrix, nullptr, deltaTime);
+        lastPosition = position;
+        lastRotation = rotation;
     }
-} DynamicObjectData;
+    else
+    {
+        float interpolationFactor = deltaTime / settings::ntPeriodic;
+        lastPosition = bx::lerp(lastPosition, position, interpolationFactor);
+        lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
+    }
 
-typedef struct RobotComponentData
+    instanceData.transform = {
+        modelMatrix,
+        parentMatrix,
+        lastPosition,
+        lastRotation};
+
+    if (lastDataUpdate == -1)
+    {
+        instanceData.previousTransform = instanceData.transform;
+    }
+}
+
+RobotData::RobotData(RobotModel *model)
+    : model(model), components(model->components.size()), bumperBaseColor(model->bumperModelColor)
 {
-    std::array<float, 16> modelMatrix;
-    std::vector<Mesh> meshes;
-} RobotComponentData;
+    uint16_t ledCount = static_cast<uint16_t>(floorf(model->ledCount));
+    ledColorData = std::make_unique<uint8_t[]>(ledCount * 4);
+    TEXTURE(
+        ledColorTexture,
+        ledCount, 1,
+        1.0f, 1.0f,
+        false,
+        1,
+        bgfx::TextureFormat::RGBA8,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+}
 
-typedef struct RobotModel
+void RobotData::update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects, std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates)
 {
-    std::string name;
-
-    std::array<float, 16> modelMatrix;
-    std::vector<Mesh> meshes;
-
-    std::vector<RobotComponentData> components;
-
-    float rslOnEmissionStrength = 0.0f;
-    std::array<float, 4> bumperModelColor;
-    std::optional<std::array<float, 4>> bumperBlueColor;
-    std::optional<std::array<float, 4>> bumperRedColor;
-
-    float ledCount = 0.0f;
-    float ledAspectRatio = 1.0f;
-
-    // NT-dependent materials use per-instance robot data
-    // Meshes with these materials can't be instanced
-    Material *rslMaterial = nullptr;
-    Material *bumperMaterial = nullptr;
-    Material *ledMaterial = nullptr;
-
-    bool isInstanceable(const Material *material) const
+    if (poseSub.Exists() && (alwaysEnabled || (enabledSub.Exists() && enabledSub.GetAtomic().value)))
     {
-        return material != rslMaterial && material != bumperMaterial && material != ledMaterial;
-    }
+        auto robotPose = poseSub.GetAtomic();
+        frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
+        dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+        dynamicData.rotation = rotation3dToQuaternion(localPose.Rotation());
+        dynamicData.update(model->modelMatrix.data(), deltaTime, freezeTemporalEffects);
+        dynamicData.lastDataUpdate = currentDataUpdateIndex;
 
-    // Construct, specifying only model matrices from config file
-    RobotModel(std::string name, std::array<float, 16> modelMatrix, std::vector<RobotComponentData> components)
-        : name(name), modelMatrix(modelMatrix), components(components)
-    {
-    }
-} RobotModel;
+        // Update component poses
+        auto componentPoses = componentPosesSub.GetAtomic();
 
-typedef struct RobotData
-{
-    RobotModel *model;
+        float robotOriginMtx[16];
+        float rotationMatrix[16];
+        bx::mtxFromQuaternion(rotationMatrix, dynamicData.lastRotation);
+        float translationMatrix[16];
+        bx::mtxTranslate(translationMatrix, dynamicData.lastPosition.x, dynamicData.lastPosition.y, dynamicData.lastPosition.z);
+        bx::mtxMul(robotOriginMtx, rotationMatrix, translationMatrix);
 
-    DynamicObjectData dynamicData;
-    std::vector<DynamicObjectData> components;
-
-    nt::StructTopic<frc::Pose3d> poseTopic;
-    nt::StructSubscriber<frc::Pose3d> poseSub;
-
-    nt::StructArrayTopic<frc::Pose3d> componentPosesTopic;
-    nt::StructArraySubscriber<frc::Pose3d> componentPosesSub;
-
-    nt::BooleanTopic rslStateTopic;
-    nt::BooleanSubscriber rslStateSub;
-
-    nt::IntegerTopic allianceStationTopic;
-    nt::IntegerSubscriber allianceStationSub;
-
-    nt::StringArrayTopic ledColorsTopic;
-    nt::StringArraySubscriber ledColorsSub;
-
-    // is opponent robot enabled
-    nt::BooleanTopic enabledTopic;
-    nt::BooleanSubscriber enabledSub;
-    bool alwaysEnabled = false;
-
-    std::array<float, 4> bumperBaseColor;
-    float rslEmissionStrength = 0.0f;
-
-    // RGB8 texture
-    Texture ledColorTexture;
-    std::unique_ptr<uint8_t[]> ledColorData;
-
-    RobotData(const RobotData &) = delete;
-    RobotData &operator=(const RobotData &) = delete;
-    RobotData(RobotData &&) noexcept = default;
-    RobotData &operator=(RobotData &&) noexcept = default;
-
-    RobotData(RobotModel *model)
-        : model(model), components(model->components.size()), bumperBaseColor(model->bumperModelColor)
-    {
-        uint16_t ledCount = static_cast<uint16_t>(floorf(model->ledCount));
-        ledColorData = std::make_unique<uint8_t[]>(ledCount * 4);
-        TEXTURE(
-            ledColorTexture,
-            ledCount, 1,
-            1.0f, 1.0f,
-            false,
-            1,
-            bgfx::TextureFormat::RGBA8,
-            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
-    }
-
-    void update(int currentDataUpdateIndex, float deltaTime)
-    {
-        if (poseSub.Exists() && (alwaysEnabled || (enabledSub.Exists() && enabledSub.GetAtomic().value)))
+        for (size_t i = 0; i < components.size(); ++i)
         {
-            auto robotPose = poseSub.GetAtomic();
-            frc::Pose3d localPose = transformPose3dToLocalCoordinates(robotPose.value);
-            dynamicData.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-            dynamicData.rotation = rotation3dToQuaternion(localPose.Rotation());
-            dynamicData.update(model->modelMatrix.data(), deltaTime);
-            dynamicData.lastDataUpdate = currentDataUpdateIndex;
-
-            // Update component poses
-            auto componentPoses = componentPosesSub.GetAtomic();
-
-            float robotOriginMtx[16];
-            float rotationMatrix[16];
-            bx::mtxFromQuaternion(rotationMatrix, dynamicData.lastRotation);
-            float translationMatrix[16];
-            bx::mtxTranslate(translationMatrix, dynamicData.lastPosition.x, dynamicData.lastPosition.y, dynamicData.lastPosition.z);
-            bx::mtxMul(robotOriginMtx, rotationMatrix, translationMatrix);
-
-            for (size_t i = 0; i < components.size(); ++i)
+            if (componentPosesSub.Exists() && i < componentPoses.value.size())
             {
-                if (componentPosesSub.Exists() && i < componentPoses.value.size())
-                {
-                    // invert rotation to match advscope
-                    components[i].position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
-                    components[i].rotation = rotation3dToQuaternionInverse(componentPoses.value[i].Rotation());
-                    components[i].update(model->components[i].modelMatrix.data(), robotOriginMtx, deltaTime);
-                }
-                else
-                {
-                    components[i].position = {0.0f, 0.0f, 0.0f};
-                    components[i].rotation = rotation3dToQuaternion(frc::Rotation3d{});
-                    components[i].update(model->modelMatrix.data(), robotOriginMtx, deltaTime);
-                }
-
-                components[i].lastDataUpdate = currentDataUpdateIndex;
-            }
-
-            // Update RSL state
-            if (rslStateSub.Exists())
-            {
-                rslEmissionStrength = rslStateSub.GetAtomic().value ? model->rslOnEmissionStrength : 0.0f;
-            }
-
-            // Update bumper color
-            if (allianceStationSub.Exists())
-            {
-                int allianceStation = allianceStationSub.GetAtomic().value;
-                if ((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && model->bumperRedColor.has_value()) // Red
-                {
-                    bumperBaseColor = model->bumperRedColor.value();
-                }
-                else if ((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && model->bumperBlueColor.has_value()) // Blue
-                {
-                    bumperBaseColor = model->bumperBlueColor.value();
-                }
-                else
-                {
-                    bumperBaseColor = model->bumperModelColor;
-                }
-            }
-
-            // Update LED colors
-            if (ledColorsSub.Exists())
-            {
-                std::vector<std::string> ledColors = ledColorsSub.GetAtomic().value;
-                for (uint16_t i = 0; i < ledColorTexture.width; ++i)
-                {
-                    if (i < ledColors.size())
-                    {
-                        std::string colorStr = ledColors[i];
-                        if (colorStr.length() == 7 && colorStr[0] == '#')
-                        {
-                            uint8_t r = std::stoi(colorStr.substr(1, 2), nullptr, 16);
-                            uint8_t g = std::stoi(colorStr.substr(3, 2), nullptr, 16);
-                            uint8_t b = std::stoi(colorStr.substr(5, 2), nullptr, 16);
-                            ledColorData[i * 4 + 0] = r;
-                            ledColorData[i * 4 + 1] = g;
-                            ledColorData[i * 4 + 2] = b;
-                            ledColorData[i * 4 + 3] = 255;
-                        }
-                    }
-                    else
-                    {
-                        ledColorData[i * 4 + 0] = 0;
-                        ledColorData[i * 4 + 1] = 0;
-                        ledColorData[i * 4 + 2] = 0;
-                        ledColorData[i * 4 + 3] = 255;
-                    }
-                }
+                // invert rotation to match advscope
+                components[i].position = {static_cast<float>(componentPoses.value[i].X().value()), static_cast<float>(componentPoses.value[i].Y().value()), static_cast<float>(componentPoses.value[i].Z().value())};
+                components[i].rotation = rotation3dToQuaternionInverse(componentPoses.value[i].Rotation());
+                components[i].update(model->components[i].modelMatrix.data(), robotOriginMtx, deltaTime, freezeTemporalEffects);
             }
             else
             {
-                for (uint16_t i = 0; i < ledColorTexture.width; ++i)
+                components[i].position = {0.0f, 0.0f, 0.0f};
+                components[i].rotation = rotation3dToQuaternion(frc::Rotation3d{});
+                components[i].update(model->modelMatrix.data(), robotOriginMtx, deltaTime, freezeTemporalEffects);
+            }
+
+            components[i].lastDataUpdate = currentDataUpdateIndex;
+        }
+
+        // Update RSL state
+        if (rslStateSub.Exists())
+        {
+            rslEmissionStrength = rslStateSub.GetAtomic().value ? model->rslOnEmissionStrength : 0.0f;
+        }
+
+        // Update bumper color
+        if (allianceStationSub.Exists())
+        {
+            int allianceStation = allianceStationSub.GetAtomic().value;
+            if ((allianceStation == 1 || allianceStation == 2 || allianceStation == 3) && model->bumperRedColor.has_value()) // Red
+            {
+                bumperBaseColor = model->bumperRedColor.value();
+            }
+            else if ((allianceStation == 4 || allianceStation == 5 || allianceStation == 6) && model->bumperBlueColor.has_value()) // Blue
+            {
+                bumperBaseColor = model->bumperBlueColor.value();
+            }
+            else
+            {
+                bumperBaseColor = model->bumperModelColor;
+            }
+        }
+
+        // Update LED colors
+        if (ledColorsSub.Exists())
+        {
+            std::vector<std::string> ledColors = ledColorsSub.GetAtomic().value;
+            for (uint16_t i = 0; i < ledColorTexture.width; ++i)
+            {
+                if (i < ledColors.size())
+                {
+                    std::string colorStr = ledColors[i];
+                    if (colorStr.length() == 7 && colorStr[0] == '#')
+                    {
+                        uint8_t r = std::stoi(colorStr.substr(1, 2), nullptr, 16);
+                        uint8_t g = std::stoi(colorStr.substr(3, 2), nullptr, 16);
+                        uint8_t b = std::stoi(colorStr.substr(5, 2), nullptr, 16);
+                        ledColorData[i * 4 + 0] = r;
+                        ledColorData[i * 4 + 1] = g;
+                        ledColorData[i * 4 + 2] = b;
+                        ledColorData[i * 4 + 3] = 255;
+                    }
+                }
+                else
                 {
                     ledColorData[i * 4 + 0] = 0;
                     ledColorData[i * 4 + 1] = 0;
@@ -1784,100 +1309,70 @@ typedef struct RobotData
         }
         else
         {
-            dynamicData.lastDataUpdate = -1;
-            for (auto &component : components)
+            for (uint16_t i = 0; i < ledColorTexture.width; ++i)
             {
-                component.lastDataUpdate = -1;
+                ledColorData[i * 4 + 0] = 0;
+                ledColorData[i * 4 + 1] = 0;
+                ledColorData[i * 4 + 2] = 0;
+                ledColorData[i * 4 + 3] = 255;
             }
         }
     }
-} RobotData;
-
-typedef struct GamePieceData
-{
-    std::string name;
-    std::unordered_map<int, DynamicObjectData> instances;
-    std::array<float, 16> modelMatrix;
-    std::vector<Mesh> meshes;
-
-    nt::StructArrayTopic<frc::Pose3d> posesTopic;
-    nt::StructArraySubscriber<frc::Pose3d> posesSub;
-
-    nt::StructArrayTopic<Pose3dObject> poseObjectsTopic;
-    nt::StructArraySubscriber<Pose3dObject> poseObjectsSub;
-
-    void update(int currentDataUpdateIndex, float deltaTime)
+    else
     {
-        bool hasObjects = poseObjectsSub.Exists();
-        if (hasObjects || posesSub.Exists())
+        dynamicData.lastDataUpdate = -1;
+        for (auto &component : components)
         {
-            auto updateInstance = [&](DynamicObjectData &instance, const frc::Pose3d &pose)
-            {
-                auto localPose = transformPose3dToLocalCoordinates(pose);
-                instance.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
-                instance.rotation = rotation3dToQuaternion(localPose.Rotation());
-                instance.update(modelMatrix.data(), deltaTime);
-                instance.lastDataUpdate = currentDataUpdateIndex;
-            };
+            component.lastDataUpdate = -1;
+        }
+    }
+}
 
-            if (hasObjects)
+void GamePieceData::update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects, std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates)
+{
+    bool hasObjects = poseObjectsSub.Exists();
+    if (hasObjects || posesSub.Exists())
+    {
+        auto updateInstance = [&](DynamicObjectData &instance, const frc::Pose3d &pose)
+        {
+            auto localPose = transformPose3dToLocalCoordinates(pose);
+            instance.position = {static_cast<float>(localPose.X().value()), static_cast<float>(localPose.Y().value()), static_cast<float>(localPose.Z().value())};
+            instance.rotation = rotation3dToQuaternion(localPose.Rotation());
+            instance.update(modelMatrix.data(), deltaTime, freezeTemporalEffects);
+            instance.lastDataUpdate = currentDataUpdateIndex;
+        };
+
+        if (hasObjects)
+        {
+            auto gamePiecePoseObjects = poseObjectsSub.GetAtomic();
+            for (size_t i = 0; i < gamePiecePoseObjects.value.size(); ++i)
             {
-                auto gamePiecePoseObjects = poseObjectsSub.GetAtomic();
-                for (size_t i = 0; i < gamePiecePoseObjects.value.size(); ++i)
-                {
-                    updateInstance(instances[gamePiecePoseObjects.value[i].identity], gamePiecePoseObjects.value[i].pose);
-                }
+                updateInstance(instances[gamePiecePoseObjects.value[i].identity], gamePiecePoseObjects.value[i].pose);
             }
-            else
-            {
-                auto gamePiecePoses = posesSub.GetAtomic();
-                for (size_t i = 0; i < gamePiecePoses.value.size(); ++i)
-                {
-                    updateInstance(instances[i], gamePiecePoses.value[i]);
-                }
-            }
-            std::erase_if(instances, [currentDataUpdateIndex](const std::pair<int, DynamicObjectData> &pair)
-                          { return pair.second.lastDataUpdate != currentDataUpdateIndex; });
         }
         else
         {
-            instances.clear();
+            auto gamePiecePoses = posesSub.GetAtomic();
+            for (size_t i = 0; i < gamePiecePoses.value.size(); ++i)
+            {
+                updateInstance(instances[i], gamePiecePoses.value[i]);
+            }
         }
+        std::erase_if(instances, [currentDataUpdateIndex](const std::pair<int, DynamicObjectData> &pair)
+                      { return pair.second.lastDataUpdate != currentDataUpdateIndex; });
     }
-} GamePieceData;
+    else
+    {
+        instances.clear();
+    }
+}
 
-std::vector<RobotModel> robotModels;
-std::unordered_map<RobotModel *, std::vector<RobotData>> robots;
-std::vector<GamePieceData> gamePieces;
-
-static std::function<void()> restartSimulationCallback;
-
-void field::setRestartSimulationCallback(std::function<void()> callback)
+void FieldRenderer::setRestartSimulationCallback(std::function<void()> callback)
 {
     restartSimulationCallback = callback;
 }
 
-struct OrbitCamera
-{
-    bx::Vec3 target{0.0f, 0.0f, 0.25f};
-    float distance = 15.811388f;
-    float yaw = bx::toRad(90.0f);
-    float pitch = bx::toRad(18.0f);
-    float minDistance = 0.1f;
-    float maxDistance = 120.0f;
-    float orbitSpeed = 0.008f;
-
-    float originTransform[16];
-
-    OrbitCamera()
-    {
-        bx::mtxIdentity(originTransform);
-    }
-};
-
-OrbitCamera orbitCamera;
-
-void updateOrbitCameraFromInput()
+void FieldRenderer::updateOrbitCameraFromInput()
 {
     if (!ImGui::GetCurrentContext())
     {
@@ -1917,19 +1412,6 @@ void updateOrbitCameraFromInput()
     }
 }
 
-bx::Vec3 getOrbitEye()
-{
-    const float cosPitch = std::cos(orbitCamera.pitch);
-    const float sinPitch = std::sin(orbitCamera.pitch);
-    const float sinYaw = std::sin(orbitCamera.yaw);
-    const float cosYaw = std::cos(orbitCamera.yaw);
-
-    return {
-        orbitCamera.target.x + orbitCamera.distance * cosPitch * cosYaw,
-        orbitCamera.target.y - orbitCamera.distance * cosPitch * sinYaw,
-        orbitCamera.target.z + orbitCamera.distance * sinPitch};
-}
-
 static void performRotationStack(float out[16], const std::vector<ModelRotationConfig> &rotations)
 {
     float result[16];
@@ -1966,7 +1448,7 @@ static void performRotationStack(float out[16], const std::vector<ModelRotationC
  * this is useful for dynamically removing meshes based on tags.
  * additionally, meshes with same tag but different materials will also stay separated, since they can't be merged anyway.
  */
-void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name, const std::unordered_map<std::string, std::string> &tags)
+static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name, const std::unordered_map<std::string, std::string> &tags)
 {
     std::filesystem::path glbPath = directory + name + ".glb";
     std::filesystem::path cachePath = directory + name + ".cache";
@@ -1996,7 +1478,7 @@ void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::s
     }
 }
 
-void loadFieldModel()
+void FieldRenderer::loadFieldModel()
 {
     logger->info("Loading field model");
     bx::DefaultAllocator allocator;
@@ -2124,7 +1606,7 @@ void loadFieldModel()
     }
 }
 
-void loadRobotModel()
+void FieldRenderer::loadRobotModel()
 {
     logger->info("Loading robot model");
     bx::DefaultAllocator allocator;
@@ -2289,9 +1771,7 @@ void loadRobotModel()
     }
 }
 
-bool startedLoadingFieldModel = false;
-
-void field::startLoadFieldModel()
+void FieldRenderer::startLoadFieldModel()
 {
     if (startedLoadingFieldModel)
     {
@@ -2301,12 +1781,11 @@ void field::startLoadFieldModel()
     startedLoadingFieldModel = true;
 
     logger->info("Starting loading field model in background thread.");
-    fieldModelLoadingFuture = std::async(std::launch::async, loadFieldModel);
+    fieldModelLoadingFuture = std::async(std::launch::async, [this]()
+                                         { loadFieldModel(); });
 }
 
-bool startedLoadingRobotModel = false;
-
-void field::startLoadRobotModel()
+void FieldRenderer::startLoadRobotModel()
 {
     if (startedLoadingRobotModel)
     {
@@ -2316,13 +1795,32 @@ void field::startLoadRobotModel()
     startedLoadingRobotModel = true;
 
     logger->info("Starting loading robot model in background thread.");
-    robotModelLoadingFuture = std::async(std::launch::async, loadRobotModel);
+    robotModelLoadingFuture = std::async(std::launch::async, [this]()
+                                         { loadRobotModel(); });
 }
 
-void field::init(const blackboard::app::Window &window)
+FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
 {
+    skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
+    lightColor = {
+        SRGBToLinear({1.0f, 0.25f, 0.25f, 432.0f}),
+        SRGBToLinear({1.0f, 0.85f, 0.85f, 332.0f}),
+        SRGBToLinear({1.0f, 1.0f, 1.0f, 432.0f}),
+        SRGBToLinear({1.0f, 1.0f, 1.0f, 332.0f}),
+        SRGBToLinear({0.25f, 0.45f, 1.0f, 432.0f}),
+        SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})};
+
     MeshVertex::init();
     UVVertex::init();
+
+    font = blackboard::gui::get_font("Inter_Regular_otf");
+
+    load_image((void *)shadow_png_bytes, sizeof(shadow_png_bytes), shadowTexture, BGFX_SAMPLER_UVW_CLAMP);
+
+    load_image((void *)mainmenu_png_bytes, sizeof(mainmenu_png_bytes), mainMenuTexture);
+    load_image((void *)settings_png_bytes, sizeof(settings_png_bytes), settingsTexture);
+    load_image((void *)viewmode_png_bytes, sizeof(viewmode_png_bytes), viewModeTexture);
+    load_image((void *)restartjava_png_bytes, sizeof(restartjava_png_bytes), restartJavaTexture);
 
     s_texPresent = bgfx::createUniform("s_texPresent", bgfx::UniformType::Sampler);
 
@@ -2378,7 +1876,7 @@ void field::init(const blackboard::app::Window &window)
     initGTAO(window.width, window.height);
 }
 
-void field::startNTClient()
+void FieldRenderer::startNTClient()
 {
     logger->info("Starting NetworkTables client");
     ntInst = nt::NetworkTableInstance::Create();
@@ -2404,7 +1902,7 @@ void field::startNTClient()
 constexpr float CAMERA_LINEAR_FAR = 100.0f;
 
 // assumes reverse z, infinite far
-void updateInfo(float cameraNear, float proj[16])
+void FieldRenderer::updateInfo(float cameraNear, float proj[16])
 {
     float info[8] = {
         cameraNear,
@@ -2471,23 +1969,6 @@ void screenSpaceQuad(bool _originBottomLeft, bgfx::Encoder *encoder, float _widt
     }
 }
 
-float previousViewProj[16] = {0};
-float previousView[16] = {0};
-float previousProj[16] = {0};
-
-float curTime = 0.0f;
-float previousJitterX = 0.0f;
-float previousJitterY = 0.0f;
-bool firstFrame = true;
-
-bool firstTAAFrame = true;
-bool taaUseBuffer1 = false;
-uint8_t jitterIndex = 0;
-
-uint8_t mbIndex = 0;
-
-uint8_t gtaoNoiseIndex = 0;
-
 float Halton(uint32_t i, uint32_t b)
 {
     float f = 1.0f;
@@ -2505,7 +1986,7 @@ float Halton(uint32_t i, uint32_t b)
 
 static constexpr uint32_t HALTON_SAMPLES = 8;
 
-void ensureTextures(uint16_t width, uint16_t height)
+void FieldRenderer::ensureTextures(uint16_t width, uint16_t height)
 {
     gAccumTex.beginFrame();
     gMomentsTex.beginFrame();
@@ -2581,7 +2062,7 @@ void ensureTextures(uint16_t width, uint16_t height)
     gGTAOFinalAOTerm.ensure(width, height);
 }
 
-void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepass = true)
+void FieldRenderer::setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepass)
 {
     float pbrData[4] = {
         (mesh.material.writesObjectMotionVectors && settings::writeObjectMotionVectors) ? 1.0f : 0.0f,
@@ -2636,184 +2117,7 @@ void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepa
     }
 }
 
-template <std::ranges::input_range R>
-void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[2][16])
-{
-    for (const auto &mesh : meshes)
-    {
-        setupMesh(encoder, mesh);
-        encoder->setTransform(modelMatrix, 2);
-        if (mesh.material.type == MaterialType::Transparent)
-        {
-            encoder->submit(VIEW_OIT_MOMENTS, programOitMoments);
-            setupMesh(encoder, mesh, false);
-            encoder->setTransform(modelMatrix, 2);
-            encoder->submit(VIEW_OIT, programOit);
-        }
-        else
-        {
-            encoder->submit(VIEW_GBUFFER, mesh.material.texture.empty() ? programPBR : programPBRTextured);
-        }
-    }
-}
-
-template <std::ranges::forward_range R>
-void drawRobotMeshes(bgfx::Encoder *encoder, RobotModel *robotModel, R &&meshes, const std::vector<std::pair<const InstanceData &, const RobotData &>> &instances)
-{
-    auto instanceableMeshes = meshes | std::views::filter([robotModel](const Mesh &mesh)
-                                                          { return robotModel->isInstanceable(&mesh.material); });
-
-    auto nonInstanceableMeshes = meshes | std::views::filter([robotModel](const Mesh &mesh)
-                                                             { return !robotModel->isInstanceable(&mesh.material); });
-
-    std::vector<InstanceData> instanceData;
-    instanceData.reserve(instances.size());
-    std::ranges::transform(instances, std::back_inserter(instanceData), [](const auto &pair)
-                           { return pair.first; });
-
-    drawMeshesInstanced(encoder, instanceableMeshes, instanceData);
-
-    if (std::ranges::distance(nonInstanceableMeshes) == 0)
-    {
-        return;
-    }
-
-    for (const auto &instance : instances)
-    {
-        if (robotModel->rslMaterial)
-        {
-            robotModel->rslMaterial->emissionColor[3] = instance.second.rslEmissionStrength;
-        }
-
-        if (robotModel->bumperMaterial)
-        {
-            robotModel->bumperMaterial->baseColor = instance.second.bumperBaseColor;
-        }
-
-        float matrices[2][16];
-        instance.first.transform.toMatrix(matrices[0]);
-        instance.first.previousTransform.toMatrix(matrices[1]);
-
-        for (auto &mesh : nonInstanceableMeshes)
-        {
-            setupMesh(encoder, mesh);
-            encoder->setTransform(matrices, 2);
-
-            if (mesh.material.type == MaterialType::Transparent)
-            {
-                encoder->submit(VIEW_OIT_MOMENTS, programOitMoments);
-                setupMesh(encoder, mesh, false);
-                encoder->setTransform(matrices, 2);
-                encoder->submit(VIEW_OIT, programOit);
-            }
-            else if (mesh.material.texture == "led")
-            {
-                float ledData[4] = {
-                    robotModel->ledCount,
-                    robotModel->ledAspectRatio,
-                    0.0f,
-                    0.0f};
-                encoder->setUniform(u_ledData, ledData);
-
-                bgfx::updateTexture2D(
-                    instance.second.ledColorTexture.handle,
-                    0, 0, 0, 0, instance.second.ledColorTexture.width, instance.second.ledColorTexture.height,
-                    bgfx::copy(instance.second.ledColorData.get(), static_cast<uint32_t>(instance.second.ledColorTexture.width * 4)));
-
-                encoder->setTexture(1, s_ledColors, instance.second.ledColorTexture.handle, BGFX_SAMPLER_UVW_CLAMP);
-
-                encoder->submit(VIEW_GBUFFER, programPBRLed);
-            }
-            else
-            {
-                encoder->submit(VIEW_GBUFFER, programPBR);
-            }
-        }
-    }
-}
-
-template <std::ranges::input_range R>
-void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes, const std::vector<InstanceData> &instanceData)
-{
-    // figure out how big of a buffer is available
-    uint32_t instanceCount = bgfx::getAvailInstanceDataBuffer(instanceData.size(), sizeof(InstanceData));
-
-    bgfx::InstanceDataBuffer idb;
-    bgfx::allocInstanceDataBuffer(&idb, instanceCount, sizeof(InstanceData));
-
-    std::memcpy(idb.data, instanceData.data(), instanceCount * sizeof(InstanceData));
-
-    for (const auto &mesh : meshes)
-    {
-        setupMesh(encoder, mesh);
-
-        encoder->setInstanceDataBuffer(&idb);
-        if (mesh.material.type == MaterialType::Transparent)
-        {
-            encoder->submit(VIEW_OIT_MOMENTS, programOitMomentsInstanced);
-            setupMesh(encoder, mesh, false);
-            encoder->setInstanceDataBuffer(&idb);
-            encoder->submit(VIEW_OIT, programOitInstanced);
-        }
-        else
-        {
-            encoder->submit(VIEW_GBUFFER, programPBRInstanced);
-        }
-    }
-}
-
-template <std::ranges::input_range R>
-void drawRobot(bgfx::Encoder *encoder, RobotModel *robotModel, R &&instances, const std::function<bool(const DynamicObjectData &)> &componentFilter)
-{
-    if (instances.empty())
-    {
-        return;
-    }
-
-    std::vector<std::pair<const InstanceData &, const RobotData &>> robotInstances;
-    robotInstances.reserve(std::ranges::distance(instances));
-    for (auto &robot : instances)
-    {
-        robotInstances.emplace_back(robot.dynamicData.instanceData, robot);
-    }
-
-    drawRobotMeshes(encoder, robotModel, robotModel->meshes, robotInstances);
-
-    std::map<size_t, std::vector<std::pair<const InstanceData &, const RobotData &>>> componentInstancesMap;
-
-    for (const auto &robot : instances)
-    {
-        for (size_t i = 0; i < robot.components.size(); ++i)
-        {
-            const auto &component = robot.components[i];
-            if (!componentFilter(component))
-            {
-                continue;
-            }
-
-            componentInstancesMap[i].emplace_back(component.instanceData, robot);
-        }
-    }
-
-    for (const auto &[index, componentInstances] : componentInstancesMap)
-    {
-        if (componentInstances.empty())
-        {
-            continue;
-        }
-
-        if (index >= robotModel->components.size())
-        {
-            logger->warn("Component index {} is out of bounds for robot model with {} components.", index, robotModel->components.size());
-            continue;
-        }
-
-        const auto &component = robotModel->components[index];
-        drawRobotMeshes(encoder, robotModel, component.meshes, componentInstances);
-    }
-}
-
-void drawAprilTags(bgfx::Encoder *encoder)
+void FieldRenderer::drawAprilTags(bgfx::Encoder *encoder)
 {
     if (aprilTags.empty())
     {
@@ -2833,11 +2137,7 @@ void drawAprilTags(bgfx::Encoder *encoder)
     encoder->submit(VIEW_GBUFFER, programPBRApriltag);
 }
 
-bool createdFieldMeshBuffers = false;
-bool createdRobotMeshBuffers = false;
-int currentDataUpdateIndex = 0;
-
-void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic, std::string_view enabledTopic = "")
+void FieldRenderer::addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, std::string_view rslStateTopic, std::string_view allianceStationTopic, std::string_view ledColorsTopic, std::string_view enabledTopic)
 {
     RobotData &robot = robots[&robotModels[0]].emplace_back(&robotModels[0]);
 
@@ -2866,7 +2166,7 @@ void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, 
     }
 }
 
-void drawDebugMenu()
+void FieldRenderer::drawDebugMenu()
 {
     if (!ImGui::Begin("Debug Menu"))
     {
@@ -2945,7 +2245,103 @@ void drawDebugMenu()
         ImGui::EndCombo();
     }
 
-    if (ImGui::Button("Restart Simulation"))
+    ImGui::End();
+}
+
+void FieldRenderer::drawTopUI()
+{
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    float buttonSize = 50.0f * globalScale;
+    float borderSize = 2.0f * globalScale;
+    float rounding = 16.0f * globalScale;
+    float fontSize = 12.0f * globalScale;
+    float textOffset = 5.0f * globalScale;
+
+    float buttonSpacing = 30.0f * globalScale;
+    int numButtons = 4;
+    float totalWidth = numButtons * buttonSize + (numButtons - 1) * buttonSpacing;
+
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
+
+    ImDrawList *drawList = ImGui::GetBackgroundDrawList(viewport);
+
+    float shadowWidth = 920.0f * globalScale;
+    float shadowHeight = 135.0f * globalScale;
+    float overflow = std::max(0.0f, shadowWidth - viewport->Size.x) / 2.0f;
+    float u0 = overflow / shadowWidth;
+    float u1 = std::min(1.0f, (overflow + viewport->Size.x) / shadowWidth);
+    drawList->AddImage(shadowTexture.id, ImVec2(viewport->Pos.x, viewport->Pos.y), ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + shadowHeight), ImVec2(u0, 0.0f), ImVec2(u1, 1.0f));
+
+    float xOffset = viewport->Pos.x + (viewport->Size.x - totalWidth) / 2;
+    float yOffset = viewport->Pos.y + 20.0f * globalScale;
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+                             ImGuiWindowFlags_NoBackground |
+                             ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoBringToFrontOnFocus |
+                             ImGuiWindowFlags_NoNav |
+                             ImGuiWindowFlags_NoDocking;
+
+    ImGui::SetNextWindowPos(ImVec2(xOffset, yOffset));
+    ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
+    ImGui::Begin("topui.mainmenu", nullptr, flags);
+    ImGui::SetCursorPos(ImVec2(0, 0));
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+    draw->PushClipRectFullScreen();
+
+    if (IconButton(font, "##mainmenu", "Main Menu", mainMenuTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset) && !exitingFlag)
+    {
+        exitingFlag = true;
+    }
+
+    draw->PopClipRect();
+    ImGui::End();
+
+    ImGui::SetNextWindowPos(ImVec2(xOffset + buttonSize + buttonSpacing, yOffset));
+    ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
+    ImGui::Begin("topui.settings", nullptr, flags);
+    ImGui::SetCursorPos(ImVec2(0, 0));
+    draw = ImGui::GetWindowDrawList();
+    draw->PushClipRectFullScreen();
+
+    static bool showSettings = false;
+    if (IconButton(font, "##settings", "Settings", settingsTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, showSettings))
+    {
+        showSettings = !showSettings;
+    }
+
+    draw->PopClipRect();
+    ImGui::End();
+
+    ImGui::SetNextWindowPos(ImVec2(xOffset + (buttonSize + buttonSpacing) * 2, yOffset));
+    ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
+    ImGui::Begin("topui.viewmode", nullptr, flags);
+    ImGui::SetCursorPos(ImVec2(0, 0));
+    draw = ImGui::GetWindowDrawList();
+    draw->PushClipRectFullScreen();
+
+    static bool showViewMode = false;
+    if (IconButton(font, "##viewmode", "View Mode", viewModeTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset, showViewMode))
+    {
+        showViewMode = !showViewMode;
+    }
+
+    draw->PopClipRect();
+    ImGui::End();
+
+    ImGui::SetNextWindowPos(ImVec2(xOffset + (buttonSize + buttonSpacing) * 3, yOffset));
+    ImGui::SetNextWindowSize(ImVec2(buttonSize, buttonSize));
+    ImGui::Begin("topui.restartjava", nullptr, flags);
+    ImGui::SetCursorPos(ImVec2(0, 0));
+    draw = ImGui::GetWindowDrawList();
+    draw->PushClipRectFullScreen();
+
+    if (IconButton(font, "##restartjava", "Restart Java", restartJavaTexture.id, buttonSize, borderSize, rounding, fontSize, textOffset))
     {
         if (restartSimulationCallback)
         {
@@ -2953,43 +2349,11 @@ void drawDebugMenu()
         }
     }
 
+    draw->PopClipRect();
     ImGui::End();
 }
 
-void drawTopUI()
-{
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y));
-    ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, 0));
-    ImGui::Begin("Top UI", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings);
-
-    auto &style{ImGui::GetStyle()};
-    float globalScale = style.FontScaleMain * style.FontScaleDpi;
-    ImVec2 winSize = ImGui::GetWindowSize();
-
-    float buttonSize = 50.0f * globalScale;
-    float borderSize = 2.0f * globalScale;
-    float rounding = 16.0f * globalScale;
-
-    static bool toggle = false;
-    if (IconButton("##test", NULL, buttonSize, borderSize, rounding, toggle))
-    {
-        toggle = !toggle;
-    }
-
-    ImGui::End();
-}
-
-std::array<float, 4> skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
-std::array<std::array<float, 4>, LIGHT_COUNT> lightColor = {
-    SRGBToLinear({1.0f, 0.25f, 0.25f, 432.0f}),
-    SRGBToLinear({1.0f, 0.85f, 0.85f, 332.0f}),
-    SRGBToLinear({1.0f, 1.0f, 1.0f, 432.0f}),
-    SRGBToLinear({1.0f, 1.0f, 1.0f, 332.0f}),
-    SRGBToLinear({0.25f, 0.45f, 1.0f, 432.0f}),
-    SRGBToLinear({0.65f, 0.85f, 1.0f, 332.0f})};
-
-void field::render(const blackboard::app::Window &window, const std::shared_ptr<Discord> &discord)
+void FieldRenderer::render(const blackboard::app::Window &window, const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
     if (settings::enableDebugMenu)
@@ -2997,12 +2361,12 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         drawDebugMenu();
     }
 
-    // drawTopUI();
-
     if (fmsUI)
     {
         fmsUI->render(ImGui::GetMainViewport()->Size);
     }
+
+    drawTopUI();
 
     if (!createdFieldMeshBuffers && fieldModelLoadingFuture.valid() &&
         fieldModelLoadingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
@@ -3083,17 +2447,21 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     curTime += deltaTime;
 
     // Dynamic objects
+
+    auto coordTransform = [this](const frc::Pose3d &pose)
+    { return transformPose3dToLocalCoordinates(pose); };
+
     for (auto &[robotModel, instances] : robots)
     {
         for (auto &robot : instances)
         {
-            robot.update(currentDataUpdateIndex, deltaTime);
+            robot.update(currentDataUpdateIndex, deltaTime, freezeTemporalEffects, coordTransform);
         }
     }
 
     for (auto &gamePiece : gamePieces)
     {
-        gamePiece.update(currentDataUpdateIndex, deltaTime);
+        gamePiece.update(currentDataUpdateIndex, deltaTime, freezeTemporalEffects, coordTransform);
     }
 
     if (cameraView == CameraView::Robot || cameraView == CameraView::RobotRelative)
@@ -3158,7 +2526,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
             {
                 updateOrbitCameraFromInput();
                 const bx::Vec3 at = orbitCamera.target;
-                const bx::Vec3 eye = getOrbitEye();
+                const bx::Vec3 eye = orbitCamera.getEye();
 
                 driverStationCameraTarget = at;
                 lastDriverStationCameraTarget = at;
@@ -3172,7 +2540,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         {
             updateOrbitCameraFromInput();
             const bx::Vec3 at = orbitCamera.target;
-            const bx::Vec3 eye = getOrbitEye();
+            const bx::Vec3 eye = orbitCamera.getEye();
 
             driverStationCameraTarget = at;
             lastDriverStationCameraTarget = at;
@@ -3186,7 +2554,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     {
         updateOrbitCameraFromInput();
         const bx::Vec3 at = orbitCamera.target;
-        const bx::Vec3 eye = getOrbitEye();
+        const bx::Vec3 eye = orbitCamera.getEye();
 
         driverStationCameraTarget = at;
         lastDriverStationCameraTarget = at;
@@ -3334,7 +2702,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         for (auto &gamePiece : gamePieces)
         {
             std::vector<InstanceData> instanceData;
-            auto filtered = gamePiece.instances | std::views::filter([](const std::pair<int, DynamicObjectData> &pair)
+            auto filtered = gamePiece.instances | std::views::filter([this](const std::pair<int, DynamicObjectData> &pair)
                                                                      { return pair.second.lastDataUpdate == currentDataUpdateIndex; });
             instanceData.reserve(std::ranges::distance(filtered));
             std::ranges::transform(filtered, std::back_inserter(instanceData),
@@ -3358,9 +2726,9 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     {
         for (auto &[robotModel, instances] : robots)
         {
-            drawRobot(encoder, robotModel, instances | std::views::filter([](const RobotData &robot)
+            drawRobot(encoder, robotModel, instances | std::views::filter([this](const RobotData &robot)
                                                                           { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; }),
-                      [](const DynamicObjectData &component)
+                      [this](const DynamicObjectData &component)
                       { return component.lastDataUpdate == currentDataUpdateIndex; });
         }
     }
@@ -3783,8 +3151,15 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     }
 }
 
-void field::cleanup()
+bool FieldRenderer::isExiting()
 {
+    return exitingFlag;
+}
+
+FieldRenderer::~FieldRenderer()
+{
+    exitingFlag = false;
+
     fmsUI.reset();
     nt::NetworkTableInstance::Destroy(ntInst);
 
@@ -4023,4 +3398,10 @@ void field::cleanup()
         bgfx::destroy(s_workingAOTerm);
     if (bgfx::isValid(s_workingEdges))
         bgfx::destroy(s_workingEdges);
+
+    shadowTexture.destroy();
+    mainMenuTexture.destroy();
+    settingsTexture.destroy();
+    viewModeTexture.destroy();
+    restartJavaTexture.destroy();
 }

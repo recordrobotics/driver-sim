@@ -17,5 +17,5 @@ namespace ui
     bool UnderlineTextButton(const char *text);
     bool CircularButton(const char *id, float radius);
 
-    bool IconButton(const char *id, ImTextureID icon, float size, float borderSize, float rounding, bool inverted = false);
+    bool IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon, float size, float borderSize, float rounding, float fontSize, float textOffset, bool inverted = false);
 }
