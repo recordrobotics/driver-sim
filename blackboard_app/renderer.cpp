@@ -12,6 +12,7 @@
 
 namespace blackboard::renderer
 {
+  static uint32_t bgfx_debug_flags;
 
   bool init(app::Window &window, Api &renderer_api, const uint16_t width, const uint16_t height)
   {
@@ -55,12 +56,12 @@ namespace blackboard::renderer
     bgfx_init.resolution.reset = BGFX_RESET_HIDPI | BGFX_RESET_VSYNC;
 #ifdef SDL_VIDEO_DRIVER_X11
     bgfx_init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(window.window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
-    bgfx_init.platformData.nwh = (void *)window_handle;
+    bgfx_init.platformData.nwh = window_handle;
 #endif
     bgfx::init(bgfx_init);
 
 #ifdef _DEBUG
-    bgfx::setDebug(BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS);
+    set_bgfx_debug_flags(BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS);
 #endif
 
     switch (bgfx::getRendererType())
@@ -86,5 +87,16 @@ namespace blackboard::renderer
     }
 
     return true;
+  }
+
+  uint32_t get_bgfx_debug_flags()
+  {
+    return bgfx_debug_flags;
+  }
+
+  void set_bgfx_debug_flags(uint32_t flags)
+  {
+    bgfx_debug_flags = flags;
+    bgfx::setDebug(flags);
   }
 } // namespace blackboard::renderer

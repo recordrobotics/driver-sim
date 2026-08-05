@@ -16,4 +16,6 @@ namespace ui
     void SplitToggleButtonGroup(std::list<ToggleButton> buttons);
     bool UnderlineTextButton(const char *text);
     bool CircularButton(const char *id, float radius);
+
+    bool IconButton(const char *id, ImTextureID icon, float size, float borderSize, float rounding, bool inverted = false);
 }

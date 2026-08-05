@@ -8,7 +8,7 @@ SAMPLER2D(s_color, 0);
 SAMPLER2D(s_velocity, 1);
 SAMPLER2D(s_neighbormax, 2);
 SAMPLER2D(s_tilevariance, 3);
-IMAGE2D_WO(s_output, rgba16f, 4);
+IMAGE2D_WO(s_output, r11f_g11f_b10f, 4);
 
 /*
 	float ----;

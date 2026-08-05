@@ -37,6 +37,7 @@ namespace settings
     bool enableBloom = true;
     bool enableGTAO = true;
     bool writeObjectMotionVectors = true;
+    bool enableVSync = true;
     bool enableDebugMenu = false;
 
     bool showMainMenu = true;
@@ -48,6 +49,7 @@ namespace settings
     bool launchElastic = true;
     bool launchRobotCode = true;
     double ntPeriodic = 0.022;
+    bool enableFrameInterpolation = true;
 
     bool enableDiscordSDK = true;
 
@@ -65,6 +67,7 @@ namespace settings
     uint32_t gameMatchTotal = 76;
 
     std::string renderApi = "auto";
+    bool updateWhileMinimized = true;
 
     Rebuilt2026 rebuilt2026 = {
         .energizedRPThreshold = 100,
@@ -78,12 +81,15 @@ namespace settings
         enableBloom = true;
         enableGTAO = true;
         writeObjectMotionVectors = true;
+        enableVSync = true;
         enableDebugMenu = false;
         showMainMenu = true;
         cacheModels = true;
         jvmArguments = {};
         codeArguments = {};
 
+        enableFrameInterpolation = true;
+        updateWhileMinimized = true;
         renderApi = "auto";
 
         if (std::filesystem::exists("C:\\Program Files (x86)\\FRC Driver Station\\DriverStation.exe"))
@@ -200,6 +206,7 @@ namespace settings
             enableBloom = j.value("enableBloom", enableBloom);
             enableGTAO = j.value("enableGTAO", enableGTAO);
             writeObjectMotionVectors = j.value("writeObjectMotionVectors", writeObjectMotionVectors);
+            enableVSync = j.value("enableVSync", enableVSync);
             enableDebugMenu = j.value("enableDebugMenu", enableDebugMenu);
 
             showMainMenu = j.value("showMainMenu", showMainMenu);
@@ -210,6 +217,7 @@ namespace settings
             launchElastic = j.value("launchElastic", launchElastic);
             launchRobotCode = j.value("launchRobotCode", launchRobotCode);
             ntPeriodic = j.value("ntPeriodic", ntPeriodic);
+            enableFrameInterpolation = j.value("enableFrameInterpolation", enableFrameInterpolation);
 
             enableDiscordSDK = j.value("enableDiscordSDK", enableDiscordSDK);
 
@@ -222,6 +230,7 @@ namespace settings
             gameMatchTotal = j.value("gameMatchTotal", gameMatchTotal);
 
             renderApi = j.value("renderApi", renderApi);
+            updateWhileMinimized = j.value("updateWhileMinimized", updateWhileMinimized);
 
             rebuilt2026 = j.value("rebuilt2026", rebuilt2026);
 
@@ -244,6 +253,7 @@ namespace settings
         j["enableBloom"] = enableBloom;
         j["enableGTAO"] = enableGTAO;
         j["writeObjectMotionVectors"] = writeObjectMotionVectors;
+        j["enableVSync"] = enableVSync;
         j["enableDebugMenu"] = enableDebugMenu;
 
         j["showMainMenu"] = showMainMenu;
@@ -254,6 +264,7 @@ namespace settings
         j["launchElastic"] = launchElastic;
         j["launchRobotCode"] = launchRobotCode;
         j["ntPeriodic"] = ntPeriodic;
+        j["enableFrameInterpolation"] = enableFrameInterpolation;
 
         j["enableDiscordSDK"] = enableDiscordSDK;
 
@@ -266,6 +277,7 @@ namespace settings
         j["gameMatchTotal"] = gameMatchTotal;
 
         j["renderApi"] = renderApi;
+        j["updateWhileMinimized"] = updateWhileMinimized;
 
         j["rebuilt2026"] = rebuilt2026;
 

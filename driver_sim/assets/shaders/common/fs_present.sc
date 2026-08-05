@@ -3,11 +3,11 @@ $input v_texcoord0
 #include <bgfx_shader.sh>
 #include "color.sh"
 
-SAMPLER2D(s_tex, 0);
+SAMPLER2D(s_texPresent, 0);
 
 void main()
 {
-    vec3 linearColor = texture2D(s_tex, v_texcoord0).rgb;
+    vec3 linearColor = texture2D(s_texPresent, v_texcoord0).rgb;
     vec3 srgbColor = LinearToSRGB(linearColor);
 
     // TODO: dither

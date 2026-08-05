@@ -3,9 +3,9 @@
 #include <bgfx_compute.sh>
 
 
-SAMPLER2D(u_input_texture, 0);
-IMAGE2D_RW(u_output_image, rgba16f, 1);
-SAMPLER2D(u_dirt_texture, 2);
+SAMPLER2D(s_bloomInput, 0);
+IMAGE2D_RW(u_output_image, r11f_g11f_b10f, 1);
+SAMPLER2D(s_bloomDirt, 2);
 
 uniform vec4  u_texel_size;
 uniform vec4 u_bloom_intensity;
@@ -49,7 +49,7 @@ void main()
         vec2 uv        = (base_index + 0.5) * u_texel_size.xy;
         vec2 uv_offset = vec2(i % TILE_SIZE, i / TILE_SIZE) * u_texel_size.xy;
         
-        vec4 color = texture2DLod(u_input_texture, (uv + uv_offset), u_mip_level);
+        vec4 color = texture2DLod(s_bloomInput, (uv + uv_offset), u_mip_level);
         store_lds(i, color);
     }
 
@@ -90,7 +90,10 @@ void main()
         {
             uv.x = uv.x * (screenAspect / DIRT_TEXTURE_ASPECT_RATIO) + 0.5 * (1.0 - screenAspect / DIRT_TEXTURE_ASPECT_RATIO);
         }
-        out_pixel += texture2DLod(u_dirt_texture, uv, 0.0) * u_bloom_intensity.y * bloom * u_bloom_intensity.x;
+#if !(BGFX_SHADER_LANGUAGE_HLSL || BGFX_SHADER_LANGUAGE_METAL || BGFX_SHADER_LANGUAGE_SPIRV)
+        uv.y = 1.0 - uv.y;
+#endif
+        out_pixel += texture2DLod(s_bloomDirt, uv, 0.0) * u_bloom_intensity.y * bloom * u_bloom_intensity.x;
     }
 
 	imageStore(u_output_image, pixel_coords, out_pixel);

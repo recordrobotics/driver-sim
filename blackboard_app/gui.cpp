@@ -104,11 +104,11 @@ namespace blackboard::gui
     colors[ImGuiCol_ResizeGripActive] = {0.19f, 0.39f, 0.69f, 1.00f};
     colors[ImGuiCol_Tab] = {0.11f, 0.11f, 0.11f, 1.00f};
     colors[ImGuiCol_TabHovered] = {0.14f, 0.14f, 0.14f, 1.00f};
-    colors[ImGuiCol_TabActive] = {0.19f, 0.19f, 0.19f, 1.00f};
+    colors[ImGuiCol_TabSelected] = {0.19f, 0.19f, 0.19f, 1.00f};
     colors[ImGuiCol_PlotHistogram] = {0.28f, 0.45f, 0.70f, 1.00f};
     colors[ImGuiCol_PlotHistogramHovered] = {0.20f, 0.39f, 0.69f, 1.00f};
     colors[ImGuiCol_TextSelectedBg] = {0.28f, 0.45f, 0.70f, 1.00f};
-    colors[ImGuiCol_NavHighlight] = {0.28f, 0.45f, 0.70f, 1.00f};
+    colors[ImGuiCol_NavCursor] = {0.28f, 0.45f, 0.70f, 1.00f};
     style.WindowPadding = {12.00f, 8.00f};
     style.ItemSpacing = {7.00f, 3.00f};
     style.GrabMinSize = 20.00f;
@@ -192,7 +192,7 @@ namespace blackboard::gui
 
     colors[ImGuiCol_DragDropTarget] = red;
 
-    colors[ImGuiCol_NavHighlight] = red;
+    colors[ImGuiCol_NavCursor] = red;
     colors[ImGuiCol_NavWindowingHighlight] = comment;
     colors[ImGuiCol_NavWindowingDimBg] = red;
     colors[ImGuiCol_ModalWindowDimBg] = dark_alpha_red;
@@ -203,9 +203,9 @@ namespace blackboard::gui
 
     colors[ImGuiCol_Tab] = comment;
     colors[ImGuiCol_TabHovered] = comment * ImVec4{1.2f, 1.2f, 1.2f, 1.2f};
-    colors[ImGuiCol_TabActive] = comment * ImVec4{1.3f, 1.3f, 1.3f, 1.3f};
-    colors[ImGuiCol_TabUnfocused] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
-    colors[ImGuiCol_TabUnfocusedActive] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
+    colors[ImGuiCol_TabSelected] = comment * ImVec4{1.3f, 1.3f, 1.3f, 1.3f};
+    colors[ImGuiCol_TabDimmed] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
+    colors[ImGuiCol_TabDimmedSelected] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
 
     colors[ImGuiCol_DockingEmptyBg] = darker_background;
     colors[ImGuiCol_DockingPreview] = dark_alpha_purple;

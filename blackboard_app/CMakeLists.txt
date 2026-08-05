@@ -62,7 +62,6 @@ target_link_libraries(${PROJECT_NAME}
     bimg_decode
     glm
     imgui
-    imguizmo
     spdlog
 )
 

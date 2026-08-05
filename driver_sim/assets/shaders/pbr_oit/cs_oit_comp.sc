@@ -6,11 +6,11 @@
 
 IMAGE2D_RO(s_accum, rgba16f, 0);
 IMAGE2D_RO(s_albedo, rgba8, 1);
-IMAGE2D_RO(s_emission, rgba16f, 2);
+IMAGE2D_RO(s_emission, r11f_g11f_b10f, 2);
 UIMAGE2D_RO(s_normal, r32ui, 3);
 IMAGE2D_RO(s_pbrData, rgba8, 4);
 UIMAGE2D_RO(s_finalAOTerm, r32ui, 5);
-IMAGE2D_WO(s_output, rgba16f, 6);
+IMAGE2D_WO(s_output, r11f_g11f_b10f, 6);
 SAMPLER2D(s_depth, 7);
 
 uniform vec4 u_jitter;
@@ -69,7 +69,9 @@ void main()
         }
         
         vec3 current_ndc = vec3(uvn * 2.0 - 1.0, depth);
+#if BGFX_SHADER_LANGUAGE_HLSL || BGFX_SHADER_LANGUAGE_METAL || BGFX_SHADER_LANGUAGE_SPIRV
         current_ndc.y *= -1.0;
+#endif
         vec3 current_uv = vec3((current_ndc.xy - u_jitter.xy) * 0.5 + 0.5, current_ndc.z);
 
         vec4 view_position = mul(u_invProj, vec4(current_ndc, 1.0));

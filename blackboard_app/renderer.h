@@ -26,4 +26,7 @@ namespace blackboard::renderer
 
   bool init(app::Window &window, Api &, const uint16_t width, const uint16_t height);
 
+  uint32_t get_bgfx_debug_flags();
+  void set_bgfx_debug_flags(uint32_t flags);
+
 } // namespace blackboard::renderer

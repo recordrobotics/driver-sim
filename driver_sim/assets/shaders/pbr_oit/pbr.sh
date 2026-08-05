@@ -45,7 +45,7 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 
 vec3 FresnelSchlick(float cosTheta, vec3 F0)
 {
-    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    return F0 + (1.0 - F0) * pow(abs(1.0 - cosTheta), 5.0);
 }
 
 vec3 computeLight(vec3 light_position, vec3 light_color, float light_intensity, vec3 position, vec3 N, vec3 V, vec3 albedo,

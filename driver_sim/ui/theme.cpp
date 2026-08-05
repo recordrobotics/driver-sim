@@ -77,7 +77,7 @@ void ui::set_theme()
 
     colors[ImGuiCol_DragDropTarget] = red;
 
-    colors[ImGuiCol_NavHighlight] = red;
+    colors[ImGuiCol_NavCursor] = red;
     colors[ImGuiCol_NavWindowingHighlight] = comment;
     colors[ImGuiCol_NavWindowingDimBg] = red;
     colors[ImGuiCol_ModalWindowDimBg] = dark_alpha_red;
@@ -88,9 +88,9 @@ void ui::set_theme()
 
     colors[ImGuiCol_Tab] = comment;
     colors[ImGuiCol_TabHovered] = comment * ImVec4{1.2f, 1.2f, 1.2f, 1.2f};
-    colors[ImGuiCol_TabActive] = comment * ImVec4{1.3f, 1.3f, 1.3f, 1.3f};
-    colors[ImGuiCol_TabUnfocused] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
-    colors[ImGuiCol_TabUnfocusedActive] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
+    colors[ImGuiCol_TabSelected] = comment * ImVec4{1.3f, 1.3f, 1.3f, 1.3f};
+    colors[ImGuiCol_TabDimmed] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
+    colors[ImGuiCol_TabDimmedSelected] = comment * ImVec4{0.5f, 0.5f, 0.5f, 0.5f};
 
     colors[ImGuiCol_DockingEmptyBg] = darker_background;
     colors[ImGuiCol_DockingPreview] = dark_alpha_green;

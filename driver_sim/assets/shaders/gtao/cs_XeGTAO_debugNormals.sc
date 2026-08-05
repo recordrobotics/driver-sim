@@ -3,7 +3,7 @@
 #include "common.sh"
 
 UIMAGE2D_RO(s_workingAOTerm, r32ui, 0);
-IMAGE2D_WO(dest, rgba16f, 1);
+IMAGE2D_WO(dest, r11f_g11f_b10f, 1);
 
 NUM_THREADS(16, 16, 1)
 void main()

@@ -2,8 +2,8 @@
 
 #include <bgfx_compute.sh>
 
-SAMPLER2D(u_input_texture, 0);
-IMAGE2D_WO(u_output_image, rgba16f, 1);
+SAMPLER2D(s_bloomInput, 0);
+IMAGE2D_WO(u_output_image, r11f_g11f_b10f, 1);
 
 uniform vec4  u_threshold; // x -> threshold, yzw -> (threshold - knee, 2.0 * knee, 0.25 * knee)
 uniform vec4  u_texel_size;
@@ -72,7 +72,7 @@ void main()
         vec2 uv        = (vec2(base_index) + 0.5) * u_texel_size.xy;
         vec2 uv_offset = vec2(i % TILE_SIZE, i / TILE_SIZE) * u_texel_size.xy;
         
-        vec4 color = texture2DLod(u_input_texture, uv + uv_offset, u_mip_level);
+        vec4 color = texture2DLod(s_bloomInput, uv + uv_offset, u_mip_level);
         store_lds(i, color);
     }
 

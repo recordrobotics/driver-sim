@@ -68,5 +68,5 @@ namespace blackboard::renderer
     void ImGui_Impl_sdl_bgfx_InvalidateDeviceObjects();
     bool ImGui_Impl_sdl_bgfx_CreateDeviceObjects();
 
-    unsigned long native_window_handle(ImGuiViewport *viewport, SDL_WindowID window_id);
+    void *native_window_handle(ImGuiViewport *viewport, SDL_WindowID window_id);
 } // namespace blackboard::renderer

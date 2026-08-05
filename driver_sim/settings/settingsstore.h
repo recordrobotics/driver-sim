@@ -14,6 +14,7 @@ namespace settings
     extern bool enableBloom;
     extern bool enableGTAO;
     extern bool writeObjectMotionVectors;
+    extern bool enableVSync;
     extern bool enableDebugMenu;
 
     extern bool showMainMenu;
@@ -25,6 +26,7 @@ namespace settings
     extern bool launchElastic;
     extern bool launchRobotCode;
     extern double ntPeriodic;
+    extern bool enableFrameInterpolation;
 
     extern bool enableDiscordSDK;
 
@@ -37,6 +39,7 @@ namespace settings
     extern uint32_t gameMatchTotal;
 
     extern std::string renderApi;
+    extern bool updateWhileMinimized;
 
     typedef struct Rebuilt2026
     {

@@ -5,7 +5,7 @@ include(FetchContent)
 FetchContent_Declare(
     bgfx
     GIT_REPOSITORY https://github.com/bkaradzic/bgfx.cmake.git
-    GIT_TAG v1.150.9365-558
+    GIT_TAG v1.153.9385-563
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/bgfx
     PATCH_COMMAND

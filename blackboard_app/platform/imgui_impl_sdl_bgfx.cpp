@@ -13,6 +13,7 @@
 #include <SDL3/SDL.h>
 #include <build_config/SDL_build_config.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -108,25 +109,25 @@ namespace blackboard::renderer
     All = Opaque | PointSampler,
   };
 
-  unsigned long native_window_handle(ImGuiViewport *viewport, SDL_WindowID window_id)
+  void *native_window_handle(ImGuiViewport *viewport, SDL_WindowID window_id)
   {
     SDL_Window *window = SDL_GetWindowFromID(window_id);
 #if BX_PLATFORM_WINDOWS
-    return (unsigned long)SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+    return SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
 #elif BX_PLATFORM_OSX && defined(SDL_VIDEO_DRIVER_COCOA)
-    return (unsigned long)SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
+    return SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
 #elif BX_PLATFORM_LINUX
     const char *driver = SDL_GetCurrentVideoDriver();
     if (driver && strcmp(driver, "wayland") == 0)
     {
-      return (unsigned long)SDL_GetPointerProperty(
+      return SDL_GetPointerProperty(
           SDL_GetWindowProperties(window),
           SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER,
           NULL);
     }
     else
     {
-      return SDL_GetNumberProperty(
+      return (void *)(uintptr_t)SDL_GetNumberProperty(
           SDL_GetWindowProperties(window),
           SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
           0);
@@ -153,8 +154,8 @@ namespace blackboard::renderer
     data->height = bx::max<uint16_t>((uint16_t)viewport->Size.y, 1);
     // Create frame buffer
     data->frameBufferHandle =
-        bgfx::createFrameBuffer((void *)native_window_handle(viewport, static_cast<SDL_WindowID>(
-                                                                           reinterpret_cast<uintptr_t>(viewport->PlatformHandle))),
+        bgfx::createFrameBuffer(native_window_handle(viewport, static_cast<SDL_WindowID>(
+                                                                   reinterpret_cast<uintptr_t>(viewport->PlatformHandle))),
                                 data->width * viewport->DrawData->FramebufferScale.x,
                                 data->height * viewport->DrawData->FramebufferScale.y);
     // Set frame buffer
@@ -295,7 +296,7 @@ namespace blackboard::renderer
 
     // draw_data->ScaleClipRects(clipScale);
     // Render command lists
-    for (int32_t ii = 0, num = draw_data->CmdListsCount; ii < num; ++ii)
+    for (int32_t ii = 0, num = draw_data->CmdLists.Size; ii < num; ++ii)
     {
       bgfx::TransientVertexBuffer tvb;
       bgfx::TransientIndexBuffer tib;
@@ -407,18 +408,7 @@ namespace blackboard::renderer
 
     uniform_texture = bgfx::createUniform("s_tex", bgfx::UniformType::Sampler);
 
-    // Build texture atlas
-    ImGuiIO &io = ImGui::GetIO();
-    unsigned char *pixels;
-    int width, height;
-    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-    // Upload texture to graphics system
-    font_texture =
-        bgfx::createTexture2D((uint16_t)width, (uint16_t)height, false, 1, bgfx::TextureFormat::BGRA8, 0,
-                              bgfx::copy(pixels, width * height * 4));
-    is_init = bgfx::isValid(font_texture);
-    // Store our identifier
-    io.Fonts->TexID = (void *)(intptr_t)font_texture.idx;
+    is_init = true;
   }
 
   void ImGui_Implbgfx_InvalidateDeviceObjects()

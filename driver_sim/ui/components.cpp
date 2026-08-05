@@ -159,8 +159,8 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
         groupMax,
         borderColor,
         frameRounding,
-        ImDrawFlags_RoundCornersAll,
-        borderThickness);
+        borderThickness,
+        ImDrawFlags_RoundCornersAll);
 
     float dividerX = groupMin.x;
     size_t dividerIndex = 0;
@@ -268,6 +268,57 @@ bool ui::CircularButton(const char *id, float radius)
     drawRoundedSegment(shaftStart, shaftEnd);
     drawRoundedSegment(headTop, arrowTip);
     drawRoundedSegment(headBottom, arrowTip);
+
+    return pressed;
+}
+
+bool ui::IconButton(const char *id, ImTextureID icon, float size, float borderSize, float rounding, bool inverted)
+{
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+
+    bool pressed = ImGui::InvisibleButton(id, ImVec2(size, size));
+
+    bool hovered = ImGui::IsItemHovered();
+    bool active = ImGui::IsItemActive();
+
+    if (hovered)
+    {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    ImU32 fill;
+    ImU32 border = string_hex_to_rgba_u32("#A8A8A8C7");
+    ImU32 iconColor;
+    if (inverted)
+    {
+        fill = active ? string_hex_to_rgba_u32("#D0D0D0ff") : hovered ? string_hex_to_rgba_u32("#E0E0E0ff")
+                                                                      : string_hex_to_rgba_u32("#ffffffff");
+        iconColor = string_hex_to_rgba_u32("#2189DEff");
+    }
+    else
+    {
+        fill = active ? string_hex_to_rgba_u32("#ffffff3B") : hovered ? string_hex_to_rgba_u32("#ffffff31")
+                                                                      : string_hex_to_rgba_u32("#ffffff00");
+        iconColor = string_hex_to_rgba_u32("#ffffffff");
+    }
+    draw->AddRectFilled(
+        pos,
+        ImVec2(pos.x + size, pos.y + size),
+        fill,
+        rounding);
+
+    draw->AddRect(
+        ImVec2(pos.x + borderSize / 2.0f, pos.y + borderSize / 2.0f),
+        ImVec2(pos.x + size - borderSize / 2.0f, pos.y + size - borderSize / 2.0f),
+        border,
+        rounding,
+        borderSize);
+
+    const ImVec2 center(pos.x + size * 0.5f, pos.y + size * 0.5f);
+    const float imageSize = size * 0.5f;
+
+    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, center.y - imageSize * 0.5f), ImVec2(center.x + imageSize * 0.5f, center.y + imageSize * 0.5f), ImVec2(0, 0), ImVec2(1, 1), iconColor);
 
     return pressed;
 }

@@ -1,6 +1,6 @@
 #include <bgfx_compute.sh>
 
-IMAGE2D_RW(s_image, rgba16f, 0);
+IMAGE2D_RW(s_image, r11f_g11f_b10f, 0);
 
 // x = 1 / lut_width
 // y = 1 / lut_height

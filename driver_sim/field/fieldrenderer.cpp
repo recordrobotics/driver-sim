@@ -53,12 +53,15 @@
 
 #include <ledmask.png.h>
 
+#include "../ui/components.h"
+
 #if GAME_YEAR == 2026
 #include "seasonspecific/rebuilt2026/fmsui.h"
 #include "seasonspecific/rebuilt2026/hublights.h"
 #endif
 
 using namespace std::chrono_literals;
+using namespace ui;
 
 struct Pose3dObject
 {
@@ -485,7 +488,8 @@ FrameBuffer gBufFbo;
 FrameBuffer gOitFbo;
 FrameBuffer gOitMomentsFbo;
 
-bgfx::UniformHandle s_tex;
+bgfx::UniformHandle s_texPresent;
+
 bgfx::UniformHandle s_taaHistory;
 
 bgfx::UniformHandle s_color;
@@ -500,6 +504,7 @@ bgfx::UniformHandle s_mbTileMax;
 bgfx::UniformHandle s_mbNeighborMax;
 bgfx::UniformHandle s_mbTileVariance;
 
+bgfx::UniformHandle s_bloomInput;
 bgfx::UniformHandle s_bloomDirt;
 
 bgfx::UniformHandle s_lut;
@@ -1191,6 +1196,13 @@ void initMotionBlur(uint16_t width, uint16_t height)
 void initBloom(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
+
+    s_bloomInput = bgfx::createUniform("s_bloomInput", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_bloomInput))
+    {
+        logger->error("Failed to create uniform: s_bloomInput");
+        throw std::runtime_error("Failed to create uniform: s_bloomInput");
+    }
 
     s_bloomDirt = bgfx::createUniform("s_bloomDirt", bgfx::UniformType::Sampler);
     if (!bgfx::isValid(s_bloomDirt))
@@ -2312,12 +2324,12 @@ void field::init(const blackboard::app::Window &window)
     MeshVertex::init();
     UVVertex::init();
 
-    s_tex = bgfx::createUniform("s_tex", bgfx::UniformType::Sampler);
+    s_texPresent = bgfx::createUniform("s_texPresent", bgfx::UniformType::Sampler);
 
-    if (!bgfx::isValid(s_tex))
+    if (!bgfx::isValid(s_texPresent))
     {
-        logger->error("Failed to create uniform for generic texture.");
-        throw std::runtime_error("Failed to create uniform for generic texture.");
+        logger->error("Failed to create uniform for present texture.");
+        throw std::runtime_error("Failed to create uniform for present texture.");
     }
 
     u_previousViewProj = bgfx::createUniform("u_previousViewProj", bgfx::UniformType::Mat4);
@@ -2856,6 +2868,120 @@ void addRobot(std::string_view poseTopic, std::string_view componentPosesTopic, 
     }
 }
 
+void drawDebugMenu()
+{
+    if (!ImGui::Begin("Debug Menu"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
+
+    ImGui::Separator();
+
+    if (settings::enableMotionBlur)
+    {
+        ImGui::Text("Motion Blur Settings");
+        int tileSize = MB_TILE_SIZE;
+        ImGui::SliderInt("Tile Size", &tileSize, 8, 128);
+        MB_TILE_SIZE = static_cast<uint8_t>(tileSize);
+        int sampleCount = MB_SAMPLE_COUNT;
+        ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
+        MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
+
+        ImGui::Separator();
+    }
+
+    if (settings::enableBloom)
+    {
+        ImGui::Text("Bloom Settings");
+        ImGui::SliderFloat("Threshold", &bloomThreshold, 0.0f, 8.0f);
+        ImGui::Separator();
+    }
+
+    ImGui::Text("Tonemapping Settings");
+    ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
+    ImGui::Separator();
+
+    if (settings::enableGTAO)
+    {
+        ImGui::Text("GTAO Settings");
+
+        ImGui::SliderFloat("Effect Radius", &gtaoEffectRadius, 0.01f, 3.0f);
+        ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
+        ImGui::SliderFloat("Intensity", &gtaoIntensity, 0.0f, 3.0f);
+        ImGui::SliderFloat("Direct Intensity", &gtaoDirectIntensity, 0.0f, 3.0f);
+        ImGui::SliderFloat("Bent Normal Intensity", &gtaoBentNormalIntensity, 0.0f, 3.0f);
+
+        ImGui::Separator();
+    }
+
+    if (ImGui::BeginCombo("Debug View", DEBUG_VIEW_NAMES[static_cast<int>(debugView)].c_str()))
+    {
+        for (int i = 0; i < DEBUG_VIEW_NAMES.size(); i++)
+        {
+            if (ImGui::Selectable(DEBUG_VIEW_NAMES[i].c_str(), debugView == static_cast<DebugView>(i)))
+            {
+                debugView = static_cast<DebugView>(i);
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::BeginCombo("Camera View", CAMERA_VIEW_NAMES[static_cast<int>(cameraView)].c_str()))
+    {
+        for (int i = 0; i < CAMERA_VIEW_NAMES.size(); i++)
+        {
+            if (ImGui::Selectable(CAMERA_VIEW_NAMES[i].c_str(), cameraView == static_cast<CameraView>(i)))
+            {
+                cameraView = static_cast<CameraView>(i);
+                orbitCamera.target = {0.0f, 0.0f, 0.25f};
+                bx::mtxIdentity(orbitCamera.originTransform);
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::Button("Restart Simulation"))
+    {
+        if (restartSimulationCallback)
+        {
+            restartSimulationCallback();
+        }
+    }
+
+    ImGui::End();
+}
+
+void drawTopUI()
+{
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y));
+    ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, 0));
+    ImGui::Begin("Top UI", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings);
+
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+    ImVec2 winSize = ImGui::GetWindowSize();
+
+    float buttonSize = 50.0f * globalScale;
+    float borderSize = 2.0f * globalScale;
+    float rounding = 16.0f * globalScale;
+
+    static bool toggle = false;
+    if (IconButton("##test", NULL, buttonSize, borderSize, rounding, toggle))
+    {
+        toggle = !toggle;
+    }
+
+    ImGui::End();
+}
+
 std::array<float, 4> skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
 std::array<std::array<float, 4>, LIGHT_COUNT> lightColor = {
     SRGBToLinear({1.0f, 0.25f, 0.25f, 432.0f}),
@@ -2870,88 +2996,10 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
     if (settings::enableDebugMenu)
     {
-        ImGui::Begin("Debug Menu");
-        ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
-
-        ImGui::Separator();
-
-        if (settings::enableMotionBlur)
-        {
-            ImGui::Text("Motion Blur Settings");
-            int tileSize = MB_TILE_SIZE;
-            ImGui::SliderInt("Tile Size", &tileSize, 8, 128);
-            MB_TILE_SIZE = static_cast<uint8_t>(tileSize);
-            int sampleCount = MB_SAMPLE_COUNT;
-            ImGui::SliderInt("Sample Count", &sampleCount, 4, 64);
-            MB_SAMPLE_COUNT = static_cast<uint8_t>(sampleCount);
-
-            ImGui::Separator();
-        }
-
-        if (settings::enableBloom)
-        {
-            ImGui::Text("Bloom Settings");
-            ImGui::SliderFloat("Threshold", &bloomThreshold, 0.0f, 8.0f);
-            ImGui::Separator();
-        }
-
-        ImGui::Text("Tonemapping Settings");
-        ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
-        ImGui::Separator();
-
-        if (settings::enableGTAO)
-        {
-            ImGui::Text("GTAO Settings");
-
-            ImGui::SliderFloat("Effect Radius", &gtaoEffectRadius, 0.01f, 3.0f);
-            ImGui::SliderFloat("Radius Multiplier", &gtaoRadiusMultiplier, 0.25f, 2.0f);
-            ImGui::SliderFloat("Intensity", &gtaoIntensity, 0.0f, 3.0f);
-            ImGui::SliderFloat("Direct Intensity", &gtaoDirectIntensity, 0.0f, 3.0f);
-            ImGui::SliderFloat("Bent Normal Intensity", &gtaoBentNormalIntensity, 0.0f, 3.0f);
-
-            ImGui::Separator();
-        }
-
-        if (ImGui::BeginCombo("Debug View", DEBUG_VIEW_NAMES[static_cast<int>(debugView)].c_str()))
-        {
-            for (int i = 0; i < DEBUG_VIEW_NAMES.size(); i++)
-            {
-                if (ImGui::Selectable(DEBUG_VIEW_NAMES[i].c_str(), debugView == static_cast<DebugView>(i)))
-                {
-                    debugView = static_cast<DebugView>(i);
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        ImGui::Separator();
-
-        if (ImGui::BeginCombo("Camera View", CAMERA_VIEW_NAMES[static_cast<int>(cameraView)].c_str()))
-        {
-            for (int i = 0; i < CAMERA_VIEW_NAMES.size(); i++)
-            {
-                if (ImGui::Selectable(CAMERA_VIEW_NAMES[i].c_str(), cameraView == static_cast<CameraView>(i)))
-                {
-                    cameraView = static_cast<CameraView>(i);
-                    orbitCamera.target = {0.0f, 0.0f, 0.25f};
-                    bx::mtxIdentity(orbitCamera.originTransform);
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        if (ImGui::Button("Restart Simulation"))
-        {
-            if (restartSimulationCallback)
-            {
-                restartSimulationCallback();
-            }
-        }
-
-        ImGui::End();
+        drawDebugMenu();
     }
+
+    // drawTopUI();
 
     if (fmsUI)
     {
@@ -3033,7 +3081,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         createdRobotMeshBuffers = true;
     }
 
-    const float deltaTime = ImGui::GetIO().DeltaTime;
+    const float deltaTime = std::max(0.0f, std::min(0.3f, ImGui::GetIO().DeltaTime));
     curTime += deltaTime;
 
     // Dynamic objects
@@ -3552,7 +3600,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         for (uint8_t i = 0; i < gOutputColor.mipCount - 1; ++i)
         {
             encoder->setUniform(u_bloomThreshold, bloomThresholdField);
-            encoder->setTexture(0, s_tex, gOutputColor.handle, 0, 1, i, 1);
+            encoder->setTexture(0, s_bloomInput, gOutputColor.handle, 0, 1, i, 1);
 
             xGroups = (int)floorf((mipSizeX - 1) / 8 + 1);
             yGroups = (int)floorf((mipSizeY - 1) / 8 + 1);
@@ -3573,7 +3621,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         for (uint8_t i = gOutputColor.mipCount - 1; i >= 1; --i)
         {
             encoder->setUniform(u_bloomIntensity, bloomIntensityField);
-            encoder->setTexture(0, s_tex, gOutputColor.handle, 0, 1, i, 1);
+            encoder->setTexture(0, s_bloomInput, gOutputColor.handle, 0, 1, i, 1);
             encoder->setTexture(2, s_bloomDirt, bloomDirtMask.handle);
 
             mipSizeX = std::max(1.0f, floorf(float(m_width) / (1 << (i - 1))));
@@ -3604,7 +3652,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
     switch (debugView)
     {
     case DebugView::Albedo:
-        encoder->setTexture(0, s_tex, gbufAlbedo.handle);
+        encoder->setTexture(0, s_texPresent, gbufAlbedo.handle);
         break;
     case DebugView::Normal:
         // Unpack and store normals in gOutputColor
@@ -3615,58 +3663,58 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_BLIT, debugNormalsProgram, xGroups, yGroups);
 
-        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        encoder->setTexture(0, s_texPresent, gOutputColor.handle);
         break;
     case DebugView::Emission:
-        encoder->setTexture(0, s_tex, gbufEmission.handle);
+        encoder->setTexture(0, s_texPresent, gbufEmission.handle);
         break;
     case DebugView::PBRData:
-        encoder->setTexture(0, s_tex, gbufPBRData.handle);
+        encoder->setTexture(0, s_texPresent, gbufPBRData.handle);
         break;
     case DebugView::Velocity:
-        encoder->setTexture(0, s_tex, gbufVelocity.handle);
+        encoder->setTexture(0, s_texPresent, gbufVelocity.handle);
         break;
     case DebugView::Depth:
-        encoder->setTexture(0, s_tex, gbufDepth.handle);
+        encoder->setTexture(0, s_texPresent, gbufDepth.handle);
         break;
     case DebugView::OITMoments:
-        encoder->setTexture(0, s_tex, gMomentsTex.handle);
+        encoder->setTexture(0, s_texPresent, gMomentsTex.handle);
         break;
     case DebugView::OITTotalDepth:
-        encoder->setTexture(0, s_tex, gTotalDepthTex.handle);
+        encoder->setTexture(0, s_texPresent, gTotalDepthTex.handle);
         break;
     case DebugView::OITAccum:
-        encoder->setTexture(0, s_tex, gAccumTex.handle);
+        encoder->setTexture(0, s_texPresent, gAccumTex.handle);
         break;
     case DebugView::MotionBlurVelocity:
-        encoder->setTexture(0, s_tex, gMBVelocity.handle);
+        encoder->setTexture(0, s_texPresent, gMBVelocity.handle);
         break;
     case DebugView::MotionBlurTileMaxX:
-        encoder->setTexture(0, s_tex, gMBTileMaxX.handle);
+        encoder->setTexture(0, s_texPresent, gMBTileMaxX.handle);
         break;
     case DebugView::MotionBlurTileMaxY:
-        encoder->setTexture(0, s_tex, gMBTileMax.handle);
+        encoder->setTexture(0, s_texPresent, gMBTileMax.handle);
         break;
     case DebugView::MotionBlurNeighborMax:
-        encoder->setTexture(0, s_tex, gMBNeighborMax.handle);
+        encoder->setTexture(0, s_texPresent, gMBNeighborMax.handle);
         break;
     case DebugView::MotionBlurTileVariance:
-        encoder->setTexture(0, s_tex, gMBTileVariance.handle);
+        encoder->setTexture(0, s_texPresent, gMBTileVariance.handle);
         break;
     case DebugView::GTAOWorkingDepth0:
-        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 0, 1);
+        encoder->setTexture(0, s_texPresent, gGTAOWorkingDepth.handle, 0, 1, 0, 1);
         break;
     case DebugView::GTAOWorkingDepth1:
-        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 1, 1);
+        encoder->setTexture(0, s_texPresent, gGTAOWorkingDepth.handle, 0, 1, 1, 1);
         break;
     case DebugView::GTAOWorkingDepth2:
-        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 2, 1);
+        encoder->setTexture(0, s_texPresent, gGTAOWorkingDepth.handle, 0, 1, 2, 1);
         break;
     case DebugView::GTAOWorkingDepth3:
-        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 3, 1);
+        encoder->setTexture(0, s_texPresent, gGTAOWorkingDepth.handle, 0, 1, 3, 1);
         break;
     case DebugView::GTAOWorkingDepth4:
-        encoder->setTexture(0, s_tex, gGTAOWorkingDepth.handle, 0, 1, 4, 1);
+        encoder->setTexture(0, s_texPresent, gGTAOWorkingDepth.handle, 0, 1, 4, 1);
         break;
     case DebugView::GTAOWorkingAOTermNormals:
         // Unpack and store normals in gOutputColor
@@ -3677,7 +3725,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_BLIT, XeGTAO_debugNormalsProgram, xGroups, yGroups);
 
-        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        encoder->setTexture(0, s_texPresent, gOutputColor.handle);
         break;
     case DebugView::GTAOWorkingAOTermVisibility:
         // Unpack and store visibility in gOutputColor
@@ -3688,7 +3736,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_BLIT, XeGTAO_debugVisibilityProgram, xGroups, yGroups);
 
-        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        encoder->setTexture(0, s_texPresent, gOutputColor.handle);
         break;
     case DebugView::GTAOFinalAOTermNormals:
         // Unpack and store normals in gOutputColor
@@ -3699,7 +3747,7 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_BLIT, XeGTAO_debugNormalsProgram, xGroups, yGroups);
 
-        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        encoder->setTexture(0, s_texPresent, gOutputColor.handle);
         break;
     case DebugView::GTAOFinalAOTermVisibility:
         // Unpack and store visibility in gOutputColor
@@ -3710,13 +3758,13 @@ void field::render(const blackboard::app::Window &window, const std::shared_ptr<
         encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
         encoder->dispatch(VIEW_BLIT, XeGTAO_debugVisibilityProgram, xGroups, yGroups);
 
-        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        encoder->setTexture(0, s_texPresent, gOutputColor.handle);
         break;
     case DebugView::GTAOWorkingEdges:
-        encoder->setTexture(0, s_tex, gGTAOWorkingEdges.handle);
+        encoder->setTexture(0, s_texPresent, gGTAOWorkingEdges.handle);
         break;
     default:
-        encoder->setTexture(0, s_tex, gOutputColor.handle);
+        encoder->setTexture(0, s_texPresent, gOutputColor.handle);
         break;
     }
 
@@ -3930,8 +3978,9 @@ void field::cleanup()
     apriltagTexture.destroy();
     ledMaskTexture.destroy();
 
-    if (bgfx::isValid(s_tex))
-        bgfx::destroy(s_tex);
+    if (bgfx::isValid(s_texPresent))
+        bgfx::destroy(s_texPresent);
+
     if (bgfx::isValid(s_taaHistory))
         bgfx::destroy(s_taaHistory);
 
@@ -3950,8 +3999,11 @@ void field::cleanup()
     if (bgfx::isValid(s_mbTileVariance))
         bgfx::destroy(s_mbTileVariance);
 
+    if (bgfx::isValid(s_bloomInput))
+        bgfx::destroy(s_bloomInput);
     if (bgfx::isValid(s_bloomDirt))
         bgfx::destroy(s_bloomDirt);
+
     if (bgfx::isValid(s_lut))
         bgfx::destroy(s_lut);
 

@@ -1,10 +1,10 @@
 #include <bgfx_compute.sh>
 
-IMAGE2D_RO(s_velocity, rg16f, 0);
+IMAGE2D_RO(s_velocity, rgba16f, 0);
 SAMPLER2D(s_depth, 1);
-IMAGE2D_RO(s_taaCurrent, rgba16f, 2);
+IMAGE2D_RO(s_taaCurrent, r11f_g11f_b10f, 2);
 SAMPLER2D(s_taaHistory, 3);
-IMAGE2D_WO(s_taaOutput, rgba16f, 4);
+IMAGE2D_WO(s_taaOutput, r11f_g11f_b10f, 4);
 
 float Mitchell(float x) {
     float ax = abs(x);

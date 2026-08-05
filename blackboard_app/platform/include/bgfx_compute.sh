@@ -84,6 +84,7 @@
 #define COMP_r16f     float
 #define COMP_rg16f    float2
 #define COMP_rgba16f  float4
+#define COMP_r11f_g11f_b10f  float3
 #if BGFX_SHADER_LANGUAGE_HLSL
 #	define COMP_rgba8  unorm float4
 #	define COMP_rg8    unorm float2
@@ -100,6 +101,8 @@
 #	define COMP_r16          float
 #endif // BGFX_SHADER_LANGUAGE_HLSL
 #define COMP_rgba32f  float4
+
+#define format_r11f_g11f_b10f format_rgba16f
 
 #define IMAGE2D_RO( _name, _format, _reg)                                       \
 	FORMAT(_format) Texture2D<COMP_ ## _format> _name : REGISTER(t, _reg);      \
@@ -256,6 +259,7 @@
 
 __IMAGE_IMPL_A(float,  x,    vec4,  xxxx)
 __IMAGE_IMPL_A(float2, xy,   vec4,  xyyy)
+__IMAGE_IMPL_A(float3, xyz,   vec4,  xyzz)
 __IMAGE_IMPL_A(float4, xyzw, vec4,  xyzw)
 
 __IMAGE_IMPL_A(uint,   x,    uvec4, xxxx)

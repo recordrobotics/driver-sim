@@ -11,7 +11,6 @@
 #include <bgfx/bgfx.h>
 #include <imgui/backends/imgui_impl_sdl3.h>
 #include <imgui/imgui_internal.h>
-#include <ImGuizmo.h>
 
 #include <algorithm>
 #include <iostream>
@@ -31,8 +30,7 @@ namespace blackboard::app
                                                                                        { logger::logger->info("init function not defined"); }},
         on_update{[]()
                   { logger::logger->info("update function not defined"); }},
-        on_resize{[](const uint16_t width, const uint16_t height)
-                  {  }}
+        on_resize{[](const uint16_t width, const uint16_t height) {}}
   {
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -138,6 +136,12 @@ namespace blackboard::app
               main_window->fullscreen = !main_window->fullscreen;
               SDL_SetWindowFullscreen(main_window->window, main_window->fullscreen ? true : false);
             }
+#ifdef _DEBUG
+            else if (event.key.key == SDLK_F10)
+            {
+              renderer::set_bgfx_debug_flags(renderer::get_bgfx_debug_flags() ^ (BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS));
+            }
+#endif
           }
 
           if (event.type == SDL_EVENT_QUIT)
@@ -159,7 +163,6 @@ namespace blackboard::app
         renderer::ImGui_Impl_sdl_bgfx_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
-        ImGuizmo::BeginFrame();
 
         on_update();
         m_prev_time = std::chrono::steady_clock::now();
