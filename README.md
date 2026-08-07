@@ -4,6 +4,11 @@ FRC Driver simulation with AdvantageScope 3D Mechanism support and FMS scoring U
 
 This project uses a modified version of [dashandslash/blackboard_app](https://github.com/dashandslash/blackboard_app/tree/main) as a backend library.
 
+## Setup
+
+### Discord Social SDK
+After becoming part of our discord dev team, download it from this link: https://discord.com/developers/applications/select/social-sdk/downloads. Unzip it and then put the discord_social_sdk folder inside of _external/discordsdk-src/_external.
+
 ## Build
 
 ### Requirements
