@@ -6,8 +6,8 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#include <tlhelp32.h>
 #include <windows.h>
+#include <tlhelp32.h>
 #elif defined(__linux__)
 #include <dirent.h>
 #include <fstream>
