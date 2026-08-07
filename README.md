@@ -9,6 +9,12 @@ This project uses a modified version of [dashandslash/blackboard_app](https://gi
 ### Discord Social SDK
 After becoming part of our discord dev team, download it from this link: https://discord.com/developers/applications/select/social-sdk/downloads. Unzip it and then put the discord_social_sdk folder inside of _external/discordsdk-src/_external.
 
+## Prepare
+
+## Package robot code
+zip up the jni folder from /build/jni and zip up the 2026-robot.jar from /build/libs/2026-robot.jar and place them where they are in the video
+https://github.com/user-attachments/assets/bf91111a-d703-4da5-9b15-164906701b84
+
 ## Build
 
 ### Requirements
