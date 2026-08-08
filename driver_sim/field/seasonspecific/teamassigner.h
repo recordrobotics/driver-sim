@@ -5,9 +5,8 @@
 class TeamAssigner
 {
   public:
-    TeamAssigner() {}
-
-    ~TeamAssigner() {}
+    TeamAssigner() = default;
+    ~TeamAssigner() = default;
 
     TeamAssigner(const TeamAssigner &) = delete;
     TeamAssigner &operator=(const TeamAssigner &) = delete;
@@ -16,7 +15,7 @@ class TeamAssigner
 
     void update(int allianceStation);
 
-    inline std::array<uint32_t, 6> getTeamNumbers() const { return teamNumbers; }
+    [[nodiscard]] std::array<uint32_t, 6> getTeamNumbers() const { return teamNumbers; }
 
   private:
     int lastAllianceStation = 0;

@@ -19,9 +19,10 @@
 
 namespace blackboard::gui
 {
-    std::string imgui_ini_path;
+    constexpr float VIEWPORT_FONT_SCALE = 1.2f;
 
-    std::unordered_map<std::string, ImFont *> fonts;
+    static std::string imgui_ini_path;
+    static std::unordered_map<std::string, ImFont *> fonts;
 
     void init()
     {
@@ -31,7 +32,7 @@ namespace blackboard::gui
         // Set up input output configs
         ImGuiIO &io = ImGui::GetIO();
 
-        std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
+        std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
         imgui_ini_path = prefPath + "imgui.ini";
         io.IniFilename = imgui_ini_path.c_str();
 
@@ -48,27 +49,32 @@ namespace blackboard::gui
 
         // Setup friendly style for multiviewport
         ImGuiStyle &style = ImGui::GetStyle();
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        if ((io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
         {
             style.WindowRounding = 0.0f;
             style.Colors[ImGuiCol_WindowBg].w = 1.0f;
             style.FrameBorderSize = 0.f;
             style.FramePadding = ImVec2(0.f, 0.f);
-            style.FontScaleMain = 1.2f;
+            style.FontScaleMain = VIEWPORT_FONT_SCALE;
         }
     }
 
-    bool isInit() { return ImGui::GetCurrentContext(); }
+    bool isInit() { return ImGui::GetCurrentContext() != nullptr; }
+
+    // NOLINTBEGIN(readability-magic-numbers)
 
     void set_blender_theme()
     {
         if (!isInit())
+        {
             return;
+        }
 
         ImGui::StyleColorsDark();
 
-        auto &style = ImGui::GetStyle();
-        auto colors = style.Colors;
+        auto &style{ImGui::GetStyle()};
+        auto &colors{style.Colors};
+
         colors[ImGuiCol_Text] = {0.84f, 0.84f, 0.84f, 1.00f};
         colors[ImGuiCol_WindowBg] = {0.22f, 0.22f, 0.22f, 1.00f};
         colors[ImGuiCol_ChildBg] = {0.19f, 0.19f, 0.19f, 1.00f};
@@ -118,7 +124,9 @@ namespace blackboard::gui
     void set_blackboard_theme()
     {
         if (!isInit())
+        {
             return;
+        }
 
         ImGui::StyleColorsDark();
 
@@ -140,7 +148,8 @@ namespace blackboard::gui
         const auto darker_background{dark_background * ImVec4{0.15f, 0.15f, 0.15f, 1.0f}};
         const auto dark_alpha_red{red * ImVec4{1.0f, 1.0f, 1.0f, 0.10f}};
 
-        auto &colors{ImGui::GetStyle().Colors};
+        auto &style{ImGui::GetStyle()};
+        auto &colors{style.Colors};
 
         const auto IconColour{ImVec4{0.718, 0.62f, 0.86f, 1.00f}};
         colors[ImGuiCol_Text] = foreground;
@@ -215,7 +224,6 @@ namespace blackboard::gui
         colors[ImGuiCol_TableBorderLight] = dark_alpha_purple;
         colors[ImGuiCol_TableBorderStrong] = dark_alpha_purple;
 
-        auto &style{ImGui::GetStyle()};
         style.FramePadding = {2.0f, 2.0f};
         style.CellPadding = {2.0f, 2.0f};
         style.TabBorderSize = 1.0f;
@@ -227,21 +235,23 @@ namespace blackboard::gui
         style.FrameRounding = 2.0f;
     }
 
+    // NOLINTEND(readability-magic-numbers)
+
     ImFont *get_font(const std::string &font_name)
     {
-        auto it = fonts.find(font_name);
-        if (it != fonts.end())
+        auto itr = fonts.find(font_name);
+        if (itr != fonts.end())
         {
-            return it->second;
+            return itr->second;
         }
-        else
-        {
-            logger::logger->error("Font {} not found", font_name);
-            return nullptr;
-        }
+
+        logger::logger->error("Font {} not found", font_name);
+        return nullptr;
     }
 
-    bool load_font(const std::string &font_name, void *font_data, int font_data_size,
+    std::string &get_ini_path() { return imgui_ini_path; }
+
+    bool load_font(const std::string &font_name, const void *font_data, int font_data_size,
                    const float size, const float ddpi, const bool set_as_default,
                    const int oversample_h, const int oversample_v, const float rasterizer_multiply)
     {
@@ -256,8 +266,8 @@ namespace blackboard::gui
         font_config.Name[IM_ARRAYSIZE(font_config.Name) - 1] = '\0';
         font_config.FontDataOwnedByAtlas = false;
         font_config.RasterizerMultiply = rasterizer_multiply;
-        font_config.OversampleH = oversample_h;
-        font_config.OversampleV = oversample_v;
+        font_config.OversampleH = static_cast<ImS8>(oversample_h);
+        font_config.OversampleV = static_cast<ImS8>(oversample_v);
 
         auto &io{ImGui::GetIO()};
         const float dpi_ratio{ddpi > 0.0f ? ddpi / STANDARD_DPI : 1.0f};
@@ -272,8 +282,8 @@ namespace blackboard::gui
 
         const ImWchar *ranges = io.Fonts->GetGlyphRangesDefault();
 
-        ImFont *font{io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, size_pixels,
-                                                    &font_config, ranges)};
+        ImFont *font{io.Fonts->AddFontFromMemoryTTF(const_cast<void *>(font_data), font_data_size,
+                                                    size_pixels, &font_config, ranges)};
         if (font == nullptr)
         {
             logger::logger->error("Could not load font {}", font_name);
@@ -293,7 +303,8 @@ namespace blackboard::gui
 
     static bx::DefaultAllocator s_allocator;
 
-    bool load_image(void *image_data, int image_data_size, ImTexture &out_texture, uint64_t _flags)
+    bool load_image(const void *image_data, int image_data_size, ImTexture &out_texture,
+                    uint64_t _flags)
     {
         if (!isInit())
         {
@@ -334,7 +345,9 @@ namespace blackboard::gui
     void dockspace()
     {
         if (!isInit())
+        {
             return;
+        }
 
         const static ImGuiDockNodeFlags dockspace_flags{ImGuiDockNodeFlags_None};
 
@@ -358,7 +371,7 @@ namespace blackboard::gui
 
         // Submit the DockSpace
         ImGuiIO &io{ImGui::GetIO()};
-        if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
+        if ((io.ConfigFlags & ImGuiConfigFlags_DockingEnable) != 0)
         {
             ImGuiID dockspace_id{ImGui::GetID("main_dockspace")};
             ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);

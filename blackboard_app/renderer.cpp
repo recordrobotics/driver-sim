@@ -18,9 +18,9 @@ namespace blackboard::renderer
     {
         ImGui_Impl_sdl_bgfx_Init(window.imgui_view_id);
 
-        auto window_handle{
+        auto *window_handle{
             native_window_handle(ImGui::GetMainViewport(), SDL_GetWindowID(window.window))};
-        if (!window_handle)
+        if (window_handle == nullptr)
         {
             logger::logger->error(SDL_GetError());
             return false;
@@ -57,7 +57,7 @@ namespace blackboard::renderer
         bgfx_init.resolution.reset = BGFX_RESET_HIDPI | BGFX_RESET_VSYNC;
 #ifdef SDL_VIDEO_DRIVER_X11
         bgfx_init.platformData.ndt = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window.window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
+            SDL_GetWindowProperties(window.window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
         bgfx_init.platformData.nwh = window_handle;
 #endif
         bgfx::init(bgfx_init);

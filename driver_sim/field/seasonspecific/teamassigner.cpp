@@ -1,6 +1,7 @@
 #include "teamassigner.h"
 
 #include <random>
+#include <utility>
 #include <vector>
 
 #include "../../settings/settingsstore.h"
@@ -27,7 +28,7 @@ void TeamAssigner::update(int allianceStation)
     teamNumbers[allianceStation - 1] = settings::gameTeam;
 
     // Remove game team from pool
-    pool.erase(std::remove(pool.begin(), pool.end(), settings::gameTeam), pool.end());
+    std::erase(pool, settings::gameTeam);
 
     // Randomly shuffle with alliance station as seed
     std::mt19937 rng(allianceStation);
@@ -37,7 +38,7 @@ void TeamAssigner::update(int allianceStation)
     size_t pool_idx = 0;
     for (size_t i = 0; i < teamNumbers.size(); ++i)
     {
-        if (i != allianceStation - 1 && pool_idx < pool.size())
+        if (std::cmp_not_equal(i, allianceStation - 1) && pool_idx < pool.size())
         {
             teamNumbers[i] = pool[pool_idx++];
         }

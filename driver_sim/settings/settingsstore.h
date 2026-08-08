@@ -1,9 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <unordered_set>
 
-enum class CameraView
+enum class CameraView : uint8_t
 {
     Field,
     Robot,
@@ -17,6 +18,7 @@ namespace settings
     void loadSettings();
     void saveSettings();
 
+    // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
     extern bool enableTAA;
     extern bool enableMotionBlur;
     extern bool enableBloom;
@@ -49,15 +51,16 @@ namespace settings
     extern std::string renderApi;
     extern bool updateWhileMinimized;
 
-    typedef struct Rebuilt2026
+    struct Rebuilt2026
     {
         int energizedRPThreshold;
         int superchargedRPThreshold;
-    } Rebuilt2026;
+    };
 
     extern Rebuilt2026 rebuilt2026;
 
     extern CameraView viewMode;
     extern float cameraFov;
     extern std::vector<uint32_t> cameraTarget;
+    // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
 } // namespace settings

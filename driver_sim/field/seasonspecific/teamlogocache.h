@@ -3,13 +3,14 @@
 #include <atomic>
 #include <bimg/decode.h>
 #include <blackboard_app/gui.h>
+#include <cstdint>
 #include <filesystem>
 #include <mutex>
 #include <queue>
 #include <thread>
 #include <unordered_map>
 
-enum class LogoState
+enum class LogoState : uint8_t
 {
     NotLoaded,
     Loading,

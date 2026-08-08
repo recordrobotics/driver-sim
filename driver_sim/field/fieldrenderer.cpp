@@ -1327,7 +1327,7 @@ void FieldRenderer::loadFieldModel()
     bx::FileReader reader;
     bx::Error err;
 
-    std::string fieldDirectory = std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "field/";
+    std::string fieldDirectory = std::string(SDL_GetPrefPath(nullptr, "DriverSim")) + "field/";
     std::string configFile = fieldDirectory + "config.json";
     if (bx::open(&reader, configFile.c_str(), &err))
     {
@@ -1465,7 +1465,7 @@ void FieldRenderer::loadRobotModel()
     bx::FileReader reader;
     bx::Error err;
 
-    std::string robotDirectory = std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "robot/";
+    std::string robotDirectory = std::string(SDL_GetPrefPath(nullptr, "DriverSim")) + "robot/";
     std::string configFile = robotDirectory + "config.json";
     if (bx::open(&reader, configFile.c_str(), &err))
     {
@@ -1670,13 +1670,17 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
 
     font = blackboard::gui::get_font("Inter_Regular_otf");
 
-    load_image((void *)shadow_png_bytes, sizeof(shadow_png_bytes), shadowTexture,
+    load_image(static_cast<const void *>(shadow_png_bytes), sizeof(shadow_png_bytes), shadowTexture,
                BGFX_SAMPLER_UVW_CLAMP);
 
-    load_image((void *)mainmenu_png_bytes, sizeof(mainmenu_png_bytes), mainMenuTexture);
-    load_image((void *)settings_png_bytes, sizeof(settings_png_bytes), settingsTexture);
-    load_image((void *)viewmode_png_bytes, sizeof(viewmode_png_bytes), viewModeTexture);
-    load_image((void *)restartjava_png_bytes, sizeof(restartjava_png_bytes), restartJavaTexture);
+    load_image(static_cast<const void *>(mainmenu_png_bytes), sizeof(mainmenu_png_bytes),
+               mainMenuTexture);
+    load_image(static_cast<const void *>(settings_png_bytes), sizeof(settings_png_bytes),
+               settingsTexture);
+    load_image(static_cast<const void *>(viewmode_png_bytes), sizeof(viewmode_png_bytes),
+               viewModeTexture);
+    load_image(static_cast<const void *>(restartjava_png_bytes), sizeof(restartjava_png_bytes),
+               restartJavaTexture);
 
     s_texPresent = bgfx::createUniform("s_texPresent", bgfx::UniformType::Sampler);
 
@@ -2830,7 +2834,8 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         }
     }
 
-    // always clear OIT buffers
+    // always clear GBUFFER and OIT buffers
+    encoder->touch(VIEW_GBUFFER);
     encoder->touch(VIEW_OIT);
     encoder->touch(VIEW_OIT_MOMENTS);
 

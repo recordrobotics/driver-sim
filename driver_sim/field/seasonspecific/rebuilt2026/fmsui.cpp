@@ -72,11 +72,15 @@ Rebuilt2026FMSUI::Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst)
 
     font = blackboard::gui::get_font("Roboto_Bold_ttf");
 
-    load_image((void *)firstage_png_bytes, sizeof(firstage_png_bytes), firstAgeBanner);
-    load_image((void *)rebuilt_png_bytes, sizeof(rebuilt_png_bytes), rebuiltBanner);
-    load_image((void *)arrow_png_bytes, sizeof(arrow_png_bytes), arrowIcon);
-    load_image((void *)fuelblue_png_bytes, sizeof(fuelblue_png_bytes), fuelBlueIcon);
-    load_image((void *)fuelred_png_bytes, sizeof(fuelred_png_bytes), fuelRedIcon);
+    load_image(static_cast<const void *>(firstage_png_bytes), sizeof(firstage_png_bytes),
+               firstAgeBanner);
+    load_image(static_cast<const void *>(rebuilt_png_bytes), sizeof(rebuilt_png_bytes),
+               rebuiltBanner);
+    load_image(static_cast<const void *>(arrow_png_bytes), sizeof(arrow_png_bytes), arrowIcon);
+    load_image(static_cast<const void *>(fuelblue_png_bytes), sizeof(fuelblue_png_bytes),
+               fuelBlueIcon);
+    load_image(static_cast<const void *>(fuelred_png_bytes), sizeof(fuelred_png_bytes),
+               fuelRedIcon);
 }
 
 Rebuilt2026FMSUI::~Rebuilt2026FMSUI()
@@ -96,12 +100,12 @@ void Rebuilt2026FMSUI::render(ImVec2 winSize)
 
 void Rebuilt2026FMSUI::updateHubMaterials()
 {
-    if (hubRedLightMaterial)
+    if (hubRedLightMaterial != nullptr)
     {
         hubRedLightMaterial->emissionColor =
             redHubLedSub.Get() ? Rebuilt2026::redHubLedColor : Rebuilt2026::hubLedOffColor;
     }
-    if (hubBlueLightMaterial)
+    if (hubBlueLightMaterial != nullptr)
     {
         hubBlueLightMaterial->emissionColor =
             blueHubLedSub.Get() ? Rebuilt2026::blueHubLedColor : Rebuilt2026::hubLedOffColor;
@@ -110,17 +114,17 @@ void Rebuilt2026FMSUI::updateHubMaterials()
 
 void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 {
-    teamAssigner.update(allianceStationSub.Get());
+    teamAssigner.update(static_cast<int>(allianceStationSub.Get()));
     logoCache.update();
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
 
     float scale = std::min(winSize.x / canvasWidth, winSize.y / canvasHeight);
-    float offsetX = (winSize.x - canvasWidth * scale) / 2.0f + viewport->Pos.x;
+    float offsetX = ((winSize.x - (canvasWidth * scale)) / 2.0f) + viewport->Pos.x;
     float offsetY = viewport->Pos.y;
 
-    auto Transform = [scale, offsetX, offsetY](ImVec2 p)
-    { return ImVec2(p.x * scale + offsetX, p.y * scale + offsetY); };
+    auto Transform = [scale, offsetX, offsetY](ImVec2 point)
+    { return ImVec2((point.x * scale) + offsetX, (point.y * scale) + offsetY); };
 
     ImDrawList *drawList = ImGui::GetBackgroundDrawList(viewport);
 
@@ -155,15 +159,25 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     // Center bar text
     std::string centerText;
     if (settings::gameMatchType == 0)
+    {
         centerText = "Test Match";
+    }
     else if (settings::gameMatchType == 1)
+    {
         centerText = "Practice ";
+    }
     else if (settings::gameMatchType == 2)
+    {
         centerText = "Qualification ";
+    }
     else if (settings::gameMatchType == 3)
+    {
         centerText = "Elimination ";
+    }
     else
+    {
         centerText = "Unknown Match Type ";
+    }
 
     Text({960, 37.5f},
          (settings::gameMatchType == 0 ? centerText
@@ -174,13 +188,13 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 
     // Banners
     Rect({450, 15}, {180, 45}, LIGHT);
-    if (firstAgeBanner.id)
+    if (firstAgeBanner.id != NULL)
     {
         drawList->AddImage(firstAgeBanner.id, Transform({450, 15}),
                            Transform({450 + 180, 15 + 45}));
     }
     Rect({1290, 15}, {180, 45}, LIGHT);
-    if (rebuiltBanner.id)
+    if (rebuiltBanner.id != NULL)
     {
         drawList->AddImage(rebuiltBanner.id, Transform({1290, 15}),
                            Transform({1290 + 180, 15 + 45}));
@@ -205,36 +219,40 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     constexpr int blueScoreX1 = 450 + 450; // end of blue panel
     constexpr int blueScoreW = blueScoreX1 - blueScoreX0;
     constexpr int blueScoreH = teamPanelH;
-    constexpr int blueScoreCX = blueScoreX0 + blueScoreW / 2;
+    constexpr int blueScoreCX = blueScoreX0 + (blueScoreW / 2);
     constexpr int blueScoreCY = teamY + teamPanelH; // bottom edge
 
     constexpr int redScoreX0 = 1020;     // start of red panel
     constexpr int redScoreX1 = redTeamX; // start of team numbers
     constexpr int redScoreW = redScoreX1 - redScoreX0;
     constexpr int redScoreH = teamPanelH;
-    constexpr int redScoreCX = redScoreX0 + redScoreW / 2;
+    constexpr int redScoreCX = redScoreX0 + (redScoreW / 2);
     constexpr int redScoreCY = teamY + teamPanelH; // bottom edge
 
     // Blue score
-    Text({blueScoreCX, blueScoreCY - blueScoreH / 2}, std::to_string(blueScore).c_str(), 48,
+    Text({blueScoreCX, blueScoreCY - (blueScoreH / 2)}, std::to_string(blueScore).c_str(), 48,
          IM_COL32_WHITE, true);
 
     // Red score
-    Text({redScoreCX, redScoreCY - redScoreH / 2}, std::to_string(redScore).c_str(), 48,
+    Text({redScoreCX, redScoreCY - (redScoreH / 2)}, std::to_string(redScore).c_str(), 48,
          IM_COL32_WHITE, true);
 
     // Team numbers
     std::array<uint32_t, 6> teamNumbers = teamAssigner.getTeamNumbers();
     for (int i = 0; i < teamNumbers.size(); ++i)
     {
-        float cellX = (i < 3 ? redTeamX : blueTeamX) + (i % 3) * teamCellW;
+        float cellX = static_cast<float>((i < 3 ? redTeamX : blueTeamX) + ((i % 3) * teamCellW));
 
         // Background
-        ImU32 cellColor;
+        ImU32 cellColor{};
         if (i < 3)
+        {
             cellColor = (i % 3) == 1 ? RED_TEAM_CENTER : RED_TEAM_OUTER;
+        }
         else
+        {
             cellColor = (i % 3) == 1 ? BLUE_TEAM_CENTER : BLUE_TEAM_OUTER;
+        }
 
         Rect({cellX, teamY}, {teamCellW, teamPanelH}, cellColor);
 
@@ -245,21 +263,23 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         constexpr int logoH = 30;
         int teamNumber = teamNumbers[i];
         ImTexture logoTex = logoCache.getTeamLogo(teamNumber);
-        if (logoTex.id)
+        if (logoTex.id != NULL)
         {
             drawList->AddImage(logoTex.id, Transform({logoX, logoY}),
                                Transform({logoX + logoW, logoY + logoH}));
         }
 
         // Team Number
-        Text({cellX + (teamCellW + 30) / 2, teamY + 30}, std::to_string(teamNumber).c_str(), 21,
+        Text({cellX + ((teamCellW + 30) / 2), teamY + 30}, std::to_string(teamNumber).c_str(), 21,
              IM_COL32_WHITE, true);
     }
 
     // Match time
     int matchTime = static_cast<int>(std::ceil(matchTimeSub.Get()));
     if (matchTime < 0)
+    {
         matchTime = 140;
+    }
     int minutes = matchTime / 60;
     int seconds = matchTime % 60;
 
@@ -269,7 +289,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     constexpr int timerPanelH = 60;
     constexpr int timerCY = timerPanelY + timerPanelH;
 
-    Text({960, timerCY - timerPanelH / 2},
+    Text({960, timerCY - (timerPanelH / 2)},
          (std::to_string(minutes) + ":" + (seconds < 10 ? "0" : "") + std::to_string(seconds))
              .c_str(),
          45, IM_COL32_BLACK, true);
@@ -286,8 +306,8 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         // Horizontal separator
         Rect({shiftPanelX, shiftPanelY - 1}, {shiftPanelW, 2}, borderColor);
 
-        int shiftNum;
-        int shiftTimeLeft;
+        int shiftNum{};
+        int shiftTimeLeft{};
 
         if (matchTime > 130)
         {
@@ -325,21 +345,21 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         constexpr int shiftCountY = shiftPanelY;
         constexpr int shiftCountW = 75;
         Rect({shiftCountX, shiftCountY}, {shiftCountW, shiftPanelH}, IM_COL32_WHITE);
-        Text({shiftCountX + shiftCountW / 2, shiftCountY + shiftPanelH / 2},
+        Text({shiftCountX + (shiftCountW / 2), shiftCountY + (shiftPanelH / 2)},
              (std::to_string(shiftNum) + " / 6").c_str(), 32, IM_COL32_BLACK, true);
 
         // Shift timer panel
         constexpr int shiftTimerX = shiftCountX + shiftCountW;
         constexpr int shiftTimerW = shiftPanelW - shiftCountW;
         Rect({shiftTimerX, shiftCountY}, {shiftTimerW, shiftPanelH}, borderColor);
-        Text({shiftTimerX + shiftTimerW / 2, shiftCountY + shiftPanelH / 2},
+        Text({shiftTimerX + (shiftTimerW / 2), shiftCountY + (shiftPanelH / 2)},
              ((shiftTimeLeft < 10 ? ":0" : ":") + std::to_string(shiftTimeLeft)).c_str(), 21,
              IM_COL32_BLACK, true);
     }
 
     // Blue fuel counter
     Rect({35, 67}, {45, 45}, IM_COL32_WHITE);
-    if (fuelBlueIcon.id)
+    if (fuelBlueIcon.id != NULL)
     {
         drawList->AddImage(fuelBlueIcon.id, Transform({35, 67}), Transform({35 + 45, 67 + 45}));
     }
@@ -353,7 +373,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 
     // Red fuel counter
     Rect({1689, 67}, {45, 45}, IM_COL32_WHITE);
-    if (fuelRedIcon.id)
+    if (fuelRedIcon.id != NULL)
     {
         drawList->AddImage(fuelRedIcon.id, Transform({1689, 67}), Transform({1689 + 45, 67 + 45}));
     }
@@ -368,7 +388,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     // Left arrow
     if (blueHubActiveSub.Get())
     {
-        if (arrowIcon.id)
+        if (arrowIcon.id != NULL)
         {
             drawList->AddImage(arrowIcon.id, Transform({302, 67}), Transform({302 + 45, 67 + 45}),
                                {1, 0}, {0, 1}); // flip horizontally
@@ -382,7 +402,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     // Right arrow
     if (redHubActiveSub.Get())
     {
-        if (arrowIcon.id)
+        if (arrowIcon.id != NULL)
         {
             drawList->AddImage(arrowIcon.id, Transform({1573, 67}),
                                Transform({1573 + 45, 67 + 45}));
@@ -404,36 +424,32 @@ void Rebuilt2026FMSUI::postProcessField(std::vector<Mesh> &fieldMeshes)
 
 int Rebuilt2026FMSUI::getDriverScore() const
 {
-    int allianceStation = allianceStationSub.Get();
+    int allianceStation = static_cast<int>(allianceStationSub.Get());
     if (allianceStation >= 1 && allianceStation <= 3)
     {
         return static_cast<int>(redScoreSub.Get());
     }
-    else if (allianceStation >= 4 && allianceStation <= 6)
+    if (allianceStation >= 4 && allianceStation <= 6)
     {
         return static_cast<int>(blueScoreSub.Get());
     }
-    else
-    {
-        return 0;
-    }
+
+    return 0;
 }
 
 int Rebuilt2026FMSUI::getOpponentScore() const
 {
-    int allianceStation = allianceStationSub.Get();
+    int allianceStation = static_cast<int>(allianceStationSub.Get());
     if (allianceStation >= 1 && allianceStation <= 3)
     {
         return static_cast<int>(blueScoreSub.Get());
     }
-    else if (allianceStation >= 4 && allianceStation <= 6)
+    if (allianceStation >= 4 && allianceStation <= 6)
     {
         return static_cast<int>(redScoreSub.Get());
     }
-    else
-    {
-        return 0;
-    }
+
+    return 0;
 }
 
 std::string Rebuilt2026FMSUI::getDriveMode() const
@@ -442,14 +458,13 @@ std::string Rebuilt2026FMSUI::getDriveMode() const
     {
         return "Disabled";
     }
-    else if (isAutonomousSub.Get())
+
+    if (isAutonomousSub.Get())
     {
         return "Auto";
     }
-    else
-    {
-        return "Teleop";
-    }
+
+    return "Teleop";
 }
 
 uint64_t Rebuilt2026FMSUI::getMatchEndTime() const
@@ -459,13 +474,11 @@ uint64_t Rebuilt2026FMSUI::getMatchEndTime() const
     {
         return 0;
     }
-    else
-    {
-        uint64_t currentTimeMillis =
-            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                      std::chrono::system_clock::now().time_since_epoch())
-                                      .count());
-        uint64_t matchEndTimeMillis = currentTimeMillis + static_cast<uint64_t>(matchTime * 1000.0);
-        return matchEndTimeMillis;
-    }
+
+    uint64_t currentTimeMillis =
+        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::system_clock::now().time_since_epoch())
+                                  .count());
+    uint64_t matchEndTimeMillis = currentTimeMillis + static_cast<uint64_t>(matchTime * 1000.0);
+    return matchEndTimeMillis;
 }

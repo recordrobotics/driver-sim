@@ -1,31 +1,41 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <utility>
-#include <cstdint>
 
 struct SDL_Window;
 
 namespace blackboard::app
 {
 
-  struct Window
-  {
-    ~Window();
-    void init_platform_window();
+    struct Window
+    {
+        static constexpr uint16_t DEFAULT_WIDTH = 1280u;
+        static constexpr uint16_t DEFAULT_HEIGHT = 720u;
+        static constexpr uint16_t IMGUI_VIEW_ID = 255;
 
-    std::pair<uint16_t, uint16_t> get_size_in_pixels() const;
-    float effective_display_resolution() const;
+        ~Window();
+        Window() = default;
+        Window(const Window &) = delete;
+        Window &operator=(const Window &) = delete;
+        Window(Window &&) = delete;
+        Window &operator=(Window &&) = delete;
 
-    // get position
-    std::pair<uint16_t, uint16_t> get_position() const;
+        void init_platform_window();
 
-    std::string title{"title"};
-    uint16_t width{1280u};
-    uint16_t height{720u};
-    uint16_t imgui_view_id{255}; // might be possible to remove this id
-    bool fullscreen{false};
-    SDL_Window *window{nullptr};
-    bool is_dragging{false};
-  };
+        [[nodiscard]] std::pair<uint16_t, uint16_t> get_size_in_pixels() const;
+        [[nodiscard]] float effective_display_resolution() const;
+
+        // get position
+        [[nodiscard]] std::pair<uint16_t, uint16_t> get_position() const;
+
+        std::string title{"title"};
+        uint16_t width{DEFAULT_WIDTH};
+        uint16_t height{DEFAULT_HEIGHT};
+        uint16_t imgui_view_id{IMGUI_VIEW_ID}; // might be possible to remove this id
+        bool fullscreen{false};
+        SDL_Window *window{nullptr};
+        bool is_dragging{false};
+    };
 
 } // namespace blackboard::app

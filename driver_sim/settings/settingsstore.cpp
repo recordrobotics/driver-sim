@@ -13,69 +13,69 @@ namespace nlohmann
 {
     template <> struct adl_serializer<settings::Rebuilt2026>
     {
-        static void to_json(json &j, const settings::Rebuilt2026 &value)
+        static void to_json(json &json, const settings::Rebuilt2026 &value)
         {
-            j = {{"energizedRPThreshold", value.energizedRPThreshold},
-                 {"superchargedRPThreshold", value.superchargedRPThreshold}};
+            json = {{"energizedRPThreshold", value.energizedRPThreshold},
+                    {"superchargedRPThreshold", value.superchargedRPThreshold}};
         }
 
-        static settings::Rebuilt2026 from_json(const json &j)
+        static settings::Rebuilt2026 from_json(const json &json)
         {
-            return {j.at("energizedRPThreshold").get<int>(),
-                    j.at("superchargedRPThreshold").get<int>()};
+            return {.energizedRPThreshold = json.at("energizedRPThreshold").get<int>(),
+                    .superchargedRPThreshold = json.at("superchargedRPThreshold").get<int>()};
         }
     };
 
     template <> struct adl_serializer<CameraView>
     {
-        static void to_json(json &j, const CameraView &value)
+        static void to_json(json &json, const CameraView &value)
         {
             switch (value)
             {
             case CameraView::Field:
-                j = "field";
+                json = "field";
                 break;
             case CameraView::Robot:
-                j = "robot";
+                json = "robot";
                 break;
             case CameraView::RobotRelative:
-                j = "robot-relative";
+                json = "robot-relative";
                 break;
             case CameraView::DriverStation:
-                j = "driverstation";
+                json = "driverstation";
                 break;
             }
         }
 
-        static CameraView from_json(const json &j)
+        static CameraView from_json(const json &json)
         {
-            std::string view = j.get<std::string>();
+            std::string view = json.get<std::string>();
             if (view == "field")
             {
                 return CameraView::Field;
             }
-            else if (view == "robot")
+            if (view == "robot")
             {
                 return CameraView::Robot;
             }
-            else if (view == "robot-relative")
+            if (view == "robot-relative")
             {
                 return CameraView::RobotRelative;
             }
-            else if (view == "driverstation")
+            if (view == "driverstation")
             {
                 return CameraView::DriverStation;
             }
-            else
-            {
-                throw std::invalid_argument("Invalid camera view");
-            }
+
+            throw std::invalid_argument("Invalid camera view");
         }
     };
 } // namespace nlohmann
 
 namespace settings
 {
+    // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables,readability-magic-numbers)
+
     bool enableTAA = true;
     bool enableMotionBlur = true;
     bool enableBloom = true;
@@ -134,7 +134,7 @@ namespace settings
         renderApi = "auto";
 
         if (std::filesystem::exists(
-                "C:\\Program Files (x86)\\FRC Driver Station\\DriverStation.exe"))
+                R"(C:\Program Files (x86)\FRC Driver Station\DriverStation.exe)"))
         {
             enabledExtensions = {"halsim_ds_socket"};
         }
@@ -164,20 +164,27 @@ namespace settings
         cameraTarget = {0, 0};
     }
 
+    // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables,readability-magic-numbers)
+
     uint64_t parseHumanSizeToBytes(const std::string &sizeStr)
     {
+        constexpr uint64_t MULTIPLIER_KB = 1024ull;
+        constexpr uint64_t MULTIPLIER_MB = 1024ull * MULTIPLIER_KB;
+        constexpr uint64_t MULTIPLIER_GB = 1024ull * MULTIPLIER_MB;
+        constexpr uint64_t MULTIPLIER_TB = 1024ull * MULTIPLIER_GB;
+
         std::string numberPart;
         std::string unitPart;
 
-        for (char c : sizeStr)
+        for (char chr : sizeStr)
         {
-            if (std::isdigit(c))
+            if (std::isdigit(chr) != 0)
             {
-                numberPart += c;
+                numberPart += chr;
             }
-            else if (std::isalpha(c))
+            else if (std::isalpha(chr) != 0)
             {
-                unitPart += std::tolower(c);
+                unitPart += static_cast<char>(std::tolower(chr));
             }
         }
 
@@ -185,37 +192,49 @@ namespace settings
         uint64_t multiplier = 1;
 
         if (unitPart == "kb")
-            multiplier = 1024ull;
+        {
+            multiplier = MULTIPLIER_KB;
+        }
         else if (unitPart == "mb")
-            multiplier = 1024ull * 1024ull;
+        {
+            multiplier = MULTIPLIER_MB;
+        }
         else if (unitPart == "gb")
-            multiplier = 1024ull * 1024ull * 1024ull;
+        {
+            multiplier = MULTIPLIER_GB;
+        }
         else if (unitPart == "tb")
-            multiplier = 1024ull * 1024ull * 1024ull * 1024ull;
+        {
+            multiplier = MULTIPLIER_TB;
+        }
 
         return number * multiplier;
     }
 
     std::string humanReadableSize(uint64_t bytes)
     {
-        const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+        constexpr uint64_t MULTIPLIER = 1024ull;
+        constexpr std::array<const char *, 5> units = {"B", "KB", "MB", "GB", "TB"};
         int unitIndex = 0;
 
-        while (bytes >= 1024ull && unitIndex < 4)
+        while (bytes >= MULTIPLIER && unitIndex < static_cast<int>(units.size()) - 1)
         {
-            bytes /= 1024ull;
+            bytes /= MULTIPLIER;
             unitIndex++;
         }
 
-        char buffer[64];
-        std::snprintf(buffer, sizeof(buffer), "%llu %s", bytes, units[unitIndex]);
-        return std::string(buffer);
+        constexpr size_t MAX_BUFFER_SIZE = 64;
+
+        std::array<char, MAX_BUFFER_SIZE> buffer{};
+        std::snprintf(buffer.data(), buffer.size(), "%llu %s", bytes,
+                      units.at(std::clamp(unitIndex, 0, static_cast<int>(units.size()) - 1)));
+        return {buffer.data()};
     }
 
     void loadSettings()
     {
         std::string settingsPath =
-            std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "settings.json";
+            std::string(SDL_GetPrefPath(nullptr, "DriverSim")) + "settings.json";
         bx::Error error;
         bx::FileReader reader;
 
@@ -231,7 +250,7 @@ namespace settings
             }
 
             std::vector<char> data(size + 1);
-            if (bx::read(&reader, data.data(), size, &error) != size)
+            if (bx::read(&reader, data.data(), static_cast<int32_t>(size), &error) != size)
             {
                 logger->error("Failed to read settings file: {0}, error: {1}", settingsPath,
                               error.getMessage().getCPtr());
@@ -241,47 +260,47 @@ namespace settings
             }
 
             data[size] = '\0';
-            nlohmann::json j = nlohmann::json::parse(data.data());
+            nlohmann::json json = nlohmann::json::parse(data.data());
 
-            enableTAA = j.value("enableTAA", enableTAA);
-            enableMotionBlur = j.value("enableMotionBlur", enableMotionBlur);
-            enableBloom = j.value("enableBloom", enableBloom);
-            enableGTAO = j.value("enableGTAO", enableGTAO);
+            enableTAA = json.value("enableTAA", enableTAA);
+            enableMotionBlur = json.value("enableMotionBlur", enableMotionBlur);
+            enableBloom = json.value("enableBloom", enableBloom);
+            enableGTAO = json.value("enableGTAO", enableGTAO);
             writeObjectMotionVectors =
-                j.value("writeObjectMotionVectors", writeObjectMotionVectors);
-            enableVSync = j.value("enableVSync", enableVSync);
-            enableDebugMenu = j.value("enableDebugMenu", enableDebugMenu);
+                json.value("writeObjectMotionVectors", writeObjectMotionVectors);
+            enableVSync = json.value("enableVSync", enableVSync);
+            enableDebugMenu = json.value("enableDebugMenu", enableDebugMenu);
 
-            showMainMenu = j.value("showMainMenu", showMainMenu);
-            cacheModels = j.value("cacheModels", cacheModels);
-            jvmArguments = j.value("jvmArguments", jvmArguments);
-            codeArguments = j.value("codeArguments", codeArguments);
-            enabledExtensions = j.value("enabledExtensions", enabledExtensions);
-            launchElastic = j.value("launchElastic", launchElastic);
-            launchRobotCode = j.value("launchRobotCode", launchRobotCode);
-            ntPeriodic = j.value("ntPeriodic", ntPeriodic);
+            showMainMenu = json.value("showMainMenu", showMainMenu);
+            cacheModels = json.value("cacheModels", cacheModels);
+            jvmArguments = json.value("jvmArguments", jvmArguments);
+            codeArguments = json.value("codeArguments", codeArguments);
+            enabledExtensions = json.value("enabledExtensions", enabledExtensions);
+            launchElastic = json.value("launchElastic", launchElastic);
+            launchRobotCode = json.value("launchRobotCode", launchRobotCode);
+            ntPeriodic = json.value("ntPeriodic", ntPeriodic);
             enableFrameInterpolation =
-                j.value("enableFrameInterpolation", enableFrameInterpolation);
+                json.value("enableFrameInterpolation", enableFrameInterpolation);
 
-            enableDiscordSDK = j.value("enableDiscordSDK", enableDiscordSDK);
+            enableDiscordSDK = json.value("enableDiscordSDK", enableDiscordSDK);
 
             javaLogMaxBytes = parseHumanSizeToBytes(
-                j.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
+                json.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
 
-            gameTeam = j.value("gameTeam", gameTeam);
-            gameTeamPool = j.value("gameTeamPool", gameTeamPool);
-            gameMatchType = j.value("gameMatchType", gameMatchType);
-            gameMatchNumber = j.value("gameMatchNumber", gameMatchNumber);
-            gameMatchTotal = j.value("gameMatchTotal", gameMatchTotal);
+            gameTeam = json.value("gameTeam", gameTeam);
+            gameTeamPool = json.value("gameTeamPool", gameTeamPool);
+            gameMatchType = json.value("gameMatchType", gameMatchType);
+            gameMatchNumber = json.value("gameMatchNumber", gameMatchNumber);
+            gameMatchTotal = json.value("gameMatchTotal", gameMatchTotal);
 
-            renderApi = j.value("renderApi", renderApi);
-            updateWhileMinimized = j.value("updateWhileMinimized", updateWhileMinimized);
+            renderApi = json.value("renderApi", renderApi);
+            updateWhileMinimized = json.value("updateWhileMinimized", updateWhileMinimized);
 
-            rebuilt2026 = j.value("rebuilt2026", rebuilt2026);
+            rebuilt2026 = json.value("rebuilt2026", rebuilt2026);
 
-            viewMode = j.value("viewMode", viewMode);
-            cameraFov = j.value("cameraFov", cameraFov);
-            cameraTarget = j.value("cameraTarget", cameraTarget);
+            viewMode = json.value("viewMode", viewMode);
+            cameraFov = json.value("cameraFov", cameraFov);
+            cameraTarget = json.value("cameraTarget", cameraTarget);
 
             logger->info("Settings loaded successfully from {0}", settingsPath);
         }
@@ -293,57 +312,58 @@ namespace settings
         }
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     void saveSettings()
     {
         std::string settingsPath =
-            std::string(SDL_GetPrefPath(NULL, "DriverSim")) + "settings.json";
+            std::string(SDL_GetPrefPath(nullptr, "DriverSim")) + "settings.json";
 
-        nlohmann::json j;
-        j["enableTAA"] = enableTAA;
-        j["enableMotionBlur"] = enableMotionBlur;
-        j["enableBloom"] = enableBloom;
-        j["enableGTAO"] = enableGTAO;
-        j["writeObjectMotionVectors"] = writeObjectMotionVectors;
-        j["enableVSync"] = enableVSync;
-        j["enableDebugMenu"] = enableDebugMenu;
+        nlohmann::json json;
+        json["enableTAA"] = enableTAA;
+        json["enableMotionBlur"] = enableMotionBlur;
+        json["enableBloom"] = enableBloom;
+        json["enableGTAO"] = enableGTAO;
+        json["writeObjectMotionVectors"] = writeObjectMotionVectors;
+        json["enableVSync"] = enableVSync;
+        json["enableDebugMenu"] = enableDebugMenu;
 
-        j["showMainMenu"] = showMainMenu;
-        j["cacheModels"] = cacheModels;
-        j["jvmArguments"] = jvmArguments;
-        j["codeArguments"] = codeArguments;
-        j["enabledExtensions"] = enabledExtensions;
-        j["launchElastic"] = launchElastic;
-        j["launchRobotCode"] = launchRobotCode;
-        j["ntPeriodic"] = ntPeriodic;
-        j["enableFrameInterpolation"] = enableFrameInterpolation;
+        json["showMainMenu"] = showMainMenu;
+        json["cacheModels"] = cacheModels;
+        json["jvmArguments"] = jvmArguments;
+        json["codeArguments"] = codeArguments;
+        json["enabledExtensions"] = enabledExtensions;
+        json["launchElastic"] = launchElastic;
+        json["launchRobotCode"] = launchRobotCode;
+        json["ntPeriodic"] = ntPeriodic;
+        json["enableFrameInterpolation"] = enableFrameInterpolation;
 
-        j["enableDiscordSDK"] = enableDiscordSDK;
+        json["enableDiscordSDK"] = enableDiscordSDK;
 
-        j["javaLogMaxBytes"] = humanReadableSize(javaLogMaxBytes);
+        json["javaLogMaxBytes"] = humanReadableSize(javaLogMaxBytes);
 
-        j["gameTeam"] = gameTeam;
-        j["gameTeamPool"] = gameTeamPool;
-        j["gameMatchType"] = gameMatchType;
-        j["gameMatchNumber"] = gameMatchNumber;
-        j["gameMatchTotal"] = gameMatchTotal;
+        json["gameTeam"] = gameTeam;
+        json["gameTeamPool"] = gameTeamPool;
+        json["gameMatchType"] = gameMatchType;
+        json["gameMatchNumber"] = gameMatchNumber;
+        json["gameMatchTotal"] = gameMatchTotal;
 
-        j["renderApi"] = renderApi;
-        j["updateWhileMinimized"] = updateWhileMinimized;
+        json["renderApi"] = renderApi;
+        json["updateWhileMinimized"] = updateWhileMinimized;
 
-        j["rebuilt2026"] = rebuilt2026;
+        json["rebuilt2026"] = rebuilt2026;
 
-        j["viewMode"] = viewMode;
-        j["cameraFov"] = cameraFov;
-        j["cameraTarget"] = cameraTarget;
+        json["viewMode"] = viewMode;
+        json["cameraFov"] = cameraFov;
+        json["cameraTarget"] = cameraTarget;
 
-        std::string jsonString = j.dump(4);
+        std::string jsonString = json.dump(4);
         bx::Error error;
         bx::FileWriter writer;
 
         if (bx::open(&writer, settingsPath.c_str(), false, &error))
         {
-            if (bx::write(&writer, jsonString.data(), jsonString.size(), &error) !=
-                jsonString.size())
+            if (bx::write(&writer, jsonString.data(), static_cast<int32_t>(jsonString.size()),
+                          &error) != jsonString.size())
             {
                 logger->error("Failed to write settings file: {0}, error: {1}", settingsPath,
                               error.getMessage().getCPtr());
@@ -361,4 +381,5 @@ namespace settings
                           error.getMessage().getCPtr());
         }
     }
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 } // namespace settings

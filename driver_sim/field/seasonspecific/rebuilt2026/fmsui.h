@@ -30,12 +30,12 @@ class Rebuilt2026FMSUI
     void render(ImVec2 winSize);
     void postProcessField(std::vector<Mesh> &fieldMeshes);
 
-    int getDriverScore() const;
-    int getOpponentScore() const;
+    [[nodiscard]] int getDriverScore() const;
+    [[nodiscard]] int getOpponentScore() const;
 
-    std::string getDriveMode() const;
+    [[nodiscard]] std::string getDriveMode() const;
 
-    uint64_t getMatchEndTime() const;
+    [[nodiscard]] uint64_t getMatchEndTime() const;
 
   private:
     void drawFMSUI(ImVec2 winSize);

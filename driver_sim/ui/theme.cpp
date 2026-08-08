@@ -7,6 +7,7 @@
 
 using blackboard::gui::string_hex_to_rgba_float;
 
+// NOLINTBEGIN(readability-magic-numbers)
 void ui::set_theme()
 {
     ImGui::StyleColorsDark();
@@ -110,3 +111,4 @@ void ui::set_theme()
     style.ChildRounding = 2.0f;
     style.FrameRounding = 2.0f;
 }
+// NOLINTEND(readability-magic-numbers)

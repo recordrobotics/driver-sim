@@ -5,7 +5,7 @@
 #include <imgui/imgui.h>
 
 struct SDL_Window;
-typedef uint32_t SDL_WindowID;
+using SDL_WindowID = uint32_t;
 
 namespace blackboard::renderer
 {
@@ -80,8 +80,8 @@ namespace blackboard::renderer
     void ImGui_Impl_sdl_bgfx_NewFrame();
     void ImGui_Impl_sdl_bgfx_Resize(SDL_Window *);
     void ImGui_Impl_sdl_bgfx_UpdateTextures(ImVector<ImTextureData *> *Textures);
-    void ImGui_Impl_sdl_bgfx_Render(const bgfx::ViewId viewId, ImDrawData *draw_data,
-                                    uint32_t clearColor);
+    void ImGui_Impl_sdl_bgfx_Render(bgfx::ViewId view_id, ImDrawData *draw_data,
+                                    uint32_t clear_color);
 
     // Use if you want to reset your rendering device without losing ImGui state.
     void ImGui_Impl_sdl_bgfx_InvalidateDeviceObjects();

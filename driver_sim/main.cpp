@@ -54,8 +54,8 @@ using namespace ui;
 using namespace blackboard;
 
 #define LOAD_FONT(font, set_as_default)                                                            \
-    blackboard::gui::load_font(#font, (void *)font##_bytes, sizeof(font##_bytes), 12.0f, dpi,      \
-                               set_as_default);
+    blackboard::gui::load_font(#font, static_cast<const void *>(font##_bytes),                     \
+                               sizeof(font##_bytes), 12.0f, dpi, set_as_default);
 
 blackboard::app::App *app_ptr;
 
@@ -138,7 +138,7 @@ void initApp()
 {
     set_theme();
 
-    const auto dpi{app_ptr->main_window->effective_display_resolution()};
+    const auto dpi{app_ptr->get_main_window()->effective_display_resolution()};
 
     LOAD_FONT(Inter_Thin_otf, false);
     LOAD_FONT(Inter_ThinItalic_otf, false);
@@ -161,13 +161,13 @@ void initApp()
 
     LOAD_FONT(Roboto_Bold_ttf, false);
 
-    load_image((void *)logo_png_bytes, sizeof(logo_png_bytes), logo);
+    load_image(static_cast<const void *>(logo_png_bytes), sizeof(logo_png_bytes), logo);
 
-    fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->main_window);
+    fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->get_main_window());
 
     settings::init(logo);
 
-    std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
+    std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
     javaAsset = std::make_unique<RemoteStoredAsset>(
         "jdk", "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5", prefPath,
         "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/"
@@ -225,10 +225,10 @@ void initFieldView()
 
     if (!fieldRenderer)
     {
-        fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->main_window);
+        fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->get_main_window());
     }
 
-    std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
+    std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
     elasticProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{.commandLine =
                                                                                {prefPath +
@@ -599,7 +599,7 @@ void app_update()
 
     if (fieldRenderer && pageTransition.getCurrentPage() == PAGE_3D_FIELD)
     {
-        fieldRenderer->render(*app_ptr->main_window, discord);
+        fieldRenderer->render(*app_ptr->get_main_window(), discord);
         if (fieldRenderer->isExiting())
         {
             pageTransition.transition(PAGE_SELECT);
@@ -672,10 +672,8 @@ int main(int argc, char *argv[])
         settings::saveSettings();
     }
 
-    blackboard::app::App app("Driver Sim", getRendererApiFromString(api));
+    blackboard::app::App app("Driver Sim", getRendererApiFromString(api), initApp, app_update);
     app_ptr = &app;
-    app.on_update = app_update;
-    app.on_init = initApp;
     app.run();
 
     app_cleanup();

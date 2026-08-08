@@ -11,15 +11,14 @@ using namespace blackboard::logger;
 
 static bx::DefaultAllocator s_allocator;
 
-inline constexpr uint8_t calcNumMips(bool _hasMips, uint16_t _width, uint16_t _height,
-                                     uint16_t _depth = 1)
+constexpr uint8_t calcNumMips(bool _hasMips, uint16_t _width, uint16_t _height, uint16_t _depth = 1)
 {
     if (_hasMips)
     {
         const uint32_t max = bx::max(_width, _height, _depth);
         const uint32_t num = 1 + bx::floorLog2(max);
 
-        return uint8_t(num);
+        return static_cast<uint8_t>(num);
     }
 
     return 1;
@@ -28,8 +27,9 @@ inline constexpr uint8_t calcNumMips(bool _hasMips, uint16_t _width, uint16_t _h
 Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, float widthFraction,
                  float heightFraction, bool hasMips, uint16_t numLayers,
                  bgfx::TextureFormat::Enum format, uint64_t flags, const bgfx::Memory *_mem)
-    : name(name), width(static_cast<uint16_t>(floorf(viewWidth * widthFraction))),
-      height(static_cast<uint16_t>(floorf(viewHeight * heightFraction))),
+    : name(name), handle(),
+      width(static_cast<uint16_t>(floorf(static_cast<float>(viewWidth) * widthFraction))),
+      height(static_cast<uint16_t>(floorf(static_cast<float>(viewHeight) * heightFraction))),
       widthFraction(widthFraction), heightFraction(heightFraction), hasMips(hasMips),
       numLayers(numLayers), format(format), flags(flags), hasResized(false)
 {
@@ -48,7 +48,7 @@ Texture::Texture(std::string name, uint16_t viewWidth, uint16_t viewHeight, floa
 Texture::Texture(std::string name, void *image_data, int image_data_size,
                  bimg::TextureFormat::Enum imageFormat, bgfx::TextureFormat::Enum format,
                  uint64_t _flags)
-    : name(name), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1),
+    : name(name), handle(), widthFraction(1.0f), heightFraction(1.0f), hasMips(false), numLayers(1),
       format(format), flags(_flags), hasResized(false)
 {
     bimg::ImageContainer *image = bimg::imageParse(
@@ -89,8 +89,8 @@ void Texture::destroy()
 
 void Texture::ensure(uint16_t viewWidth, uint16_t viewHeight)
 {
-    uint16_t newWidth = static_cast<uint16_t>(floorf(viewWidth * widthFraction));
-    uint16_t newHeight = static_cast<uint16_t>(floorf(viewHeight * heightFraction));
+    auto newWidth = static_cast<uint16_t>(floorf(static_cast<float>(viewWidth) * widthFraction));
+    auto newHeight = static_cast<uint16_t>(floorf(static_cast<float>(viewHeight) * heightFraction));
 
     if (newWidth != width || newHeight != height)
     {
@@ -121,7 +121,7 @@ void Texture::ensure(uint16_t viewWidth, uint16_t viewHeight)
 void Texture::beginFrame() { hasResized = false; }
 
 FrameBuffer::FrameBuffer(std::string name, std::vector<Texture *> attachments)
-    : name(name), attachments(attachments)
+    : name(name), handle(), attachments(attachments)
 {
     attachmentHandles = std::vector<bgfx::TextureHandle>(attachments.size());
     for (size_t i = 0; i < attachments.size(); i++)
@@ -142,10 +142,10 @@ FrameBuffer::FrameBuffer(std::string name, std::vector<Texture *> attachments)
 bool FrameBuffer::ensure(uint16_t viewWidth, uint16_t viewHeight)
 {
     bool resized = false;
-    for (size_t i = 0; i < attachments.size(); i++)
+    for (auto &attachment : attachments)
     {
-        attachments[i]->ensure(viewWidth, viewHeight);
-        if (attachments[i]->hasResized)
+        attachment->ensure(viewWidth, viewHeight);
+        if (attachment->hasResized)
         {
             resized = true;
         }

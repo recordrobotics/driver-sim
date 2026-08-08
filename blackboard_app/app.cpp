@@ -18,18 +18,16 @@
 
 namespace blackboard::app
 {
-
     namespace
     {
         constexpr float WINDOW_WORK_AREA_RATIO = 0.7f;
     }
 
-    App::App(const char *app_name, const renderer::Api renderer_api, const uint16_t width,
-             const uint16_t height, const bool fullscreen)
-        : main_window{std::make_unique<Window>()}, m_renderer_api{renderer_api},
-          on_init{[]() { logger::logger->info("init function not defined"); }},
-          on_update{[]() { logger::logger->info("update function not defined"); }},
-          on_resize{[](const uint16_t width, const uint16_t height) {}}
+    App::App(const char *app_name, const renderer::Api renderer_api,
+             const std::function<void()> &on_init, const std::function<void()> &on_update,
+             const uint16_t width, const uint16_t height, const bool fullscreen)
+        : main_window{std::make_unique<Window>()}, m_renderer_api{renderer_api}, on_init{on_init},
+          on_update{on_update}
     {
         if (!SDL_Init(SDL_INIT_VIDEO))
         {
@@ -43,8 +41,10 @@ namespace blackboard::app
         const SDL_DisplayID primary_display = SDL_GetPrimaryDisplay();
         if (primary_display != 0 && SDL_GetDisplayUsableBounds(primary_display, &usable_bounds))
         {
-            const int target_width = static_cast<int>(usable_bounds.w * WINDOW_WORK_AREA_RATIO);
-            const int target_height = static_cast<int>(usable_bounds.h * WINDOW_WORK_AREA_RATIO);
+            const int target_width =
+                static_cast<int>(static_cast<float>(usable_bounds.w) * WINDOW_WORK_AREA_RATIO);
+            const int target_height =
+                static_cast<int>(static_cast<float>(usable_bounds.h) * WINDOW_WORK_AREA_RATIO);
 
             const int clamped_width =
                 std::clamp(target_width, 1, static_cast<int>(std::numeric_limits<uint16_t>::max()));
@@ -99,12 +99,19 @@ namespace blackboard::app
         break;
         case renderer::Api::OPENGL:
         {
+            // no context so vulkan
             ImGui_ImplSDL3_InitForVulkan(main_window->window);
             SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
         }
         break;
         case renderer::Api::NONE:
             logger::logger->info("Render context not initialized");
+            break;
+        case renderer::Api::WEBGL:
+            logger::logger->info("WebGL not supported");
+            break;
+        case renderer::Api::AUTO:
+            // no hints for auto
             break;
         }
 
@@ -115,11 +122,9 @@ namespace blackboard::app
     {
         on_init();
 
-        if (ImGui::GetCurrentContext() && main_window)
+        if (ImGui::GetCurrentContext() != nullptr && main_window)
         {
-            ImGui::LoadIniSettingsFromDisk(gui::imgui_ini_path.c_str());
-            const auto [drawable_width, drawable_height] = main_window->get_size_in_pixels();
-            on_resize(drawable_width, drawable_height);
+            ImGui::LoadIniSettingsFromDisk(gui::get_ini_path().c_str());
 
             SDL_Event event;
             while (running)
@@ -138,8 +143,7 @@ namespace blackboard::app
                                    // (including fullscreen state)
                         {
                             main_window->fullscreen = !main_window->fullscreen;
-                            SDL_SetWindowFullscreen(main_window->window,
-                                                    main_window->fullscreen ? true : false);
+                            SDL_SetWindowFullscreen(main_window->window, main_window->fullscreen);
                         }
 #ifdef _DEBUG
                         else if (event.key.key == SDLK_F10)
@@ -150,20 +154,18 @@ namespace blackboard::app
 #endif
                     }
 
-                    if (event.type == SDL_EVENT_QUIT)
+                    if (event.type == SDL_EVENT_QUIT ||
+                        (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && is_main_window))
+                    {
                         running = false;
-                    if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && is_main_window)
-                        running = false;
-                    if (event.type == SDL_EVENT_WINDOW_RESIZED && is_main_window)
+                    }
+                    else if (event.type == SDL_EVENT_WINDOW_RESIZED && is_main_window)
                     {
                         const auto width = event.window.data1;
                         const auto height = event.window.data2;
                         main_window->width = width;
                         main_window->height = height;
                         renderer::ImGui_Impl_sdl_bgfx_Resize(main_window->window);
-                        const auto [drawable_width, drawable_height] =
-                            main_window->get_size_in_pixels();
-                        on_resize(drawable_width, drawable_height);
                     }
                 }
 
@@ -172,7 +174,6 @@ namespace blackboard::app
                 ImGui::NewFrame();
 
                 on_update();
-                m_prev_time = std::chrono::steady_clock::now();
 
                 ImGui::Render();
                 renderer::ImGui_Impl_sdl_bgfx_Render(main_window->imgui_view_id,
@@ -193,7 +194,6 @@ namespace blackboard::app
             while (running)
             {
                 on_update();
-                m_prev_time = std::chrono::steady_clock::now();
             }
         }
     }
@@ -202,7 +202,7 @@ namespace blackboard::app
     {
         if (blackboard::gui::isInit())
         {
-            ImGui::SaveIniSettingsToDisk(gui::imgui_ini_path.c_str());
+            ImGui::SaveIniSettingsToDisk(gui::get_ini_path().c_str());
 
             ImGui_ImplSDL3_Shutdown();
             renderer::ImGui_Impl_sdl_bgfx_Shutdown();
@@ -215,11 +215,6 @@ namespace blackboard::app
         }
         main_window.reset();
         logger::shutdown();
-    }
-
-    float App::main_window_resolution() const
-    {
-        return main_window ? main_window->effective_display_resolution() : 0;
     }
 
 } // namespace blackboard::app

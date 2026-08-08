@@ -19,7 +19,7 @@ void PackagedStoredAsset::performDownload(std::stop_token stoken)
     }
 
     const size_t totalBytes = embeddedData.size();
-    const size_t chunkSize = 1024 * 64; // 64 kb chunks for progress
+    constexpr size_t chunkSize = 1024ull * 64ull; // 64 kb chunks for progress
     size_t bytesWritten = 0;
 
     while (bytesWritten < totalBytes)
@@ -35,7 +35,7 @@ void PackagedStoredAsset::performDownload(std::stop_token stoken)
 
         size_t writeSize = std::min(chunkSize, totalBytes - bytesWritten);
         outFile.write(reinterpret_cast<const char *>(embeddedData.data() + bytesWritten),
-                      writeSize);
+                      static_cast<std::streamsize>(writeSize));
 
         if (!outFile)
         {

@@ -1,8 +1,10 @@
 #include "storedasset.h"
 
+#include <algorithm>
 #include <blackboard_app/logger.h>
 #include <fstream>
 #include <miniz.h>
+#include <utility>
 #include <vector>
 
 using namespace blackboard::logger;
@@ -12,7 +14,7 @@ namespace fs = std::filesystem;
 void StoredAsset::setError(const std::string &err)
 {
     logger->error("Asset error: {}", err);
-    std::lock_guard<std::mutex> lock(errorMutex);
+    std::scoped_lock lock(errorMutex);
     errorMessage = err;
     state = AssetState::Error;
 }
@@ -36,17 +38,15 @@ bool isFilenameSafe(const std::string &name)
 {
     const std::string illegalChars = "*?<>|:\"\\/";
     if (name.find_first_of(illegalChars) != std::string::npos)
+    {
         return false;
+    }
 
     // reserved windows names
     std::string baseName = fs::path(name).stem().string();
     const std::vector<std::string> reserved = {"CON", "PRN", "AUX", "NUL", "COM1", "LPT1"};
-    for (const auto &r : reserved)
-    {
-        if (baseName == r)
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(reserved, [&baseName](const auto &reservedName)
+                               { return baseName != reservedName; });
 }
 
 void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
@@ -87,21 +87,23 @@ void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
         }
     }
 
-    std::sort(pathsToDelete.begin(), pathsToDelete.end(),
-              [](const fs::path &a, const fs::path &b)
-              {
-                  return a.string().size() > b.string().size(); // Sort by path length descending
-              });
+    std::ranges::sort(pathsToDelete,
+                      [](const fs::path &compA, const fs::path &compB)
+                      {
+                          return compA.string().size() >
+                                 compB.string().size(); // Sort by path length descending
+                      });
 
-    std::error_code ec;
+    std::error_code error_code;
     for (const auto &path : pathsToDelete)
     {
-        if (fs::is_directory(path, ec))
+        if (fs::is_directory(path, error_code))
         {
-            fs::remove(path, ec);
-            if (ec)
+            fs::remove(path, error_code);
+            if (error_code)
             {
-                logger->error("Failed to remove directory {}: {}", path.string(), ec.message());
+                logger->error("Failed to remove directory {}: {}", path.string(),
+                              error_code.message());
             }
             else
             {
@@ -110,10 +112,10 @@ void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
         }
         else
         {
-            fs::remove(path, ec);
-            if (ec)
+            fs::remove(path, error_code);
+            if (error_code)
             {
-                logger->error("Failed to remove file {}: {}", path.string(), ec.message());
+                logger->error("Failed to remove file {}: {}", path.string(), error_code.message());
             }
             else
             {
@@ -129,7 +131,7 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
     mz_zip_archive zip_archive;
     memset(&zip_archive, 0, sizeof(zip_archive));
 
-    if (!mz_zip_reader_init_file(&zip_archive, zipPath.string().c_str(), 0))
+    if (mz_zip_reader_init_file(&zip_archive, zipPath.string().c_str(), 0) == 0)
     {
         setError("Failed to open zip file: " + zipPath.string());
         return;
@@ -142,7 +144,7 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
     {
         progressPercent = static_cast<int>((i * 100) / num_files);
         mz_zip_archive_file_stat file_stat;
-        if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat))
+        if (mz_zip_reader_file_stat(&zip_archive, i, &file_stat) == 0)
         {
             logger->trace("Failed to get file stat for index {}: {}", i,
                           mz_zip_get_error_string(zip_archive.m_last_error));
@@ -168,7 +170,7 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
 
         fs::path outputPath = extractTo / file_stat.m_filename;
 
-        if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
+        if (mz_zip_reader_is_file_a_directory(&zip_archive, i) != 0)
         {
             logger->trace("Creating directory: {}", outputPath.string());
             fs::create_directories(outputPath);
@@ -177,7 +179,7 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
 
         fs::create_directories(outputPath.parent_path());
 
-        if (!mz_zip_reader_extract_to_file(&zip_archive, i, outputPath.string().c_str(), 0))
+        if (mz_zip_reader_extract_to_file(&zip_archive, i, outputPath.string().c_str(), 0) == 0)
         {
             mz_zip_reader_end(&zip_archive);
             setError("Failed to extract file: " + std::string(file_stat.m_filename));
@@ -209,9 +211,9 @@ void StoredAsset::cleanupExtractedFiles()
     }
 }
 
-StoredAsset::StoredAsset(const std::string &relativeExtractPath, const std::string &hash,
+StoredAsset::StoredAsset(const std::string &relativeExtractPath, std::string hash,
                          const std::string &sdlPrefPath)
-    : expectedSha256(hash)
+    : expectedSha256(std::move(hash))
 {
     localExtractPath = fs::path(sdlPrefPath) / relativeExtractPath;
     localHashPath = fs::path(sdlPrefPath) / (relativeExtractPath + ".sha256");
@@ -229,10 +231,12 @@ StoredAsset::~StoredAsset()
 void StoredAsset::verifyOrDownload()
 {
     if (state != AssetState::Idle && state != AssetState::Error)
+    {
         return;
+    }
 
     workerThread = std::jthread(
-        [this](std::stop_token stoken)
+        [this](const std::stop_token &stoken)
         {
             state = AssetState::Verifying;
             progressPercent = 0;
@@ -251,7 +255,9 @@ void StoredAsset::verifyOrDownload()
             }
 
             if (stoken.stop_requested())
+            {
                 return;
+            }
 
             fs::create_directories(localExtractPath.parent_path());
             performDownload(stoken);
@@ -259,7 +265,9 @@ void StoredAsset::verifyOrDownload()
             if (state == AssetState::Extracting)
             {
                 if (stoken.stop_requested())
+                {
                     return;
+                }
 
                 deleteOldFiles(localExtractPath);
                 extractZip(localTempZipPath, localExtractPath);
@@ -281,6 +289,6 @@ void StoredAsset::verifyOrDownload()
 
 std::string StoredAsset::getError()
 {
-    std::lock_guard<std::mutex> lock(errorMutex);
+    std::scoped_lock lock(errorMutex);
     return errorMessage;
 }

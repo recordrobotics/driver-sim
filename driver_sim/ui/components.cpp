@@ -8,6 +8,8 @@ using blackboard::gui::string_hex_to_rgba_float;
 using blackboard::gui::string_hex_to_rgba_u32;
 using blackboard::gui::u32_multiply_alpha;
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-type-vararg)
+
 void ui::DrawCenteredText(const char *text, float yOffset)
 {
     ImVec2 winSize = ImGui::GetWindowSize();
@@ -51,7 +53,7 @@ void ui::DrawProgress(const std::string_view &label, float value, bool isError)
     ImGui::Dummy(ImVec2(0, 18 * globalScale));
 }
 
-void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
+void ui::SplitToggleButtonGroup(const std::list<ToggleButton> &buttons)
 {
     if (buttons.empty())
     {
@@ -80,12 +82,12 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
     ImGui::PushFont(nullptr, 16.0f);
 
     float totalWidth = 0;
-    for (auto &button : buttons)
+    for (const auto &button : buttons)
     {
-        totalWidth += ImGui::CalcTextSize(button.label).x + framePadding.x * 2.0f;
+        totalWidth += ImGui::CalcTextSize(button.label).x + (framePadding.x * 2.0f);
     }
 
-    const float segmentHeight = ImGui::GetTextLineHeight() + framePadding.y * 2.0f;
+    const float segmentHeight = ImGui::GetTextLineHeight() + (framePadding.y * 2.0f);
 
     ImGui::SetCursorPosX((winSize.x - totalWidth) / 2);
     const ImVec2 groupMin = ImGui::GetCursorScreenPos();
@@ -94,9 +96,9 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
     const size_t buttonCount = buttons.size();
     size_t index = 0;
 
-    for (auto &button : buttons)
+    for (const auto &button : buttons)
     {
-        const float segmentWidth = ImGui::CalcTextSize(button.label).x + framePadding.x * 2.0f;
+        const float segmentWidth = ImGui::CalcTextSize(button.label).x + (framePadding.x * 2.0f);
 
         ImGui::PushID(static_cast<int>(index));
         const ImVec2 segmentPos = ImGui::GetCursorScreenPos();
@@ -139,8 +141,8 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
                                 fillColor, frameRounding, cornerFlags);
 
         const ImVec2 textSize = ImGui::CalcTextSize(button.label);
-        const ImVec2 textPos(segmentPos.x + (segmentSize.x - textSize.x) * 0.5f,
-                             segmentPos.y + (segmentSize.y - textSize.y) * 0.5f);
+        const ImVec2 textPos(segmentPos.x + ((segmentSize.x - textSize.x) * 0.5f),
+                             segmentPos.y + ((segmentSize.y - textSize.y) * 0.5f));
 
         drawList->AddText(ImGui::GetFont(), ImGui::GetFontSize(), textPos, textColor, button.label);
 
@@ -159,9 +161,9 @@ void ui::SplitToggleButtonGroup(std::list<ToggleButton> buttons)
 
     float dividerX = groupMin.x;
     size_t dividerIndex = 0;
-    for (auto &button : buttons)
+    for (const auto &button : buttons)
     {
-        dividerX += ImGui::CalcTextSize(button.label).x + framePadding.x * 2.0f;
+        dividerX += ImGui::CalcTextSize(button.label).x + (framePadding.x * 2.0f);
         ++dividerIndex;
         if (dividerIndex < buttonCount)
         {
@@ -243,17 +245,17 @@ bool ui::CircularButton(const char *id, float radius)
     const float arrowThickness = radius * 0.13f;
     const float capRadius = arrowThickness * 0.5f;
 
-    const ImVec2 shaftStart(center.x - radius * 0.45f, center.y);
-    const ImVec2 shaftEnd(center.x + radius * 0.45f, center.y);
-    const ImVec2 arrowTip(center.x + radius * 0.45f, center.y);
-    const ImVec2 headTop(center.x, arrowTip.y - radius * 0.45f);
-    const ImVec2 headBottom(center.x, arrowTip.y + radius * 0.45f);
+    const ImVec2 shaftStart(center.x - (radius * 0.45f), center.y);
+    const ImVec2 shaftEnd(center.x + (radius * 0.45f), center.y);
+    const ImVec2 arrowTip(center.x + (radius * 0.45f), center.y);
+    const ImVec2 headTop(center.x, arrowTip.y - (radius * 0.45f));
+    const ImVec2 headBottom(center.x, arrowTip.y + (radius * 0.45f));
 
-    auto drawRoundedSegment = [&](const ImVec2 &a, const ImVec2 &b)
+    auto drawRoundedSegment = [&](const ImVec2 &start, const ImVec2 &end)
     {
-        draw->AddLine(a, b, IM_COL32_WHITE, arrowThickness);
-        draw->AddCircleFilled(a, capRadius, IM_COL32_WHITE);
-        draw->AddCircleFilled(b, capRadius, IM_COL32_WHITE);
+        draw->AddLine(start, end, IM_COL32_WHITE, arrowThickness);
+        draw->AddCircleFilled(start, capRadius, IM_COL32_WHITE);
+        draw->AddCircleFilled(end, capRadius, IM_COL32_WHITE);
     };
 
     drawRoundedSegment(shaftStart, shaftEnd);
@@ -280,9 +282,9 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
 
-    ImU32 fill;
+    ImU32 fill{};
     ImU32 border = string_hex_to_rgba_u32("#A8A8A8C7");
-    ImU32 iconColor;
+    ImU32 iconColor{};
     if (inverted)
     {
         fill = active    ? string_hex_to_rgba_u32("#D0D0D0ff")
@@ -305,21 +307,21 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
     draw->AddRectFilled(pos, ImVec2(pos.x + size, pos.y + size), fill, rounding);
 
     draw->AddRect(
-        ImVec2(pos.x + borderSize / 2.0f - 1, pos.y + borderSize / 2.0f - 1),
-        ImVec2(pos.x + size - borderSize / 2.0f + 1, pos.y + size - borderSize / 2.0f + 1), border,
-        rounding, borderSize);
+        ImVec2(pos.x + (borderSize / 2.0f) - 1, pos.y + (borderSize / 2.0f) - 1),
+        ImVec2(pos.x + size - (borderSize / 2.0f) + 1, pos.y + size - (borderSize / 2.0f) + 1),
+        border, rounding, borderSize);
 
-    const ImVec2 center(pos.x + size * 0.5f, pos.y + size * 0.5f);
+    const ImVec2 center(pos.x + (size * 0.5f), pos.y + (size * 0.5f));
     const float imageSize = size * 0.5f;
 
-    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, center.y - imageSize * 0.5f),
-                   ImVec2(center.x + imageSize * 0.5f, center.y + imageSize * 0.5f), ImVec2(0, 0),
-                   ImVec2(1, 1), iconColor);
+    draw->AddImage(icon, ImVec2(center.x - (imageSize * 0.5f), center.y - (imageSize * 0.5f)),
+                   ImVec2(center.x + (imageSize * 0.5f), center.y + (imageSize * 0.5f)),
+                   ImVec2(0, 0), ImVec2(1, 1), iconColor);
 
     ImVec2 textSize =
         font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text.data(), text.data() + text.size());
 
-    draw->AddText(font, fontSize, ImVec2(center.x - textSize.x / 2.0f, pos.y + size + textOffset),
+    draw->AddText(font, fontSize, ImVec2(center.x - (textSize.x / 2.0f), pos.y + size + textOffset),
                   u32_multiply_alpha(string_hex_to_rgba_u32("#FFFFFFFF"), opacity), text.data(),
                   text.data() + text.size());
 
@@ -330,24 +332,28 @@ inline float AddCenteredWrappedText(ImDrawList *draw, ImFont *font, float fontSi
                                     const ImVec2 &pos, float wrapWidth, ImU32 color,
                                     const char *text, const char *textEnd = nullptr)
 {
-    if (!text)
+    if (text == nullptr)
+    {
         return 0.0f;
+    }
 
-    if (!textEnd)
+    if (textEnd == nullptr)
+    {
         textEnd = text + std::strlen(text);
+    }
 
-    float y = pos.y;
+    float lineY = pos.y;
     const float lineHeight = fontSize;
 
     while (text < textEnd)
     {
         const char *lineEnd = font->CalcWordWrapPosition(fontSize, text, textEnd, wrapWidth);
 
-        for (const char *s = text; s < lineEnd; ++s)
+        for (const char *chr = text; chr < lineEnd; ++chr)
         {
-            if (*s == '\n')
+            if (*chr == '\n')
             {
-                lineEnd = s;
+                lineEnd = chr;
                 break;
             }
         }
@@ -357,31 +363,35 @@ inline float AddCenteredWrappedText(ImDrawList *draw, ImFont *font, float fontSi
             if (*text == '\n')
             {
                 ++text;
-                y += lineHeight;
+                lineY += lineHeight;
                 continue;
             }
 
-            unsigned int c;
-            lineEnd = text + ImTextCharFromUtf8(&c, text, textEnd);
+            unsigned int utfChar{};
+            lineEnd = text + ImTextCharFromUtf8(&utfChar, text, textEnd);
         }
 
         const float lineWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text, lineEnd).x;
 
-        draw->AddText(font, fontSize, ImVec2(pos.x + (wrapWidth - lineWidth) * 0.5f, y), color,
-                      text, lineEnd);
+        draw->AddText(font, fontSize, ImVec2(pos.x + ((wrapWidth - lineWidth) * 0.5f), lineY),
+                      color, text, lineEnd);
 
-        y += lineHeight;
+        lineY += lineHeight;
 
         text = lineEnd;
 
         if (text < textEnd && *text == '\n')
+        {
             ++text;
+        }
 
         while (text < textEnd && ImCharIsBlankA(*text))
+        {
             ++text;
+        }
     }
 
-    return y - pos.y;
+    return lineY - pos.y;
 }
 
 bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name,
@@ -419,32 +429,34 @@ bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name,
     float descriptionFontSize = 12.0f * globalScale;
 
     draw->AddRect(
-        ImVec2(pos.x + borderSize / 2.0f - 1, pos.y + borderSize / 2.0f - 1),
-        ImVec2(pos.x + width - borderSize / 2.0f + 1, pos.y + height - borderSize / 2.0f + 1),
+        ImVec2(pos.x + (borderSize / 2.0f) - 1, pos.y + (borderSize / 2.0f) - 1),
+        ImVec2(pos.x + width - (borderSize / 2.0f) + 1, pos.y + height - (borderSize / 2.0f) + 1),
         border, rounding, borderSize);
 
-    const ImVec2 center(pos.x + width * 0.5f, pos.y + height * 0.5f);
+    const ImVec2 center(pos.x + (width * 0.5f), pos.y + (height * 0.5f));
     const float imageSize = 64.0f * globalScale;
 
-    draw->AddImage(icon, ImVec2(center.x - imageSize * 0.5f, pos.y + 10.0f * globalScale),
-                   ImVec2(center.x + imageSize * 0.5f, pos.y + 10.0f * globalScale + imageSize),
+    draw->AddImage(icon, ImVec2(center.x - (imageSize * 0.5f), pos.y + (10.0f * globalScale)),
+                   ImVec2(center.x + (imageSize * 0.5f), pos.y + (10.0f * globalScale) + imageSize),
                    ImVec2(0, 0), ImVec2(1, 1), iconColor);
 
     ImVec2 nameSize =
         font->CalcTextSizeA(nameFontSize, FLT_MAX, 0.0f, name.data(), name.data() + name.size());
     draw->AddText(font, nameFontSize,
-                  ImVec2(center.x - nameSize.x / 2.0f,
-                         pos.y + 10.0f * globalScale + imageSize + 1.0f * globalScale),
+                  ImVec2(center.x - (nameSize.x / 2.0f),
+                         pos.y + (10.0f * globalScale) + imageSize + (1.0f * globalScale)),
                   nameColor, name.data(), name.data() + name.size());
 
-    const float textWidth = width - 35.0f * globalScale;
+    const float textWidth = width - (35.0f * globalScale);
 
     AddCenteredWrappedText(draw, font, descriptionFontSize,
-                           ImVec2(center.x - textWidth * 0.5f, pos.y + 10.0f * globalScale +
-                                                                   imageSize + 1.0f * globalScale +
-                                                                   nameSize.y + 5.0f * globalScale),
+                           ImVec2(center.x - (textWidth * 0.5f),
+                                  pos.y + (10.0f * globalScale) + imageSize + (1.0f * globalScale) +
+                                      nameSize.y + (5.0f * globalScale)),
                            textWidth, descriptionColor, description.data(),
                            description.data() + description.size());
 
     return pressed;
 }
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-type-vararg)

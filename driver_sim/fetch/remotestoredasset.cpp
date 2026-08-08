@@ -18,7 +18,7 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
         return;
     }
 
-    cpr::Response r = cpr::Download(
+    cpr::Response resp = cpr::Download(
         ofs, cpr::Url{remoteUrl},
         cpr::ProgressCallback(
             [this, &stoken](cpr::cpr_off_t downloadTotal, cpr::cpr_off_t downloadNow,
@@ -51,7 +51,7 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
         return;
     }
 
-    if (r.status_code == 200)
+    if (resp.status_code == 200)
     {
         progressPercent = 100;
         state = AssetState::Extracting;
@@ -59,17 +59,17 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
     }
     else
     {
-        logger->error("Failed to download asset from {}: HTTP {} - {}", remoteUrl, r.status_code,
-                      r.error.message);
+        logger->error("Failed to download asset from {}: HTTP {} - {}", remoteUrl, resp.status_code,
+                      resp.error.message);
         std::filesystem::remove(localTempZipPath); // Delete potential files
 
-        if (r.error.code != cpr::ErrorCode::OK)
+        if (resp.error.code != cpr::ErrorCode::OK)
         {
-            setError("Network Error: " + r.error.message + " (" + remoteUrl + ")");
+            setError("Network Error: " + resp.error.message + " (" + remoteUrl + ")");
         }
         else
         {
-            setError("HTTP Error " + std::to_string(r.status_code) + " from: " + remoteUrl);
+            setError("HTTP Error " + std::to_string(resp.status_code) + " from: " + remoteUrl);
         }
     }
 }

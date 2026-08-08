@@ -6,8 +6,10 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+// clang-format off
 #include <windows.h>
 #include <tlhelp32.h>
+// clang-format on
 #elif defined(__linux__)
 #include <dirent.h>
 #include <fstream>
@@ -30,18 +32,21 @@ extern char **environ;
 #define ENV_PTR environ
 #endif
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 Process::environment_type make_inherited_env(const Process::environment_type &overrides)
 {
     Process::environment_type env;
 
     // inherit parent environment
-    for (char **e = ENV_PTR; e && *e; ++e)
+    for (char **env_ptr = ENV_PTR; (env_ptr != nullptr) && ((*env_ptr) != nullptr); ++env_ptr)
     {
-        std::string entry(*e);
+        std::string entry(*env_ptr);
 
         auto pos = entry.find('=');
         if (pos == std::string::npos)
+        {
             continue;
+        }
 
         std::string key = entry.substr(0, pos);
         std::string value = entry.substr(pos + 1);
@@ -50,13 +55,14 @@ Process::environment_type make_inherited_env(const Process::environment_type &ov
     }
 
     // append custom env
-    for (const auto &kv : overrides)
+    for (const auto &keyValue : overrides)
     {
-        env[kv.first] = kv.second;
+        env[keyValue.first] = keyValue.second;
     }
 
     return env;
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
 struct ExistingProcess
 {
@@ -73,12 +79,14 @@ std::optional<ExistingProcess> find_existing_process(const std::string_view exec
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE)
+    {
         return std::nullopt;
+    }
 
     PROCESSENTRY32 entry{};
     entry.dwSize = sizeof(entry);
 
-    if (!Process32First(snapshot, &entry))
+    if (Process32First(snapshot, &entry) == FALSE)
     {
         CloseHandle(snapshot);
         return std::nullopt;
@@ -87,7 +95,9 @@ std::optional<ExistingProcess> find_existing_process(const std::string_view exec
     do
     {
         if (entry.th32ProcessID == self)
+        {
             continue;
+        }
 
         if (wanted == entry.szExeFile)
         {
@@ -95,7 +105,7 @@ std::optional<ExistingProcess> find_existing_process(const std::string_view exec
             return ExistingProcess{static_cast<int64_t>(entry.th32ProcessID)};
         }
 
-    } while (Process32Next(snapshot, &entry));
+    } while (Process32Next(snapshot, &entry) != FALSE);
 
     CloseHandle(snapshot);
 
@@ -173,8 +183,9 @@ std::optional<ExistingProcess> find_existing_process(const std::string_view exec
     return std::nullopt;
 }
 
-void handle_existing_process(std::stop_token stop_token, const std::string_view executable_name,
-                             std::shared_ptr<spdlog::logger> logger)
+void handle_existing_process(const std::stop_token &stop_token,
+                             const std::string_view executable_name,
+                             const std::shared_ptr<spdlog::logger> &logger)
 {
     logger->info("Searching for existing process: {}", executable_name);
 
@@ -198,7 +209,7 @@ bool ProcessRunner::start()
     env = make_inherited_env(config.environment);
 
     worker_thread = std::jthread(
-        [this](std::stop_token stop_token)
+        [this](const std::stop_token &stop_token)
         {
             bool is_restart = false;
 
@@ -206,12 +217,12 @@ bool ProcessRunner::start()
             {
                 if (config.use_existing_process && !is_restart)
                 {
-                    handle_existing_process(stop_token, config.commandLine[0], logger);
+                    handle_existing_process(stop_token, config.commandLine.front(), logger);
                 }
 
                 if (is_restart)
                 {
-                    logger->info("Auto-restarting process: {}", config.commandLine[0]);
+                    logger->info("Auto-restarting process: {}", config.commandLine.front());
                 }
 
                 is_restart = true;
@@ -226,7 +237,7 @@ bool ProcessRunner::start()
                                       const std::function<void(const std::string &)> &log_func)
                 {
                     buffer.append(bytes, size);
-                    size_t pos;
+                    size_t pos{};
                     while ((pos = buffer.find('\n')) != std::string::npos)
                     {
                         std::string line = buffer.substr(0, pos);
@@ -258,7 +269,7 @@ bool ProcessRunner::start()
 
                 if (process.get_id() <= 0)
                 {
-                    logger->error("Failed to start process: {}", config.commandLine[0]);
+                    logger->error("Failed to start process: {}", config.commandLine.front());
 
                     auto fail_delay = std::chrono::seconds(2);
                     auto start_time = std::chrono::steady_clock::now();
@@ -273,14 +284,16 @@ bool ProcessRunner::start()
                 }
 
                 logger->info("Process started successfully. PID: {}, {}", process.get_id(),
-                             config.commandLine[0]);
+                             config.commandLine.front());
 
                 int exit_status = -1;
 
                 while (!stop_token.stop_requested() && !restart_requested)
                 {
                     if (process.try_get_exit_status(exit_status))
+                    {
                         break;
+                    }
 
                     std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 }
@@ -288,14 +301,14 @@ bool ProcessRunner::start()
                 if (stop_token.stop_requested() || restart_requested)
                 {
                     logger->info("Stop requested. Worker thread is terminating child process: {}",
-                                 config.commandLine[0]);
+                                 config.commandLine.front());
                     process.kill(true);
                 }
 
                 exit_status = process.get_exit_status();
 
                 logger->info("Process exited with status {}. {}", exit_status,
-                             config.commandLine[0]);
+                             config.commandLine.front());
 
                 if (stop_token.stop_requested())
                 {
@@ -308,7 +321,7 @@ bool ProcessRunner::start()
                     {
                         logger->warn(
                             "Child process {} exited unexpectedly. Terminating main process.",
-                            config.commandLine[0]);
+                            config.commandLine.front());
                         SDL_Event quit_event;
                         quit_event.type = SDL_EVENT_QUIT;
                         SDL_PushEvent(&quit_event);
@@ -317,7 +330,7 @@ bool ProcessRunner::start()
                 }
 
                 logger->warn("Process {} exited unexpectedly. Auto-restarting in 1 second...",
-                             config.commandLine[0]);
+                             config.commandLine.front());
                 auto restart_delay = std::chrono::seconds(1);
                 auto start_time = std::chrono::steady_clock::now();
                 while (!stop_token.stop_requested() &&
@@ -333,7 +346,7 @@ bool ProcessRunner::start()
 
 void ProcessRunner::stop()
 {
-    logger->info("Stopping process... {}", config.commandLine[0]);
+    logger->info("Stopping process... {}", config.commandLine.front());
 
     worker_thread.request_stop();
 
@@ -342,11 +355,11 @@ void ProcessRunner::stop()
         worker_thread.join();
     }
 
-    logger->info("Process stopped successfully. {}", config.commandLine[0]);
+    logger->info("Process stopped successfully. {}", config.commandLine.front());
 }
 
 void ProcessRunner::restart()
 {
-    logger->info("Restarting process... {}", config.commandLine[0]);
+    logger->info("Restarting process... {}", config.commandLine.front());
     restart_requested = true;
 }

@@ -1,36 +1,31 @@
 #pragma once
 
-#include <discordsdk/discord.h>
-#include "fetch/storedasset.h"
 #include "fetch/remotestoredasset.h"
+#include "fetch/storedasset.h"
+#include <discordsdk/discord.h>
 
 class Discord
 {
-public:
+  public:
     Discord();
+    ~Discord() = default;
 
     Discord(const Discord &) = delete;
     Discord &operator=(const Discord &) = delete;
     Discord(Discord &&) noexcept = default;
     Discord &operator=(Discord &&) noexcept = default;
 
-    bool isAvailable() const;
+    [[nodiscard]] bool isAvailable() const;
 
     void update();
 
     void setMenu();
-    void setField(
-        int gameYear,
-        int allianceStation,
-        int driverScore,
-        int opponentScore,
-        const std::string &robotName,
-        const std::string &driveMode,
-        const std::string &robotRepoUrl,
-        const std::string &robotDownloadUrl,
-        uint64_t matchEndTimeMs);
+    void setField(int gameYear, int allianceStation, int driverScore, int opponentScore,
+                  const std::string &robotName, const std::string &driveMode,
+                  const std::string &robotRepoUrl, const std::string &robotDownloadUrl,
+                  uint64_t matchEndTimeMs);
 
-private:
+  private:
     void onLoaded();
     void updateActivity(const discordpp::Activity &activity);
 

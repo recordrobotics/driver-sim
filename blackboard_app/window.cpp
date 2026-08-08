@@ -9,6 +9,7 @@
 #include <bx/allocator.h>
 
 #include <iostream>
+#include <limits>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -46,11 +47,22 @@ namespace blackboard::app
         }
         else
         {
-            SDL_Surface *surface =
-                SDL_CreateSurfaceFrom(image->m_width, image->m_height, SDL_PIXELFORMAT_ARGB8888,
-                                      image->m_data, image->m_width * 4);
+            if (image->m_width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+                image->m_height > static_cast<uint32_t>(std::numeric_limits<int>::max()))
+            {
+                logger::logger->error("Icon dimensions are too large");
+                bimg::imageFree(image);
+                return;
+            }
 
-            if (surface)
+            const int icon_width = static_cast<int>(image->m_width);
+            const int icon_height = static_cast<int>(image->m_height);
+            const int icon_pitch = icon_width * 4;
+
+            SDL_Surface *surface = SDL_CreateSurfaceFrom(
+                icon_width, icon_height, SDL_PIXELFORMAT_ARGB8888, image->m_data, icon_pitch);
+
+            if (surface != nullptr)
             {
                 SDL_SetWindowIcon(window, surface);
                 SDL_DestroySurface(surface);
@@ -66,9 +78,10 @@ namespace blackboard::app
 
     std::pair<uint16_t, uint16_t> Window::get_size_in_pixels() const
     {
-        int w{0u}, h{0u};
-        SDL_GetWindowSizeInPixels(window, &w, &h);
-        return {w, h};
+        int width{0u};
+        int height{0u};
+        SDL_GetWindowSizeInPixels(window, &width, &height);
+        return {width, height};
     }
 
     float Window::effective_display_resolution() const
@@ -80,9 +93,10 @@ namespace blackboard::app
 
     std::pair<uint16_t, uint16_t> Window::get_position() const
     {
-        int x{0u}, y{0u};
-        SDL_GetWindowPosition(window, &x, &y);
-        return {x, y};
+        int xPos{0u};
+        int yPos{0u};
+        SDL_GetWindowPosition(window, &xPos, &yPos);
+        return {xPos, yPos};
     }
 
 } // namespace blackboard::app

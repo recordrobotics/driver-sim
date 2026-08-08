@@ -21,7 +21,7 @@ void DrawVerticallyCenteredText(const char *text, float heightAvailable)
 {
     ImVec2 textSize = ImGui::CalcTextSize(text);
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (heightAvailable - textSize.y) * 0.5f);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ((heightAvailable - textSize.y) * 0.5f));
     ImGui::TextUnformatted(text);
 }
 
@@ -30,8 +30,8 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
 
-    const ImVec2 p = ImVec2(40.0f * globalScale, 40.0f * globalScale);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, p);
+    const ImVec2 padding = ImVec2(40.0f * globalScale, 40.0f * globalScale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
 
     ImGui::SetNextWindowPos(viewportPos);
@@ -46,7 +46,7 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
         const ImVec2 logoSize(70.0f * globalScale, 70.0f * globalScale);
 
         // Logo
-        if (logo.id)
+        if (logo.id != 0u)
         {
             ImGui::Image(logo.id, logoSize);
         }

@@ -1,8 +1,22 @@
 Checks: >
-  bugprone-*,
-  performance-*,
-  modernize-*,
-  readability-*,
-  cppcoreguidelines-*
+    bugprone-*,
+    -bugprone-easily-swappable-parameters,
+    performance-*,
+    modernize-*,
+    -modernize-use-trailing-return-type,
+    readability-*,
+    -readability-uppercase-literal-suffix,
+    cppcoreguidelines-*,
+    -cppcoreguidelines-pro-type-reinterpret-cast,
+    -cppcoreguidelines-avoid-magic-numbers
 
 WarningsAsErrors: ""
+ExcludeHeaderFilterRegex: ".*_external/.*"
+
+CheckOptions:
+    - key: readability-identifier-length.IgnoredVariableNames
+      value: "^(io|id)$"
+    - key: readability-identifier-length.IgnoredParameterNames
+      value: "^(n|io|id)$"
+    - key: readability-magic-numbers.IgnoredFloatingPointValues
+      value: "1.0;100.0;0.5;2.0"

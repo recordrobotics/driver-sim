@@ -9,7 +9,7 @@ using namespace blackboard::logger;
 
 Discord::Discord()
 {
-    std::string prefPath = SDL_GetPrefPath(NULL, "DriverSim");
+    std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
     discordSDKAsset = std::make_unique<RemoteStoredAsset>(
         "discord_sdk", "2a7c8b043ca04a14a10c64b4f1116fe2a93bb6f6f4f0b4784c0ca1fc06ca832e", prefPath,
@@ -66,7 +66,7 @@ void Discord::updateActivity(const discordpp::Activity &activity)
     {
         client->UpdateRichPresence(
             activity,
-            [](discordpp::ClientResult result)
+            [](const discordpp::ClientResult &result)
             {
                 if (!result.Successful())
                 {
@@ -122,7 +122,7 @@ void Discord::setField(int gameYear, int allianceStation, int driverScore, int o
         assets.SetLargeText("2026 Rebuilt");
     }
 
-    int dsIndex = allianceStation < 1 ? 1 : (allianceStation - 1) % 3 + 1;
+    int dsIndex = allianceStation < 1 ? 1 : ((allianceStation - 1) % 3) + 1;
     assets.SetSmallImage(
         (allianceStation == 1 || allianceStation == 2 || allianceStation == 3) ? "red" : "blue");
     assets.SetSmallText((allianceStation == 1 || allianceStation == 2 || allianceStation == 3)

@@ -3,6 +3,7 @@
 #include "../utils.h"
 #include <bgfx/bgfx.h>
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 #include <spdlog/fmt/fmt.h>
@@ -16,10 +17,10 @@
 #define STR(x) STR_HELPER(x)
 #endif
 
-constexpr uint8_t MESH_SERIALIZATION_MAGIC[] = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 8; // increment to force reload cache
+constexpr std::array<uint8_t, 4> MESH_SERIALIZATION_MAGIC = {0x67, 0x31, 0x67, 0x31};
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 9; // increment to force reload cache
 
-enum class MaterialType
+enum class MaterialType : uint8_t
 {
     Opaque,
     Transparent
@@ -46,7 +47,7 @@ namespace fmt
     };
 } // namespace fmt
 
-typedef struct Material
+struct Material
 {
     MaterialType type;
     std::array<float, 4> baseColor;
@@ -59,29 +60,19 @@ typedef struct Material
     Material()
         : type(MaterialType::Opaque), baseColor{1.0f, 0.0f, 1.0f, 1.0f},
           emissionColor{0.0f, 0.0f, 0.0f, 0.0f}, writesObjectMotionVectors(false), metallic(0.0f),
-          roughness(0.5f), texture("")
+          roughness(0.5f)
     {
     }
 
-    Material(const fastgltf::Material &m, const std::string &nodeName = "")
+    Material(const fastgltf::Material &mat, const std::string &nodeName = "")
+        : baseColor{mat.pbrData.baseColorFactor[0], mat.pbrData.baseColorFactor[1],
+                    mat.pbrData.baseColorFactor[2], mat.pbrData.baseColorFactor[3]},
+          emissionColor{mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2],
+                        mat.emissiveStrength},
+          type(mat.alphaMode == fastgltf::AlphaMode::Blend ? MaterialType::Transparent
+                                                           : MaterialType::Opaque),
+          writesObjectMotionVectors(false)
     {
-        auto &base = m.pbrData.baseColorFactor;
-
-        baseColor[0] = base[0];
-        baseColor[1] = base[1];
-        baseColor[2] = base[2];
-        baseColor[3] = base[3];
-
-        auto &emission = m.emissiveFactor;
-        emissionColor[0] = emission[0];
-        emissionColor[1] = emission[1];
-        emissionColor[2] = emission[2];
-        emissionColor[3] = m.emissiveStrength;
-
-        type = m.alphaMode == fastgltf::AlphaMode::Blend ? MaterialType::Transparent
-                                                         : MaterialType::Opaque;
-        writesObjectMotionVectors = false;
-
         // cad export pbrData is wrong, base it off the node name instead
         if (nodeName.find("FE-" STR(GAME_YEAR) "-01") != std::string::npos)
         {
@@ -115,41 +106,41 @@ typedef struct Material
                bit_equal(metallic, other.metallic) && bit_equal(roughness, other.roughness) &&
                texture == other.texture && type == other.type;
     }
-} Material;
+};
 
-typedef struct MaterialHash
+struct MaterialHash
 {
     std::size_t operator()(const Material &mat) const
     {
-        std::size_t h = 2166136261u;
-        for (std::size_t i = 0; i < mat.baseColor.size(); ++i)
+        std::size_t hash = 2166136261u;
+        for (float color : mat.baseColor)
         {
-            hash_combine(h, mat.baseColor[i]);
+            hash_combine(hash, color);
         }
 
-        for (std::size_t i = 0; i < mat.emissionColor.size(); ++i)
+        for (float color : mat.emissionColor)
         {
-            hash_combine(h, mat.emissionColor[i]);
+            hash_combine(hash, color);
         }
 
-        hash_combine(h, mat.type);
-        hash_combine(h, mat.texture);
-        hash_combine(h, mat.metallic);
-        hash_combine(h, mat.roughness);
+        hash_combine(hash, mat.type);
+        hash_combine(hash, mat.texture);
+        hash_combine(hash, mat.metallic);
+        hash_combine(hash, mat.roughness);
 
-        return h;
+        return hash;
     }
-} MaterialHash;
+};
 
 namespace std
 {
     template <> struct hash<Material>
     {
-        size_t operator()(Material m) const noexcept { return MaterialHash{}(m); }
+        size_t operator()(const Material &mat) const noexcept { return MaterialHash{}(mat); }
     };
 } // namespace std
 
-typedef struct MeshVertex
+struct MeshVertex
 {
     float x, y, z;
     uint32_t normal;
@@ -165,9 +156,9 @@ typedef struct MeshVertex
             .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
             .end();
     }
-} MeshVertex;
+};
 
-typedef struct Mesh
+struct Mesh
 {
     std::string tag;
     Material material;
@@ -179,7 +170,7 @@ typedef struct Mesh
     bgfx::IndexBufferHandle indexBuffer = BGFX_INVALID_HANDLE;
 
     Mesh() = default;
-    Mesh(const Material &mat) : material(mat) {}
+    Mesh(Material mat) : material(std::move(mat)) {}
 
     bool createBuffers()
     {
@@ -235,20 +226,19 @@ typedef struct Mesh
     /**
      * Adds a cube mesh to the specified mesh.
      * @param mesh The mesh to add the cube to.
-     * @param cx The x-coordinate of the cube's center.
-     * @param cy The y-coordinate of the cube's center.
-     * @param cz The z-coordinate of the cube's center.
+     * @param centerX The x-coordinate of the cube's center.
+     * @param centerY The y-coordinate of the cube's center.
+     * @param centerZ The z-coordinate of the cube's center.
      * @param width The width of the cube.
      * @param height The height of the cube.
      * @param depth The depth of the cube.
      * @param projectedUVs Whether to use projected UV coordinates from the +x face (useful if world
      * space orientation of the uvs matters).
      */
-    static void addCube(Mesh &mesh, float cx, float cy, float cz, float width, float height,
-                        float depth, bool projectedUVs = false);
+    static void addCube(Mesh &mesh, float centerX, float centerY, float centerZ, float width,
+                        float height, float depth, bool projectedUVs = false);
 
-    static inline Material *getTaggedMaterial(std::vector<Mesh> &meshes,
-                                              const std::string_view &tag)
+    static Material *getTaggedMaterial(std::vector<Mesh> &meshes, const std::string_view &tag)
     {
         for (auto &mesh : meshes)
         {
@@ -259,4 +249,4 @@ typedef struct Mesh
         }
         return nullptr;
     }
-} Mesh;
+};

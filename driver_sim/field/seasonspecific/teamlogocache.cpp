@@ -27,7 +27,8 @@ static bx::DefaultAllocator allocator;
 
 TeamLogoCache::TeamLogoCache()
 {
-    logoCacheDirectory = std::filesystem::path(SDL_GetPrefPath(NULL, "DriverSim")) / "team_logos";
+    logoCacheDirectory =
+        std::filesystem::path(SDL_GetPrefPath(nullptr, "DriverSim")) / "team_logos";
     if (!std::filesystem::exists(logoCacheDirectory))
     {
         if (!std::filesystem::create_directories(logoCacheDirectory))
@@ -37,7 +38,7 @@ TeamLogoCache::TeamLogoCache()
     }
 
     logger->info("Loading team placeholder");
-    blackboard::gui::load_image((void *)teamplaceholder_png_bytes,
+    blackboard::gui::load_image(static_cast<const void *>(teamplaceholder_png_bytes),
                                 sizeof(teamplaceholder_png_bytes), placeholderTexture,
                                 BGFX_SAMPLER_POINT);
 }
@@ -75,7 +76,7 @@ bimg::ImageContainer *readImage(const char *path)
 
     if (bx::open(&reader, path, &err))
     {
-        uint32_t size = (uint32_t)bx::getSize(&reader);
+        auto size = static_cast<int32_t>(bx::getSize(&reader));
 
         if (size == 0)
         {
@@ -84,7 +85,7 @@ bimg::ImageContainer *readImage(const char *path)
             return nullptr;
         }
 
-        char *data = (char *)bx::alloc(&allocator, size);
+        auto *data = static_cast<char *>(bx::alloc(&allocator, size));
         bx::read(&reader, data, size, &err);
 
         if (!isPng(data, size))
@@ -107,12 +108,9 @@ bimg::ImageContainer *readImage(const char *path)
         bx::free(&allocator, data);
         return image;
     }
-    else
-    {
-        logger->error("Could not open image file: {0}, error: {1}", path,
-                      err.getMessage().getCPtr());
-        return nullptr;
-    }
+
+    logger->error("Could not open image file: {0}, error: {1}", path, err.getMessage().getCPtr());
+    return nullptr;
 }
 
 bool processImage(int teamNumber, bimg::ImageContainer *image,
@@ -149,7 +147,7 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
     {
         return logoCache[teamNumber];
     }
-    else if (logoStates[teamNumber] == LogoState::NotLoaded)
+    if (logoStates[teamNumber] == LogoState::NotLoaded)
     {
         logoStates[teamNumber] = LogoState::Loading;
 
@@ -170,24 +168,22 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                     bimg::ImageContainer *image = readImage(localPath.string().c_str());
                     if (image)
                     {
-                        std::lock_guard<std::mutex> lock(processQueueMutex);
-                        processQueue.push({teamNumber, image});
+                        std::scoped_lock lock(processQueueMutex);
+                        processQueue.emplace(teamNumber, image);
                         return;
                     }
-                    else
+
+                    logger->error("Failed to load cached logo for team {}.", teamNumber);
+                    try
                     {
-                        logger->error("Failed to load cached logo for team {}.", teamNumber);
-                        try
-                        {
-                            std::filesystem::remove(localPath);
-                        }
-                        catch (const std::filesystem::filesystem_error &e)
-                        {
-                            logger->error("Failed to delete corrupted image file {}: {}",
-                                          localPath.string(), e.what());
-                        }
-                        logoStates[teamNumber] = LogoState::Error;
+                        std::filesystem::remove(localPath);
                     }
+                    catch (const std::filesystem::filesystem_error &e)
+                    {
+                        logger->error("Failed to delete corrupted image file {}: {}",
+                                      localPath.string(), e.what());
+                    }
+                    logoStates[teamNumber] = LogoState::Error;
                 }
 
                 logger->info("Starting download of team logo {} from URL: {}", teamNumber,
@@ -206,7 +202,7 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                     return;
                 }
 
-                cpr::Response r = cpr::Download(
+                cpr::Response response = cpr::Download(
                     ofs, cpr::Url{remoteUrl},
                     cpr::ProgressCallback(
                         [this, &stop_token,
@@ -242,14 +238,14 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                     return;
                 }
 
-                if (r.status_code == 200)
+                if (response.status_code == 200)
                 {
                     logger->info("Download complete for URL: {}", remoteUrl);
                     bimg::ImageContainer *image = readImage(localPath.string().c_str());
                     if (image)
                     {
-                        std::lock_guard<std::mutex> lock(processQueueMutex);
-                        processQueue.push({teamNumber, image});
+                        std::scoped_lock lock(processQueueMutex);
+                        processQueue.emplace(teamNumber, image);
                     }
                     else
                     {
@@ -269,7 +265,7 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                 else
                 {
                     logger->error("Failed to download team logo from {}: HTTP {} - {}", remoteUrl,
-                                  r.status_code, r.error.message);
+                                  response.status_code, response.error.message);
                     try
                     {
                         std::filesystem::remove(localPath); // Delete potential files
@@ -280,14 +276,14 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
                                       localPath.string(), e.what());
                     }
 
-                    if (r.error.code != cpr::ErrorCode::OK)
+                    if (response.error.code != cpr::ErrorCode::OK)
                     {
-                        logger->error("Network Error: {} ({})", r.error.message, remoteUrl);
+                        logger->error("Network Error: {} ({})", response.error.message, remoteUrl);
                     }
                     else
                     {
-                        logger->error("HTTP Error {} from: {}", std::to_string(r.status_code),
-                                      remoteUrl);
+                        logger->error("HTTP Error {} from: {}",
+                                      std::to_string(response.status_code), remoteUrl);
                     }
                     try
                     {
@@ -309,7 +305,7 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
 
 void TeamLogoCache::update()
 {
-    std::lock_guard<std::mutex> lock(processQueueMutex);
+    std::scoped_lock lock(processQueueMutex);
     while (!processQueue.empty())
     {
         auto [teamNumber, image] = processQueue.front();

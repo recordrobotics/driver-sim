@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 
-enum class AssetState
+enum class AssetState : uint8_t
 {
     Idle,
     Verifying,
@@ -44,17 +44,22 @@ class StoredAsset
 
     void setError(const std::string &err);
 
-    std::string readSha256(const std::filesystem::path &path);
+    static std::string readSha256(const std::filesystem::path &path);
 
     void deleteOldFiles(const std::filesystem::path &rootFolder);
     void extractZip(const std::filesystem::path &zipPath, const std::filesystem::path &extractTo);
     void cleanupExtractedFiles();
 
   public:
-    StoredAsset(const std::string &relativeExtractPath, const std::string &hash,
+    StoredAsset(const std::string &relativeExtractPath, std::string hash,
                 const std::string &sdlPrefPath);
 
     virtual ~StoredAsset();
+
+    StoredAsset(const StoredAsset &) = delete;
+    StoredAsset &operator=(const StoredAsset &) = delete;
+    StoredAsset(StoredAsset &&) = delete;
+    StoredAsset &operator=(StoredAsset &&) = delete;
 
     void verifyOrDownload();
 

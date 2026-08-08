@@ -1,12 +1,14 @@
 #pragma once
 
+#include <cstdint>
+
 namespace ui
 {
-    enum TransitionState
+    enum class TransitionState : uint8_t
     {
-        TRANSITION_NONE,
-        TRANSITION_FADE_TO_BG,
-        TRANSITION_FADE_FROM_BG
+        None,
+        FadeToBackground,
+        FadeFromBackground
     };
 
     class Transition
@@ -18,12 +20,12 @@ namespace ui
         void update();
         void draw();
 
-        int getCurrentPage() const { return currentPage; }
+        [[nodiscard]] int getCurrentPage() const { return currentPage; }
 
       private:
-        TransitionState state = TRANSITION_NONE;
+        TransitionState state = TransitionState::None;
         float alpha = 0.0f;
-        const float duration;
+        float duration;
 
         int currentPage;
         int targetPage;
