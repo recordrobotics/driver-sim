@@ -7,6 +7,7 @@
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
+using blackboard::gui::string_hex_to_rgba_u32;
 
 namespace settings
 {
@@ -23,6 +24,124 @@ void DrawVerticallyCenteredText(const char *text, float heightAvailable)
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ((heightAvailable - textSize.y) * 0.5f));
     ImGui::TextUnformatted(text);
+}
+
+bool DrawLinkText(const char *label, const char *url = nullptr)
+{
+    if (url == nullptr)
+    {
+        url = label;
+    }
+
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImVec2 size = ImGui::CalcTextSize(label);
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+
+    bool pressed = ImGui::InvisibleButton(label, size);
+
+    bool hovered = ImGui::IsItemHovered();
+    bool active = ImGui::IsItemActive();
+
+    ImU32 col = string_hex_to_rgba_u32("#6C74FAFF");
+
+    if (active)
+    {
+        col = string_hex_to_rgba_u32("#767ce3FF");
+    }
+    else if (hovered)
+    {
+        col = string_hex_to_rgba_u32("#5b63f0FF");
+    }
+
+    if (hovered)
+    {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    if (pressed)
+    {
+        ImGuiPlatformIO &platform_io = ImGui::GetPlatformIO();
+        if (platform_io.Platform_OpenInShellFn != nullptr)
+        {
+            platform_io.Platform_OpenInShellFn(ImGui::GetCurrentContext(), url);
+        }
+    }
+
+    draw->AddText(pos, col, label);
+
+    return pressed;
+}
+
+void drawAboutPanel(ImFont *font)
+{
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    ImGui::Dummy(ImVec2(0, 50.0f * globalScale));
+
+    ImGui::PushFont(nullptr, 13.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#D3D3D3FF"));
+    ImGui::TextUnformatted("About Driver Sim");
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 5.0f * globalScale));
+
+    ImGui::PushFont(nullptr, 10.0f);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));
+    ImGui::TextUnformatted("Version 1.0.0 (2026) Build 2026.7.16+ (Packaged) dc88a1a d1d8cba");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    ImGui::PopStyleColor();
+
+    DrawLinkText("https://github.com/recordrobotics/2026-robot");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    DrawLinkText("https://github.com/recordrobotics/driver-sim");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));
+
+    ImGui::TextUnformatted("Stored Assets");
+    ImGui::Dummy(ImVec2(0, 6.0f * globalScale));
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+    ImGui::TextUnformatted(
+        "jdk:8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5 (remote)");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+    ImGui::TextUnformatted(
+        "elastic:6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7 (remote)");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+    ImGui::TextUnformatted(
+        "field:0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31 (remote)");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+    ImGui::TextUnformatted(
+        "robot:b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462 (remote)");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+    ImGui::TextUnformatted(
+        "jni:0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5 (remote)");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+    ImGui::TextUnformatted(
+        "code:7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878 (packaged)");
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+    ImGui::TextUnformatted(
+        "discord_sdk:2a7c8b043ca04a14a10c64b4f1116fe2a93bb6f6f4f0b4784c0ca1fc06ca832e (remote)");
+
+    ImGui::Dummy(ImVec2(0, 6.0f * globalScale));
+
+    ImGui::PopStyleColor();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#858585FF"));
+    ImGui::TextUnformatted("Made by Record Robotics");
+    ImGui::PopStyleColor();
+
+    ImGui::PopFont();
+
+    ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
 }
 
 void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
@@ -55,13 +174,17 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
             ImGui::Dummy(logoSize);
         }
 
-        ImGui::Dummy(ImVec2(0, 6 * globalScale));
+        ImGui::SameLine();
+        ImGui::Dummy(ImVec2(28.0f * globalScale, 0));
 
+        ImGui::SameLine();
         ImGui::PushFont(nullptr, 35.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#8F8686ff"));
-        DrawVerticallyCenteredText("Driver Sim", logoSize.y);
+        DrawVerticallyCenteredText("Settings", logoSize.y);
         ImGui::PopStyleColor();
         ImGui::PopFont();
+
+        drawAboutPanel(font);
     }
 
     ImGui::End();
