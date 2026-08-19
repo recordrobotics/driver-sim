@@ -328,70 +328,101 @@ bool ui::IconButton(ImFont *font, const char *id, std::string_view text, ImTextu
     return pressed;
 }
 
-inline float AddCenteredWrappedText(ImDrawList *draw, ImFont *font, float fontSize,
-                                    const ImVec2 &pos, float wrapWidth, ImU32 color,
-                                    const char *text, const char *textEnd = nullptr)
+namespace ui
 {
-    if (text == nullptr)
+    inline float AddAlignedWrappedText(ImDrawList *draw, ImFont *font, float fontSize,
+                                       const ImVec2 &pos, float wrapWidth, ImU32 color,
+                                       TextAlign align, const char *text,
+                                       const char *textEnd = nullptr)
     {
-        return 0.0f;
-    }
-
-    if (textEnd == nullptr)
-    {
-        textEnd = text + std::strlen(text);
-    }
-
-    float lineY = pos.y;
-    const float lineHeight = fontSize;
-
-    while (text < textEnd)
-    {
-        const char *lineEnd = font->CalcWordWrapPosition(fontSize, text, textEnd, wrapWidth);
-
-        for (const char *chr = text; chr < lineEnd; ++chr)
+        if (text == nullptr)
         {
-            if (*chr == '\n')
+            return 0.0f;
+        }
+
+        if (textEnd == nullptr)
+        {
+            textEnd = text + std::strlen(text);
+        }
+
+        float lineY = pos.y;
+        const float lineHeight = fontSize;
+
+        while (text < textEnd)
+        {
+            const char *lineEnd = font->CalcWordWrapPosition(fontSize, text, textEnd, wrapWidth);
+
+            for (const char *chr = text; chr < lineEnd; ++chr)
             {
-                lineEnd = chr;
+                if (*chr == '\n')
+                {
+                    lineEnd = chr;
+                    break;
+                }
+            }
+
+            if (lineEnd == text)
+            {
+                if (*text == '\n')
+                {
+                    ++text;
+                    lineY += lineHeight;
+                    continue;
+                }
+
+                unsigned int utfChar{};
+                lineEnd = text + ImTextCharFromUtf8(&utfChar, text, textEnd);
+            }
+
+            const float lineWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text, lineEnd).x;
+
+            switch (align)
+            {
+            case TextAlign::Left:
+                draw->AddText(font, fontSize, ImVec2(pos.x, lineY), color, text, lineEnd);
+                break;
+            case TextAlign::Center:
+                draw->AddText(font, fontSize,
+                              ImVec2(pos.x + ((wrapWidth - lineWidth) * 0.5f), lineY), color, text,
+                              lineEnd);
+                break;
+            case TextAlign::Right:
+                draw->AddText(font, fontSize, ImVec2(pos.x + (wrapWidth - lineWidth), lineY), color,
+                              text, lineEnd);
                 break;
             }
-        }
 
-        if (lineEnd == text)
-        {
-            if (*text == '\n')
+            lineY += lineHeight;
+
+            text = lineEnd;
+
+            if (text < textEnd && *text == '\n')
             {
                 ++text;
-                lineY += lineHeight;
-                continue;
             }
 
-            unsigned int utfChar{};
-            lineEnd = text + ImTextCharFromUtf8(&utfChar, text, textEnd);
+            while (text < textEnd && ImCharIsBlankA(*text))
+            {
+                ++text;
+            }
         }
 
-        const float lineWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text, lineEnd).x;
-
-        draw->AddText(font, fontSize, ImVec2(pos.x + ((wrapWidth - lineWidth) * 0.5f), lineY),
-                      color, text, lineEnd);
-
-        lineY += lineHeight;
-
-        text = lineEnd;
-
-        if (text < textEnd && *text == '\n')
-        {
-            ++text;
-        }
-
-        while (text < textEnd && ImCharIsBlankA(*text))
-        {
-            ++text;
-        }
+        return lineY - pos.y;
     }
+}; // namespace ui
 
-    return lineY - pos.y;
+void ui::TextAlignedWrapped(TextAlign align, const char *text)
+{
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+    ImFont *font = ImGui::GetFont();
+    float fontSize = ImGui::GetFontSize();
+    ImU32 textColor = ImGui::GetColorU32(ImGuiCol_Text);
+
+    float height = AddAlignedWrappedText(draw, font, fontSize, pos,
+                                         ImGui::GetContentRegionAvail().x, textColor, align, text);
+
+    ImGui::Dummy(ImVec2(0, height));
 }
 
 bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name,
@@ -449,12 +480,12 @@ bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name,
 
     const float textWidth = width - (35.0f * globalScale);
 
-    AddCenteredWrappedText(draw, font, descriptionFontSize,
-                           ImVec2(center.x - (textWidth * 0.5f),
-                                  pos.y + (10.0f * globalScale) + imageSize + (1.0f * globalScale) +
-                                      nameSize.y + (5.0f * globalScale)),
-                           textWidth, descriptionColor, description.data(),
-                           description.data() + description.size());
+    AddAlignedWrappedText(draw, font, descriptionFontSize,
+                          ImVec2(center.x - (textWidth * 0.5f),
+                                 pos.y + (10.0f * globalScale) + imageSize + (1.0f * globalScale) +
+                                     nameSize.y + (5.0f * globalScale)),
+                          textWidth, descriptionColor, TextAlign::Center, description.data(),
+                          description.data() + description.size());
 
     return pressed;
 }

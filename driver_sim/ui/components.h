@@ -11,11 +11,20 @@ namespace ui
         bool *state;
     };
 
+    enum class TextAlign
+    {
+        Left,
+        Center,
+        Right
+    };
+
     void DrawCenteredText(const char *text, float yOffset = 0.0f);
     void DrawProgress(const std::string_view &label, float value, bool isError = false);
     void SplitToggleButtonGroup(const std::list<ToggleButton> &buttons);
     bool UnderlineTextButton(const char *text);
     bool CircularButton(const char *id, float radius);
+
+    void TextAlignedWrapped(TextAlign align, const char *text);
 
     bool IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon,
                     float size, float borderSize, float rounding, float fontSize, float textOffset,

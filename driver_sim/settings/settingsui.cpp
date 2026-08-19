@@ -1,5 +1,6 @@
 #include "settingsui.h"
 
+#include "../ui/components.h"
 #include <blackboard_app/gui.h>
 
 #include <logo.png.h>
@@ -144,12 +145,70 @@ void drawAboutPanel(ImFont *font)
     ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
 }
 
+void drawHeader(const char *text)
+{
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    ImGui::Dummy(ImVec2(0, 60.0f * globalScale));
+    ImGui::SameLine();
+    ImGui::PushFont(nullptr, 24.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#928E8Eff"));
+    DrawVerticallyCenteredText(text, 60.0f * globalScale);
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+}
+
+void drawSettingOption(const char *id, const char *name, const char *description)
+{
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    ImGui::PushFont(nullptr, 13.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#8A8A8AFF"));
+    ImGui::TextUnformatted(id);
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+
+    ImGui::PushFont(nullptr, 20.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#D1D1D1FF"));
+    ImGui::TextUnformatted(name);
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 2.0f * globalScale));
+
+    ImGui::Columns(2, nullptr, false);
+    ImGui::SetColumnWidth(0, 370.0f * globalScale);
+    ImGui::PushFont(nullptr, 12.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A7A7A7FF"));
+    ImGui::TextWrapped(description);
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::Dummy(ImVec2(10.0f * globalScale, 0));
+
+    ImGui::NextColumn();
+
+    ImGui::PushFont(nullptr, 11.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#F0F25FFF"));
+    ui::TextAlignedWrapped(ui::TextAlign::Right,
+                           "This value is different from the default of 'true'.");
+    ImGui::PopStyleColor();
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#EC9658FF"));
+    ui::TextAlignedWrapped(ui::TextAlign::Right, "Reset to default");
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+
+    ImGui::Columns(1);
+}
+
 void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
 
-    const ImVec2 padding = ImVec2(40.0f * globalScale, 40.0f * globalScale);
+    const ImVec2 padding = ImVec2(50.0f * globalScale, 40.0f * globalScale);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
 
@@ -157,11 +216,13 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
     ImGui::SetNextWindowSize(viewportSize);
     ImGui::SetNextWindowViewport(viewportId);
 
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings |
                              ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoDocking;
     if (ImGui::Begin("Settings", nullptr, flags))
     {
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 10.0f * globalScale);
         const ImVec2 logoSize(70.0f * globalScale, 70.0f * globalScale);
 
         // Logo
@@ -183,6 +244,30 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
         DrawVerticallyCenteredText("Settings", logoSize.y);
         ImGui::PopStyleColor();
         ImGui::PopFont();
+        ImGui::Dummy(ImVec2(0, 20.0f * globalScale));
+
+        drawHeader("General");
+
+        drawSettingOption(
+            "showMainMenu", "Show main menu",
+            "Determines whether the main menu should show when Driver Sim is started. When false "
+            "Driver Sim opens directly to the 3D field view.");
+        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+
+        drawSettingOption("showExitWarning", "Show exit warning",
+                          "Determines whether to show the warning confirmation message when "
+                          "leaving the 3D field view and going back to the main menu.");
+        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+
+        drawSettingOption("launchRobotCode", "Launch robot code",
+                          "Whether to launch the robot code when opening the 3D field view. "
+                          "Disable if using a separate instance of the robot code, for example "
+                          "when working as a developer on the code.");
+        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+
+        drawHeader("Game Specific");
+        drawHeader("Simulation");
+        drawHeader("Graphics");
 
         drawAboutPanel(font);
     }

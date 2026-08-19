@@ -2430,7 +2430,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
     auto viewport = ImGui::GetMainViewport();
-    float sidebarWidth = 650.0f * globalScale;
+    float sidebarWidth = 610.0f * globalScale;
 
     uint16_t m_width = showSettings ? static_cast<uint16_t>(std::round(window.width - sidebarWidth))
                                     : window.width;
