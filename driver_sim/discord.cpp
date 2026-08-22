@@ -22,7 +22,7 @@ Discord::Discord()
                                             std::chrono::system_clock::now().time_since_epoch())
                                             .count());
 
-    if (settings::enableDiscordSDK)
+    if (settings::current.enableDiscordSDK)
     {
         discordSDKAsset->verifyOrDownload();
     }

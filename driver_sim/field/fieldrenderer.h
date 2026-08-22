@@ -235,8 +235,9 @@ struct RobotData
     RobotData &operator=(RobotData &&) noexcept = default;
 
     RobotData(RobotModel *model);
-    void update(int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects,
-                std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates);
+    void update(
+        int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects,
+        const std::function<frc::Pose3d(const frc::Pose3d &)> &transformPose3dToLocalCoordinates);
 };
 
 struct GamePieceData

@@ -13,7 +13,7 @@ static java_log_manager::UsageStats lastUsageStats{};
 void java_log_manager::enforceFolderLimits()
 {
     UsageStats stats{};
-    stats.maxAllowedBytes = settings::javaLogMaxBytes;
+    stats.maxAllowedBytes = settings::current.javaLogMaxBytes;
     std::string javaLogPath = std::string(SDL_GetPrefPath(nullptr, "DriverSim")) + "code/logs/";
 
     if (!std::filesystem::exists(javaLogPath))

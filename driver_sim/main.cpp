@@ -198,12 +198,12 @@ void initApp()
     fieldAsset->verifyOrDownload();
     robotAsset->verifyOrDownload();
 
-    if (settings::launchElastic)
+    if (settings::current.launchElastic)
     {
         dashboardAsset->verifyOrDownload();
     }
 
-    if (settings::launchRobotCode)
+    if (settings::current.launchRobotCode)
     {
         javaAsset->verifyOrDownload();
         jniAsset->verifyOrDownload();
@@ -248,10 +248,11 @@ void initFieldView()
                                                 "-Djava.library.path=" + prefPath + "jni/release",
                                                 "-jar", prefPath + "code/libs/2026-robot.jar"};
     javaCommandLine.insert(
-        javaCommandLine.end() - 2, settings::jvmArguments.begin(),
-        settings::jvmArguments.end()); // insert JVM arguments before the -jar argument
-    javaCommandLine.insert(javaCommandLine.end(), settings::codeArguments.begin(),
-                           settings::codeArguments.end()); // insert code arguments at the end
+        javaCommandLine.end() - 2, settings::current.jvmArguments.begin(),
+        settings::current.jvmArguments.end()); // insert JVM arguments before the -jar argument
+    javaCommandLine.insert(
+        javaCommandLine.end(), settings::current.codeArguments.begin(),
+        settings::current.codeArguments.end()); // insert code arguments at the end
 
     javaProcess = std::make_unique<ProcessRunner>(
         ProcessRunner::Config{
@@ -259,8 +260,8 @@ void initFieldView()
             .working_directory = prefPath + "code",
             .environment = {{"HALSIM_EXTENSIONS",
                              std::accumulate(
-                                 settings::enabledExtensions.begin(),
-                                 settings::enabledExtensions.end(), std::string(),
+                                 settings::current.enabledExtensions.begin(),
+                                 settings::current.enabledExtensions.end(), std::string(),
                                  [prefPath](const std::string &acc, const std::string &ext)
                                  { return acc + prefPath + "jni/release/" + ext + ".dll;"; })}},
             .kill_parent_on_child_exit = false,
@@ -268,12 +269,12 @@ void initFieldView()
             .use_existing_process = false},
         logger::logger);
 
-    if (settings::launchElastic)
+    if (settings::current.launchElastic)
     {
         elasticProcess->start();
     }
 
-    if (settings::launchRobotCode)
+    if (settings::current.launchRobotCode)
     {
         javaProcess->start();
     }
@@ -283,7 +284,7 @@ void initFieldView()
     fieldRenderer->setRestartSimulationCallback(
         []()
         {
-            if (settings::launchRobotCode)
+            if (settings::current.launchRobotCode)
             {
                 javaProcess->restart();
             }
@@ -298,12 +299,12 @@ void cleanupFieldView()
 
     fieldRenderer.reset();
 
-    if (settings::launchElastic)
+    if (settings::current.launchElastic)
     {
         elasticProcess.reset();
     }
 
-    if (settings::launchRobotCode)
+    if (settings::current.launchRobotCode)
     {
         javaProcess.reset();
     }
@@ -406,20 +407,21 @@ void drawPageLoading()
 
     if (fieldAsset->getState() == AssetState::Complete &&
         robotAsset->getState() == AssetState::Complete &&
-        (!settings::launchElastic || dashboardAsset->getState() == AssetState::Complete) &&
-        (!settings::launchRobotCode || (javaAsset->getState() == AssetState::Complete &&
-                                        jniAsset->getState() == AssetState::Complete &&
-                                        robotCodeAsset->getState() == AssetState::Complete)))
+        (!settings::current.launchElastic || dashboardAsset->getState() == AssetState::Complete) &&
+        (!settings::current.launchRobotCode ||
+         (javaAsset->getState() == AssetState::Complete &&
+          jniAsset->getState() == AssetState::Complete &&
+          robotCodeAsset->getState() == AssetState::Complete)))
     {
         pageTransition.transition(
-            settings::showMainMenu ? PAGE_SELECT : PAGE_3D_FIELD,
+            settings::current.showMainMenu ? PAGE_SELECT : PAGE_3D_FIELD,
             // instant transition if all assets were quick loaded
             fieldAsset->isQuickLoaded() && robotAsset->isQuickLoaded() &&
-                (!settings::launchElastic || dashboardAsset->isQuickLoaded()) &&
-                (!settings::launchRobotCode ||
+                (!settings::current.launchElastic || dashboardAsset->isQuickLoaded()) &&
+                (!settings::current.launchRobotCode ||
                  (javaAsset->isQuickLoaded() && jniAsset->isQuickLoaded() &&
                   robotCodeAsset->isQuickLoaded())));
-        if (!settings::showMainMenu)
+        if (!settings::current.showMainMenu)
         {
             initFieldView();
         }
@@ -427,17 +429,17 @@ void drawPageLoading()
 
     ImGui::Dummy(ImVec2(0, 22 * globalScale));
 
-    if (settings::launchRobotCode)
+    if (settings::current.launchRobotCode)
     {
         drawAssetProgress("Java 17", *javaAsset);
     }
-    if (settings::launchElastic)
+    if (settings::current.launchElastic)
     {
         drawAssetProgress("Elastic Dashboard", *dashboardAsset);
     }
     drawAssetProgress("Field Model", *fieldAsset);
     drawAssetProgress("Robot Model", *robotAsset);
-    if (settings::launchRobotCode)
+    if (settings::current.launchRobotCode)
     {
         drawAssetProgress("JNI Libraries", *jniAsset);
         drawAssetProgress("Robot Code", *robotCodeAsset);
@@ -460,8 +462,8 @@ void drawPageSelect()
 
     ImGui::Dummy(ImVec2(0, 17 * globalScale));
 
-    bool driverStationSelected = settings::enabledExtensions.contains("halsim_ds_socket");
-    bool simGuiSelected = settings::enabledExtensions.contains("halsim_gui");
+    bool driverStationSelected = settings::current.enabledExtensions.contains("halsim_ds_socket");
+    bool simGuiSelected = settings::current.enabledExtensions.contains("halsim_gui");
 
     SplitToggleButtonGroup({
         {"Driver Station", &driverStationSelected},
@@ -470,27 +472,27 @@ void drawPageSelect()
 
     if (driverStationSelected)
     {
-        settings::enabledExtensions.insert("halsim_ds_socket");
+        settings::current.enabledExtensions.insert("halsim_ds_socket");
     }
     else
     {
-        settings::enabledExtensions.erase("halsim_ds_socket");
+        settings::current.enabledExtensions.erase("halsim_ds_socket");
     }
 
     if (simGuiSelected)
     {
-        settings::enabledExtensions.insert("halsim_gui");
+        settings::current.enabledExtensions.insert("halsim_gui");
     }
     else
     {
-        settings::enabledExtensions.erase("halsim_gui");
+        settings::current.enabledExtensions.erase("halsim_gui");
     }
 
     ImGui::Dummy(ImVec2(0, 17 * globalScale));
 
     if (UnderlineTextButton("Don't show again"))
     {
-        settings::showMainMenu = false;
+        settings::current.showMainMenu = false;
         settings::saveSettings();
         pageTransition.transition(PAGE_3D_FIELD);
         initFieldView();
@@ -593,6 +595,21 @@ void drawFPS()
     ImGui::End();
 }
 
+void app_after_events()
+{
+    blackboard::app::Window *main_window = app_ptr->get_main_window();
+    if (main_window->fullscreen != settings::current.fullscreen)
+    {
+        main_window->fullscreen = settings::current.fullscreen;
+        SDL_SetWindowFullscreen(main_window->window, main_window->fullscreen);
+
+        int drawable_width{0};
+        int drawable_height{0};
+        SDL_GetWindowSizeInPixels(main_window->window, &drawable_width, &drawable_height);
+        bgfx::reset(drawable_width, drawable_height, BGFX_RESET_VSYNC);
+    }
+}
+
 void app_update()
 {
     discord->update();
@@ -663,16 +680,17 @@ int main(int argc, char *argv[])
 
     if (api == "auto")
     {
-        api = settings::renderApi;
+        api = settings::current.renderApi;
     }
-    else if (api != settings::renderApi)
+    else if (api != settings::current.renderApi)
     {
-        logger::logger->info("Updating render API from {} to {}", settings::renderApi, api);
-        settings::renderApi = api;
+        logger::logger->info("Updating render API from {} to {}", settings::current.renderApi, api);
+        settings::current.renderApi = api;
         settings::saveSettings();
     }
 
-    blackboard::app::App app("Driver Sim", getRendererApiFromString(api), initApp, app_update);
+    blackboard::app::App app("Driver Sim", getRendererApiFromString(api), initApp, app_update,
+                             app_after_events);
     app_ptr = &app;
     app.run();
 

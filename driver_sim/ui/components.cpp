@@ -425,6 +425,100 @@ void ui::TextAlignedWrapped(TextAlign align, const char *text)
     ImGui::Dummy(ImVec2(0, height));
 }
 
+void ui::DrawVerticallyCenteredText(const char *text, float heightAvailable)
+{
+    ImVec2 textSize = ImGui::CalcTextSize(text);
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ((heightAvailable - textSize.y) * 0.5f));
+    ImGui::TextUnformatted(text);
+}
+
+bool ui::DrawLinkText(const char *label, ui::TextAlign align, ui::LinkTextOptions options,
+                      const char *id, const char *url)
+{
+    if (id == nullptr)
+    {
+        id = label;
+    }
+
+    if (url == nullptr)
+    {
+        url = label;
+    }
+
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImFont *font = ImGui::GetFont();
+    float fontSize = ImGui::GetFontSize();
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+
+    ImVec2 size = ImGui::CalcTextSize(label, nullptr, false, ImGui::GetContentRegionAvail().x);
+
+    switch (align)
+    {
+    case TextAlign::Left:
+        break;
+    case TextAlign::Center:
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                             ((ImGui::GetContentRegionAvail().x - size.x) * 0.5f));
+        break;
+    case TextAlign::Right:
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - size.x);
+        break;
+    }
+
+    bool pressed = ImGui::InvisibleButton(id, size);
+
+    bool hovered = ImGui::IsItemHovered();
+    bool active = ImGui::IsItemActive();
+
+    ImU32 col = options.color;
+
+    if (active)
+    {
+        col = options.activeColor;
+    }
+    else if (hovered)
+    {
+        col = options.hoverColor;
+    }
+
+    if (hovered)
+    {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    if (pressed)
+    {
+        ImGuiPlatformIO &platform_io = ImGui::GetPlatformIO();
+        if (platform_io.Platform_OpenInShellFn != nullptr)
+        {
+            platform_io.Platform_OpenInShellFn(ImGui::GetCurrentContext(), url);
+        }
+    }
+
+    float height = AddAlignedWrappedText(draw, font, fontSize, pos,
+                                         ImGui::GetContentRegionAvail().x, col, align, label);
+
+    if (options.underline)
+    {
+        switch (align)
+        {
+        case TextAlign::Left:
+            break;
+        case TextAlign::Center:
+            pos.x += (ImGui::GetContentRegionAvail().x - size.x) * 0.5f;
+            break;
+        case TextAlign::Right:
+            pos.x += ImGui::GetContentRegionAvail().x - size.x;
+            break;
+        }
+
+        draw->AddLine(ImVec2(pos.x, pos.y + height), ImVec2(pos.x + size.x, pos.y + height), col);
+    }
+
+    return pressed;
+}
+
 bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name,
                       std::string_view description, ImTextureID icon, float width, float height,
                       float globalScale, bool selected)

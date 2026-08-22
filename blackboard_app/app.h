@@ -16,8 +16,9 @@ namespace blackboard::app
         static constexpr uint16_t DEFAULT_HEIGHT = 720u;
 
         App(const char *app_name, renderer::Api renderer_api, const std::function<void()> &on_init,
-            const std::function<void()> &on_update, uint16_t width = DEFAULT_WIDTH,
-            uint16_t height = DEFAULT_HEIGHT, bool fullscreen = false);
+            const std::function<void()> &on_update, const std::function<void()> &after_events,
+            uint16_t width = DEFAULT_WIDTH, uint16_t height = DEFAULT_HEIGHT,
+            bool fullscreen = false);
         ~App();
 
         App(const App &) = delete;
@@ -34,6 +35,7 @@ namespace blackboard::app
       private:
         std::function<void()> on_init;
         std::function<void()> on_update;
+        std::function<void()> after_events;
 
         bool running{true};
         std::unique_ptr<Window> main_window;

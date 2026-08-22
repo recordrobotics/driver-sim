@@ -1,7 +1,14 @@
 #include "settingsui.h"
+#include "settingsstore.h"
 
 #include "../ui/components.h"
 #include <blackboard_app/gui.h>
+
+#include <cstdint>
+#include <format>
+#include <string>
+#include <type_traits>
+#include <vector>
 
 #include <logo.png.h>
 
@@ -18,60 +25,6 @@ namespace settings
 void settings::init(ImTexture &logo) { settings::logo = logo; }
 
 void settings::cleanup() {}
-
-void DrawVerticallyCenteredText(const char *text, float heightAvailable)
-{
-    ImVec2 textSize = ImGui::CalcTextSize(text);
-
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ((heightAvailable - textSize.y) * 0.5f));
-    ImGui::TextUnformatted(text);
-}
-
-bool DrawLinkText(const char *label, const char *url = nullptr)
-{
-    if (url == nullptr)
-    {
-        url = label;
-    }
-
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImVec2 size = ImGui::CalcTextSize(label);
-    ImDrawList *draw = ImGui::GetWindowDrawList();
-
-    bool pressed = ImGui::InvisibleButton(label, size);
-
-    bool hovered = ImGui::IsItemHovered();
-    bool active = ImGui::IsItemActive();
-
-    ImU32 col = string_hex_to_rgba_u32("#6C74FAFF");
-
-    if (active)
-    {
-        col = string_hex_to_rgba_u32("#767ce3FF");
-    }
-    else if (hovered)
-    {
-        col = string_hex_to_rgba_u32("#5b63f0FF");
-    }
-
-    if (hovered)
-    {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-    }
-
-    if (pressed)
-    {
-        ImGuiPlatformIO &platform_io = ImGui::GetPlatformIO();
-        if (platform_io.Platform_OpenInShellFn != nullptr)
-        {
-            platform_io.Platform_OpenInShellFn(ImGui::GetCurrentContext(), url);
-        }
-    }
-
-    draw->AddText(pos, col, label);
-
-    return pressed;
-}
 
 void drawAboutPanel(ImFont *font)
 {
@@ -94,9 +47,9 @@ void drawAboutPanel(ImFont *font)
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
     ImGui::PopStyleColor();
 
-    DrawLinkText("https://github.com/recordrobotics/2026-robot");
+    ui::DrawLinkText("https://github.com/recordrobotics/2026-robot");
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    DrawLinkText("https://github.com/recordrobotics/driver-sim");
+    ui::DrawLinkText("https://github.com/recordrobotics/driver-sim");
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
 
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));
@@ -154,7 +107,7 @@ void drawHeader(const char *text)
     ImGui::SameLine();
     ImGui::PushFont(nullptr, 24.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#928E8Eff"));
-    DrawVerticallyCenteredText(text, 60.0f * globalScale);
+    ui::DrawVerticallyCenteredText(text, 60.0f * globalScale);
     ImGui::PopStyleColor();
     ImGui::PopFont();
 }
@@ -164,19 +117,93 @@ void drawSubHeader(const char *text)
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
 
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 10.0f * globalScale);
+
     ImGui::Dummy(ImVec2(0, 20.0f * globalScale));
     ImGui::SameLine();
     ImGui::PushFont(nullptr, 16.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#9D9D9Dff"));
-    DrawVerticallyCenteredText(text, 20.0f * globalScale);
+    ui::DrawVerticallyCenteredText(text, 20.0f * globalScale);
     ImGui::PopStyleColor();
     ImGui::PopFont();
 }
 
-void drawSettingOption(const char *id, const char *name, const char *description)
+enum class SettingOptionType : uint8_t
+{
+    Bool,
+    Int,
+    U64,
+    U32,
+    U32List,
+    Float,
+    Double,
+    String,
+    StringList,
+};
+
+template <typename T> struct SettingOptionTypeOf;
+
+template <> struct SettingOptionTypeOf<bool>
+{
+    static constexpr auto value = SettingOptionType::Bool;
+};
+
+template <> struct SettingOptionTypeOf<int>
+{
+    static constexpr auto value = SettingOptionType::Int;
+};
+
+template <> struct SettingOptionTypeOf<std::uint64_t>
+{
+    static constexpr auto value = SettingOptionType::U64;
+};
+
+template <> struct SettingOptionTypeOf<std::uint32_t>
+{
+    static constexpr auto value = SettingOptionType::U32;
+};
+
+template <> struct SettingOptionTypeOf<std::vector<std::uint32_t>>
+{
+    static constexpr auto value = SettingOptionType::U32List;
+};
+
+template <> struct SettingOptionTypeOf<float>
+{
+    static constexpr auto value = SettingOptionType::Float;
+};
+
+template <> struct SettingOptionTypeOf<double>
+{
+    static constexpr auto value = SettingOptionType::Double;
+};
+
+template <> struct SettingOptionTypeOf<std::string>
+{
+    static constexpr auto value = SettingOptionType::String;
+};
+
+template <> struct SettingOptionTypeOf<std::vector<std::string>>
+{
+    static constexpr auto value = SettingOptionType::StringList;
+};
+
+template <typename T> struct SettingOptionData
+{
+    static constexpr SettingOptionType type = SettingOptionTypeOf<T>::value;
+
+    T *value;
+    T defaultValue;
+};
+
+template <typename T>
+void drawSettingOption(const char *id, const char *name, const char *description,
+                       SettingOptionData<T> data)
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15.0f * globalScale);
 
     ImGui::PushFont(nullptr, 13.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#8A8A8AFF"));
@@ -185,15 +212,23 @@ void drawSettingOption(const char *id, const char *name, const char *description
     ImGui::PopFont();
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
 
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15.0f * globalScale);
+
     ImGui::PushFont(nullptr, 20.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#D1D1D1FF"));
     ImGui::TextUnformatted(name);
     ImGui::PopStyleColor();
     ImGui::PopFont();
+
+    ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                    20.0f * globalScale);
+    ImGui::Checkbox((std::string("value_") + id).c_str(), data.value);
+
     ImGui::Dummy(ImVec2(0, 2.0f * globalScale));
 
     ImGui::Columns(2, nullptr, false);
-    ImGui::SetColumnWidth(0, 370.0f * globalScale);
+    ImGui::SetColumnWidth(0, 355.0f * globalScale);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15.0f * globalScale);
     ImGui::PushFont(nullptr, 12.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A7A7A7FF"));
     ImGui::TextWrapped(description);
@@ -204,15 +239,26 @@ void drawSettingOption(const char *id, const char *name, const char *description
 
     ImGui::NextColumn();
 
-    ImGui::PushFont(nullptr, 11.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#F0F25FFF"));
-    ui::TextAlignedWrapped(ui::TextAlign::Right,
-                           "This value is different from the default of 'true'.");
-    ImGui::PopStyleColor();
-    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#EC9658FF"));
-    ui::TextAlignedWrapped(ui::TextAlign::Right, "Reset to default");
-    ImGui::PopStyleColor();
-    ImGui::PopFont();
+    if (*data.value != data.defaultValue)
+    {
+        ImGui::PushFont(nullptr, 11.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#F0F25FFF"));
+        ui::TextAlignedWrapped(
+            ui::TextAlign::Right,
+            std::format("This value is different from the default of '{}'.", data.defaultValue)
+                .c_str());
+        ImGui::PopStyleColor();
+        if (ui::DrawLinkText("Reset to default", ui::TextAlign::Right,
+                             {.underline = true,
+                              .color = string_hex_to_rgba_u32("#EC9658FF"),
+                              .hoverColor = string_hex_to_rgba_u32("#de8647FF"),
+                              .activeColor = string_hex_to_rgba_u32("#ba7849FF")},
+                             (std::string("reset_") + id).c_str()))
+        {
+            *data.value = data.defaultValue;
+        }
+        ImGui::PopFont();
+    }
 
     ImGui::Columns(1);
 }
@@ -255,195 +301,273 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
         ImGui::SameLine();
         ImGui::PushFont(nullptr, 35.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#8F8686ff"));
-        DrawVerticallyCenteredText("Settings", logoSize.y);
+        ui::DrawVerticallyCenteredText("Settings", logoSize.y);
         ImGui::PopStyleColor();
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, 20.0f * globalScale));
 
-        drawHeader("General");
+        auto spacer = ImVec2(0, 7.0f * globalScale);
 
-        drawSettingOption(
+        drawHeader("General");
+        ImGui::Dummy(spacer);
+
+        drawSettingOption<bool>(
             "showMainMenu", "Show main menu",
             "Determines whether the main menu should show when Driver Sim is started. When false "
-            "Driver Sim opens directly to the 3D field view.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "Driver Sim opens directly to the 3D field view.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("showExitWarning", "Show exit warning",
-                          "Determines whether to show the warning confirmation message when "
-                          "leaving the 3D field view and going back to the main menu.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("showExitWarning", "Show exit warning",
+                                "Determines whether to show the warning confirmation message when "
+                                "leaving the 3D field view and going back to the main menu.",
+                                {.value = &settings::current.showExitWarning,
+                                 .defaultValue = settings::makeDefault().showExitWarning});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("launchRobotCode", "Launch robot code",
-                          "Whether to launch the robot code when opening the 3D field view. "
-                          "Disable if using a separate instance of the robot code, for example "
-                          "when working as a developer on the code.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "launchRobotCode", "Launch robot code",
+            "Whether to launch the robot code when opening the 3D field view. "
+            "Disable if using a separate instance of the robot code, for example "
+            "when working as a developer on the code.",
+            {.value = &settings::current.launchRobotCode,
+             .defaultValue = settings::makeDefault().launchRobotCode});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "launchElastic", "Launch Elastic",
             "Whether to launch the Elastic dashboard when opening the 3D field view. Disable if "
             "you prefer to not have the dashboard open or are using a separate instance of "
             "Elastic, for example when working as a developer on the robot code. Note that even if "
             "this is enabled, if an existing Elastic instance is already running it will NOT "
-            "launch a second instance.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "launch a second instance.",
+            {.value = &settings::current.launchElastic,
+             .defaultValue = settings::makeDefault().launchElastic});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("enableDiscordSDK", "Enable Discord SDK",
-                          "When enabled, the Discord SDK binary is downloaded and enables Discord "
-                          "integration features like Rich Presence. Requires restart.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "enableDiscordSDK", "Enable Discord SDK",
+            "When enabled, the Discord SDK binary is downloaded and enables Discord "
+            "integration features like Rich Presence. Requires restart.",
+            {.value = &settings::current.enableDiscordSDK,
+             .defaultValue = settings::makeDefault().enableDiscordSDK});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("fullscreen", "Fullscreen window",
-                          "When enabled, Driver Sim runs in fullscreen mode.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("fullscreen", "Fullscreen window",
+                                "When enabled, Driver Sim runs in fullscreen mode.",
+                                {.value = &settings::current.fullscreen,
+                                 .defaultValue = settings::makeDefault().fullscreen});
+        ImGui::Dummy(spacer);
 
         drawHeader("Game Specific");
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("gameTeam", "Team number",
-                          "This is your team number. It is shown in the FMS ui at the position "
-                          "your alliance station is set to.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "gameTeam", "Team number",
+            "This is your team number. It is shown in the FMS ui at the position "
+            "your alliance station is set to.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("gameTeamPool", "Team pool",
-                          "These are the other 5 team numbers to populate the FMS ui with. The "
-                          "order is chosen randomly based on your alliance station.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "gameTeamPool", "Team pool",
+            "These are the other 5 team numbers to populate the FMS ui with. The "
+            "order is chosen randomly based on your alliance station.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("gameMatchType", "Match type", "The match type shown in the FMS ui.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("gameMatchType", "Match type",
+                                "The match type shown in the FMS ui.",
+                                {.value = &settings::current.showMainMenu,
+                                 .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("gameMatchNumber", "Match number",
-                          "The match number shown in the FMS ui.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("gameMatchNumber", "Match number",
+                                "The match number shown in the FMS ui.",
+                                {.value = &settings::current.showMainMenu,
+                                 .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("gameMatchTotal", "Total matches",
-                          "The total match number shown in the FMS ui.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("gameMatchTotal", "Total matches",
+                                "The total match number shown in the FMS ui.",
+                                {.value = &settings::current.showMainMenu,
+                                 .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
         drawSubHeader("Rebuilt 2026");
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("rebuilt2026.energizedRPThreshold", "Energized RP threshold",
-                          "The displayed energized RP threshold in the FMS score ui.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("rebuilt2026.energizedRPThreshold", "Energized RP threshold",
+                                "The displayed energized RP threshold in the FMS score ui.",
+                                {.value = &settings::current.showMainMenu,
+                                 .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("rebuilt2026.superchargedRPThreshold", "Supercharged RP threshold",
-                          "The displayed supercharged RP threshold in the FMS score ui.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("rebuilt2026.superchargedRPThreshold", "Supercharged RP threshold",
+                                "The displayed supercharged RP threshold in the FMS score ui.",
+                                {.value = &settings::current.showMainMenu,
+                                 .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
         drawSubHeader("3D Field");
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("viewMode", "View mode",
-                          "The targeting mode used by the camera in the 3D field. The preferred "
-                          "way to change this is in the View Mode menu.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "viewMode", "View mode",
+            "The targeting mode used by the camera in the 3D field. The preferred "
+            "way to change this is in the View Mode menu.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "cameraFov", "Camera field of view",
-            "The vertical field of view in degrees to use for the camera in the 3D field.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "The vertical field of view in degrees to use for the camera in the 3D field.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("cameraTarget", "Camera robot target",
-                          "The robot to target when the camera is in one of the robot view modes. "
-                          "The preferred way to change this is in the View Mode menu.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "cameraTarget", "Camera robot target",
+            "The robot to target when the camera is in one of the robot view modes. "
+            "The preferred way to change this is in the View Mode menu.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
         drawHeader("Simulation");
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("enabledExtensions", "Enabled extensions",
-                          "The extensions to enable when running the simulation. The preferred way "
-                          "to change these is in the main menu.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "enabledExtensions", "Enabled extensions",
+            "The extensions to enable when running the simulation. The preferred way "
+            "to change these is in the main menu.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("jvmArguments", "JVM arguments",
-                          "The arguments to pass to the JVM when running the simulation. Use this "
-                          "to set system flags or properties.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "jvmArguments", "JVM arguments",
+            "The arguments to pass to the JVM when running the simulation. Use this "
+            "to set system flags or properties.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "codeArguments", "Code arguments",
-            "The arguments to pass to the robot code main method when running the simulation.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "The arguments to pass to the robot code main method when running the simulation.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "javaLogMaxBytes", "Max log size",
             "The maximum size of the robot code logs. Accepts values in the general formats: 64, "
             "64 b(B), 8 kb(KB), 64 mb(MB), 2 gb(GB), 1 tb(TB), etc. When this limit is reached "
             "Driver Sim deletes oldest logs first until enough storage space is restored. This "
-            "process is run on both startup and exit.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "process is run on both startup and exit.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "ntPeriodic", "NetworkTables update interval",
             "The interval in seconds at which to subscribe for updates to the simulation "
             "NetworkTables server. A larger interval results in a more “sluggish” or “overly "
             "smooth” behavior, while a smaller interval results in a more responsive experience "
             "but can occasionally stutter depending on system performance. It is recommended to "
             "set this value slightly above the robot simulation periodic interval to avoid "
-            "aliasing issues with the frame interpolation logic.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "aliasing issues with the frame interpolation logic.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "enableFrameInterpolation", "Enable Frame Interpolation",
             "Whether to smoothly interpolate between NetworkTables updates for clearer motion on "
             "the screen and to support motion blur. When disabled, objects only move when a new "
             "position is received from the simulation, resulting in jerky movements if the render "
-            "frame rate is faster than the update interval.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "frame rate is faster than the update interval.",
+            {.value = &settings::current.enableFrameInterpolation,
+             .defaultValue = settings::makeDefault().enableFrameInterpolation});
+        ImGui::Dummy(spacer);
 
         drawHeader("Graphics");
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "renderApi", "Render API",
             "Specify which rendering API Driver Sim should use. Auto uses 'd3d11' on Windows and "
             "'metal' on macOS. It is strongly recommended to use either 'vulkan' or 'd3d12' on "
-            "Windows due to graphical inconsistencies on d3d11. Requires restart.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "Windows due to graphical inconsistencies on d3d11. Requires restart.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("enableVSync", "Enable V-Sync",
-                          "When enabled, the frame rate is capped at your screen’s refresh rate. "
-                          "If disabled you may see screen tearing artifacts when your frame rate "
-                          "is higher than the refresh rate.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "enableVSync", "Enable V-Sync",
+            "When enabled, the frame rate is capped at your screen's refresh rate. "
+            "If disabled you may see screen tearing artifacts when your frame rate "
+            "is higher than the refresh rate.",
+            {.value = &settings::current.enableVSync,
+             .defaultValue = settings::makeDefault().enableVSync});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("updateWhileMinimized", "Update while minimized",
-                          "When disabled, Driver Sim pauses all periodic work until the window is "
-                          "shown again. A brief visual artifact will be seen as Driver Sim catches "
-                          "up with the robot simulation after being restored. Note that the robot "
-                          "simulation keeps running in the background regardless.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "updateWhileMinimized", "Update while minimized",
+            "When disabled, Driver Sim pauses all periodic work until the window is "
+            "shown again. A brief visual artifact will be seen as Driver Sim catches "
+            "up with the robot simulation after being restored. Note that the robot "
+            "simulation keeps running in the background regardless.",
+            {.value = &settings::current.updateWhileMinimized,
+             .defaultValue = settings::makeDefault().updateWhileMinimized});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "useFullDetailRobotModel", "Use full detail robot model",
             "The full detail robot model is the original unmodified 3D model provided by the robot "
             "asset. Driver Sim automatically performs simplification and optimization steps on the "
             "model to increase performance. This setting lets you optionally choose where to bring "
-            "back the full detail robot model.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "back the full detail robot model.",
+            {.value = &settings::current.showMainMenu,
+             .defaultValue = settings::makeDefault().showMainMenu});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "cacheModels", "Cache 3D models",
             "Whether to cache the pre-processed 3D model files. When enabled, this significantly "
             "lowers startup time (by a factor of 10x or more) however uses around 2-3x more disk "
-            "space. It is strongly recommended to keep this enabled if possible.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "space. It is strongly recommended to keep this enabled if possible.",
+            {.value = &settings::current.cacheModels,
+             .defaultValue = settings::makeDefault().cacheModels});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "writeObjectMotionVectors", "Write object motion vectors",
             "Whether to compute and write motion vectors for moving objects such as the robot or "
             "game pieces on the field. This does not affect motion vectors generated from camera "
             "movement. When enabled, motion blur is added when the robot or game pieces move. If "
             "the robot code simulation does not support identities for Pose3d's it is recommended "
             "to disable this to avoid possible visual glitches from objects changing their order "
-            "in the array.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "in the array.",
+            {.value = &settings::current.writeObjectMotionVectors,
+             .defaultValue = settings::makeDefault().writeObjectMotionVectors});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("enableGTAO", "Enable GTAO",
-                          "This effect adds realistic ambient occlusion on opaque geometry such as "
-                          "in corners where light can't easily reach the surface. Massively "
-                          "improves visual quality but decreases performance slightly.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "enableGTAO", "Enable GTAO",
+            "This effect adds realistic ambient occlusion on opaque geometry such as "
+            "in corners where light can't easily reach the surface. Massively "
+            "improves visual quality but decreases performance slightly.",
+            {.value = &settings::current.enableGTAO,
+             .defaultValue = settings::makeDefault().enableGTAO});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption(
+        drawSettingOption<bool>(
             "enableTAA", "Enable TAA",
             "This effect adds temporal antialiasing which smooths pixelated lines and aliased "
             "details on screen. Improves general visual quality but can introduce ghosting "
@@ -451,25 +575,35 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
             "recommended to keep this enabled when GTAO is enabled to provide additional temporal "
             "denoising effects. It is strongly recommended to keep writeObjectMotionVectors "
             "enabled when TAA is enabled to avoid distracting blurring and smudging artifacts on "
-            "the robot and game pieces in motion.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+            "the robot and game pieces in motion.",
+            {.value = &settings::current.enableTAA,
+             .defaultValue = settings::makeDefault().enableTAA});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("enableMotionBlur", "Enable motion blur",
-                          "This effect adds a motion blur on the screen when the camera or objects "
-                          "move quickly. Improves visual quality on fast moving game pieces (like "
-                          "balls being shot) but can decrease performance slightly.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "enableMotionBlur", "Enable motion blur",
+            "This effect adds a motion blur on the screen when the camera or objects "
+            "move quickly. Improves visual quality on fast moving game pieces (like "
+            "balls being shot) but can decrease performance slightly.",
+            {.value = &settings::current.enableMotionBlur,
+             .defaultValue = settings::makeDefault().enableMotionBlur});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("enableBloom", "Enable bloom",
-                          "When enabled, this adds a glow effect to bright elements on the screen. "
-                          "Massively improves visual quality for lights and LEDs on the robot and "
-                          "field but can decrease performance slightly.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>(
+            "enableBloom", "Enable bloom",
+            "When enabled, this adds a glow effect to bright elements on the screen. "
+            "Massively improves visual quality for lights and LEDs on the robot and "
+            "field but can decrease performance slightly.",
+            {.value = &settings::current.enableBloom,
+             .defaultValue = settings::makeDefault().enableBloom});
+        ImGui::Dummy(spacer);
 
-        drawSettingOption("enableDebugMenu", "Enable debug menu",
-                          "When enabled, shows a debug menu on the 3D field view. Useful for "
-                          "changing effect settings or viewing debug data from shaders.");
-        ImGui::Dummy(ImVec2(0, 7.0f * globalScale));
+        drawSettingOption<bool>("enableDebugMenu", "Enable debug menu",
+                                "When enabled, shows a debug menu on the 3D field view. Useful for "
+                                "changing effect settings or viewing debug data from shaders.",
+                                {.value = &settings::current.enableDebugMenu,
+                                 .defaultValue = settings::makeDefault().enableDebugMenu});
+        ImGui::Dummy(spacer);
 
         drawAboutPanel(font);
     }

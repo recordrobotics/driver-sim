@@ -25,9 +25,10 @@ namespace blackboard::app
 
     App::App(const char *app_name, const renderer::Api renderer_api,
              const std::function<void()> &on_init, const std::function<void()> &on_update,
-             const uint16_t width, const uint16_t height, const bool fullscreen)
+             const std::function<void()> &after_events, const uint16_t width, const uint16_t height,
+             const bool fullscreen)
         : main_window{std::make_unique<Window>()}, m_renderer_api{renderer_api}, on_init{on_init},
-          on_update{on_update}
+          on_update{on_update}, after_events{after_events}
     {
         if (!SDL_Init(SDL_INIT_VIDEO))
         {
@@ -137,16 +138,8 @@ namespace blackboard::app
 
                     if (event.type == SDL_EVENT_KEY_DOWN && is_main_window)
                     {
-                        // Toggle fullscreen on F11
-                        if (event.key.key == SDLK_F11 &&
-                            false) // TODO: make this a setting and add window position persistence
-                                   // (including fullscreen state)
-                        {
-                            main_window->fullscreen = !main_window->fullscreen;
-                            SDL_SetWindowFullscreen(main_window->window, main_window->fullscreen);
-                        }
 #ifdef _DEBUG
-                        else if (event.key.key == SDLK_F10)
+                        if (event.key.key == SDLK_F10)
                         {
                             renderer::set_bgfx_debug_flags(renderer::get_bgfx_debug_flags() ^
                                                            (BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS));
@@ -168,6 +161,8 @@ namespace blackboard::app
                         renderer::ImGui_Impl_sdl_bgfx_Resize(main_window->window);
                     }
                 }
+
+                after_events();
 
                 renderer::ImGui_Impl_sdl_bgfx_NewFrame();
                 ImGui_ImplSDL3_NewFrame();

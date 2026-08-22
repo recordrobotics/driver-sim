@@ -22,13 +22,13 @@ void TeamAssigner::update(int allianceStation)
 
     // Alliance station mapping: 1=red1, 2=red2, 3=red3, 4=blue1, 5=blue2, 6=blue3
     // Indices: 0=first, 1=second, 2=third
-    std::vector<uint32_t> pool = settings::gameTeamPool;
+    std::vector<uint32_t> pool = settings::current.gameTeamPool;
 
     // Place game team
-    teamNumbers[allianceStation - 1] = settings::gameTeam;
+    teamNumbers[allianceStation - 1] = settings::current.gameTeam;
 
     // Remove game team from pool
-    std::erase(pool, settings::gameTeam);
+    std::erase(pool, settings::current.gameTeam);
 
     // Randomly shuffle with alliance station as seed
     std::mt19937 rng(allianceStation);

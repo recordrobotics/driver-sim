@@ -11,15 +11,15 @@ using namespace blackboard::logger;
 
 namespace nlohmann
 {
-    template <> struct adl_serializer<settings::Rebuilt2026>
+    template <> struct adl_serializer<settings::Store::Rebuilt2026>
     {
-        static void to_json(json &json, const settings::Rebuilt2026 &value)
+        static void to_json(json &json, const settings::Store::Rebuilt2026 &value)
         {
             json = {{"energizedRPThreshold", value.energizedRPThreshold},
                     {"superchargedRPThreshold", value.superchargedRPThreshold}};
         }
 
-        static settings::Rebuilt2026 from_json(const json &json)
+        static settings::Store::Rebuilt2026 from_json(const json &json)
         {
             return {.energizedRPThreshold = json.at("energizedRPThreshold").get<int>(),
                     .superchargedRPThreshold = json.at("superchargedRPThreshold").get<int>()};
@@ -70,68 +70,69 @@ namespace nlohmann
             throw std::invalid_argument("Invalid camera view");
         }
     };
+
+    template <> struct adl_serializer<RobotModelSimplificationMode>
+    {
+        static void to_json(json &json, const RobotModelSimplificationMode &value)
+        {
+            switch (value)
+            {
+            case RobotModelSimplificationMode::Never:
+                json = "never";
+                break;
+            case RobotModelSimplificationMode::Distance:
+                json = "distance";
+                break;
+            case RobotModelSimplificationMode::MainRobot:
+                json = "main-robot";
+                break;
+            case RobotModelSimplificationMode::Always:
+                json = "always";
+                break;
+            }
+        }
+
+        static RobotModelSimplificationMode from_json(const json &json)
+        {
+            std::string mode = json.get<std::string>();
+            if (mode == "never")
+            {
+                return RobotModelSimplificationMode::Never;
+            }
+            if (mode == "distance")
+            {
+                return RobotModelSimplificationMode::Distance;
+            }
+            if (mode == "main-robot")
+            {
+                return RobotModelSimplificationMode::MainRobot;
+            }
+            if (mode == "always")
+            {
+                return RobotModelSimplificationMode::Always;
+            }
+
+            throw std::invalid_argument("Invalid robot model simplification mode");
+        }
+    };
 } // namespace nlohmann
 
 namespace settings
 {
+    Store current;
+
     // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables,readability-magic-numbers)
-
-    bool enableTAA = true;
-    bool enableMotionBlur = true;
-    bool enableBloom = true;
-    bool enableGTAO = true;
-    bool writeObjectMotionVectors = true;
-    bool enableVSync = true;
-    bool enableDebugMenu = false;
-
-    bool showMainMenu = true;
-    bool cacheModels = true;
-    std::vector<std::string> jvmArguments;
-    std::vector<std::string> codeArguments;
-
-    std::unordered_set<std::string> enabledExtensions;
-    bool launchElastic = true;
-    bool launchRobotCode = true;
-    double ntPeriodic = 0.022;
-    bool enableFrameInterpolation = true;
-
-    bool enableDiscordSDK = true;
-
-    uint64_t javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
-
-    uint32_t gameTeam = 6731;
-    std::vector<uint32_t> gameTeamPool = {151, 69, 97, 4169, 246};
-    uint32_t gameMatchType = 2;
-    uint32_t gameMatchNumber = 42;
-    uint32_t gameMatchTotal = 76;
-
-    std::string renderApi = "auto";
-    bool updateWhileMinimized = true;
-
-    Rebuilt2026 rebuilt2026 = {.energizedRPThreshold = 100, .superchargedRPThreshold = 360};
-
-    CameraView viewMode = CameraView::Field;
-    float cameraFov = 60.0f;
-    std::vector<uint32_t> cameraTarget = {0, 0};
-
-    void loadDefaultSettings()
+    Store makeDefault()
     {
-        logger->info("Loading default settings.");
-        enableTAA = true;
-        enableMotionBlur = true;
-        enableBloom = true;
-        enableGTAO = true;
-        writeObjectMotionVectors = true;
-        enableVSync = true;
-        enableDebugMenu = false;
-        showMainMenu = true;
-        cacheModels = true;
-        jvmArguments = {};
-        codeArguments = {};
+        static Store store;
+        static bool initialized = false;
 
-        enableFrameInterpolation = true;
-        updateWhileMinimized = true;
-        renderApi = "auto";
+        if (initialized)
+        {
+            return store;
+        }
+
+        std::unordered_set<std::string> enabledExtensions;
 
         if (std::filesystem::exists(
                 R"(C:\Program Files (x86)\FRC Driver Station\DriverStation.exe)"))
@@ -143,25 +144,62 @@ namespace settings
             enabledExtensions = {"halsim_gui"};
         }
 
-        launchElastic = true;
-        launchRobotCode = true;
-        ntPeriodic = 0.022;
+        store = {
+            // General
 
-        enableDiscordSDK = true;
+            .showMainMenu = true,
+            .showExitWarning = true,
+            .launchRobotCode = true,
+            .launchElastic = true,
+            .enableDiscordSDK = true,
+            .fullscreen = false,
 
-        javaLogMaxBytes = 1024ull * 1024ull * 1024ull; // 1 GB
+            // Game Specific
 
-        gameTeam = 6731;
-        gameTeamPool = {151, 69, 97, 4169, 246};
-        gameMatchType = 2;
-        gameMatchNumber = 42;
-        gameMatchTotal = 76;
+            .gameTeam = 6731,
+            .gameTeamPool = {151, 69, 97, 4169, 246},
+            .gameMatchType = 2,
+            .gameMatchNumber = 42,
+            .gameMatchTotal = 76,
 
-        rebuilt2026 = {.energizedRPThreshold = 100, .superchargedRPThreshold = 360};
+            .rebuilt2026 = {.energizedRPThreshold = 100, .superchargedRPThreshold = 360},
 
-        viewMode = CameraView::Field;
-        cameraFov = 60.0f;
-        cameraTarget = {0, 0};
+            .viewMode = CameraView::Field,
+            .cameraFov = 60.0f,
+            .cameraTarget = {0, 0},
+
+            // Simulation
+
+            .enabledExtensions = enabledExtensions,
+            .jvmArguments = {},
+            .codeArguments = {},
+            .javaLogMaxBytes = 1024ull * 1024ull * 1024ull, // 1 GB
+            .ntPeriodic = 0.022,
+            .enableFrameInterpolation = true,
+
+            // Graphics
+
+            .renderApi = "auto",
+            .enableVSync = true,
+            .updateWhileMinimized = true,
+            .useFullDetailRobotModel = RobotModelSimplificationMode::Distance,
+            .cacheModels = true,
+            .writeObjectMotionVectors = true,
+            .enableGTAO = true,
+            .enableTAA = true,
+            .enableMotionBlur = true,
+            .enableBloom = true,
+            .enableDebugMenu = false,
+        };
+
+        initialized = true;
+        return store;
+    }
+
+    void loadDefaultSettings()
+    {
+        logger->info("Loading default settings.");
+        current = makeDefault();
     }
 
     // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables,readability-magic-numbers)
@@ -233,6 +271,8 @@ namespace settings
 
     void loadSettings()
     {
+        current = makeDefault();
+
         std::string settingsPath =
             std::string(SDL_GetPrefPath(nullptr, "DriverSim")) + "settings.json";
         bx::Error error;
@@ -262,45 +302,56 @@ namespace settings
             data[size] = '\0';
             nlohmann::json json = nlohmann::json::parse(data.data());
 
-            enableTAA = json.value("enableTAA", enableTAA);
-            enableMotionBlur = json.value("enableMotionBlur", enableMotionBlur);
-            enableBloom = json.value("enableBloom", enableBloom);
-            enableGTAO = json.value("enableGTAO", enableGTAO);
-            writeObjectMotionVectors =
-                json.value("writeObjectMotionVectors", writeObjectMotionVectors);
-            enableVSync = json.value("enableVSync", enableVSync);
-            enableDebugMenu = json.value("enableDebugMenu", enableDebugMenu);
+            // General
 
-            showMainMenu = json.value("showMainMenu", showMainMenu);
-            cacheModels = json.value("cacheModels", cacheModels);
-            jvmArguments = json.value("jvmArguments", jvmArguments);
-            codeArguments = json.value("codeArguments", codeArguments);
-            enabledExtensions = json.value("enabledExtensions", enabledExtensions);
-            launchElastic = json.value("launchElastic", launchElastic);
-            launchRobotCode = json.value("launchRobotCode", launchRobotCode);
-            ntPeriodic = json.value("ntPeriodic", ntPeriodic);
-            enableFrameInterpolation =
-                json.value("enableFrameInterpolation", enableFrameInterpolation);
+            current.showMainMenu = json.value("showMainMenu", current.showMainMenu);
+            current.showExitWarning = json.value("showExitWarning", current.showExitWarning);
+            current.launchRobotCode = json.value("launchRobotCode", current.launchRobotCode);
+            current.launchElastic = json.value("launchElastic", current.launchElastic);
+            current.enableDiscordSDK = json.value("enableDiscordSDK", current.enableDiscordSDK);
+            current.fullscreen = json.value("fullscreen", current.fullscreen);
 
-            enableDiscordSDK = json.value("enableDiscordSDK", enableDiscordSDK);
+            // Game Specific
 
-            javaLogMaxBytes = parseHumanSizeToBytes(
-                json.value("javaLogMaxBytes", humanReadableSize(javaLogMaxBytes)));
+            current.gameTeam = json.value("gameTeam", current.gameTeam);
+            current.gameTeamPool = json.value("gameTeamPool", current.gameTeamPool);
+            current.gameMatchType = json.value("gameMatchType", current.gameMatchType);
+            current.gameMatchNumber = json.value("gameMatchNumber", current.gameMatchNumber);
+            current.gameMatchTotal = json.value("gameMatchTotal", current.gameMatchTotal);
 
-            gameTeam = json.value("gameTeam", gameTeam);
-            gameTeamPool = json.value("gameTeamPool", gameTeamPool);
-            gameMatchType = json.value("gameMatchType", gameMatchType);
-            gameMatchNumber = json.value("gameMatchNumber", gameMatchNumber);
-            gameMatchTotal = json.value("gameMatchTotal", gameMatchTotal);
+            current.rebuilt2026 = json.value("rebuilt2026", current.rebuilt2026);
 
-            renderApi = json.value("renderApi", renderApi);
-            updateWhileMinimized = json.value("updateWhileMinimized", updateWhileMinimized);
+            current.viewMode = json.value("viewMode", current.viewMode);
+            current.cameraFov = json.value("cameraFov", current.cameraFov);
+            current.cameraTarget = json.value("cameraTarget", current.cameraTarget);
 
-            rebuilt2026 = json.value("rebuilt2026", rebuilt2026);
+            // Simulation
 
-            viewMode = json.value("viewMode", viewMode);
-            cameraFov = json.value("cameraFov", cameraFov);
-            cameraTarget = json.value("cameraTarget", cameraTarget);
+            current.enabledExtensions = json.value("enabledExtensions", current.enabledExtensions);
+            current.jvmArguments = json.value("jvmArguments", current.jvmArguments);
+            current.codeArguments = json.value("codeArguments", current.codeArguments);
+            current.javaLogMaxBytes = parseHumanSizeToBytes(
+                json.value("javaLogMaxBytes", humanReadableSize(current.javaLogMaxBytes)));
+            current.ntPeriodic = json.value("ntPeriodic", current.ntPeriodic);
+            current.enableFrameInterpolation =
+                json.value("enableFrameInterpolation", current.enableFrameInterpolation);
+
+            // Graphics
+
+            current.renderApi = json.value("renderApi", current.renderApi);
+            current.enableVSync = json.value("enableVSync", current.enableVSync);
+            current.updateWhileMinimized =
+                json.value("updateWhileMinimized", current.updateWhileMinimized);
+            current.useFullDetailRobotModel =
+                json.value("useFullDetailRobotModel", current.useFullDetailRobotModel);
+            current.cacheModels = json.value("cacheModels", current.cacheModels);
+            current.writeObjectMotionVectors =
+                json.value("writeObjectMotionVectors", current.writeObjectMotionVectors);
+            current.enableGTAO = json.value("enableGTAO", current.enableGTAO);
+            current.enableTAA = json.value("enableTAA", current.enableTAA);
+            current.enableMotionBlur = json.value("enableMotionBlur", current.enableMotionBlur);
+            current.enableBloom = json.value("enableBloom", current.enableBloom);
+            current.enableDebugMenu = json.value("enableDebugMenu", current.enableDebugMenu);
 
             logger->info("Settings loaded successfully from {0}", settingsPath);
         }
@@ -319,42 +370,52 @@ namespace settings
             std::string(SDL_GetPrefPath(nullptr, "DriverSim")) + "settings.json";
 
         nlohmann::json json;
-        json["enableTAA"] = enableTAA;
-        json["enableMotionBlur"] = enableMotionBlur;
-        json["enableBloom"] = enableBloom;
-        json["enableGTAO"] = enableGTAO;
-        json["writeObjectMotionVectors"] = writeObjectMotionVectors;
-        json["enableVSync"] = enableVSync;
-        json["enableDebugMenu"] = enableDebugMenu;
 
-        json["showMainMenu"] = showMainMenu;
-        json["cacheModels"] = cacheModels;
-        json["jvmArguments"] = jvmArguments;
-        json["codeArguments"] = codeArguments;
-        json["enabledExtensions"] = enabledExtensions;
-        json["launchElastic"] = launchElastic;
-        json["launchRobotCode"] = launchRobotCode;
-        json["ntPeriodic"] = ntPeriodic;
-        json["enableFrameInterpolation"] = enableFrameInterpolation;
+        // General
 
-        json["enableDiscordSDK"] = enableDiscordSDK;
+        json["showMainMenu"] = current.showMainMenu;
+        json["showExitWarning"] = current.showExitWarning;
+        json["launchRobotCode"] = current.launchRobotCode;
+        json["launchElastic"] = current.launchElastic;
+        json["enableDiscordSDK"] = current.enableDiscordSDK;
+        json["fullscreen"] = current.fullscreen;
 
-        json["javaLogMaxBytes"] = humanReadableSize(javaLogMaxBytes);
+        // Game Specific
 
-        json["gameTeam"] = gameTeam;
-        json["gameTeamPool"] = gameTeamPool;
-        json["gameMatchType"] = gameMatchType;
-        json["gameMatchNumber"] = gameMatchNumber;
-        json["gameMatchTotal"] = gameMatchTotal;
+        json["gameTeam"] = current.gameTeam;
+        json["gameTeamPool"] = current.gameTeamPool;
+        json["gameMatchType"] = current.gameMatchType;
+        json["gameMatchNumber"] = current.gameMatchNumber;
+        json["gameMatchTotal"] = current.gameMatchTotal;
 
-        json["renderApi"] = renderApi;
-        json["updateWhileMinimized"] = updateWhileMinimized;
+        json["rebuilt2026"] = current.rebuilt2026;
 
-        json["rebuilt2026"] = rebuilt2026;
+        json["viewMode"] = current.viewMode;
+        json["cameraFov"] = current.cameraFov;
+        json["cameraTarget"] = current.cameraTarget;
 
-        json["viewMode"] = viewMode;
-        json["cameraFov"] = cameraFov;
-        json["cameraTarget"] = cameraTarget;
+        // Simulation
+
+        json["enabledExtensions"] = current.enabledExtensions;
+        json["jvmArguments"] = current.jvmArguments;
+        json["codeArguments"] = current.codeArguments;
+        json["javaLogMaxBytes"] = humanReadableSize(current.javaLogMaxBytes);
+        json["ntPeriodic"] = current.ntPeriodic;
+        json["enableFrameInterpolation"] = current.enableFrameInterpolation;
+
+        // Graphics
+
+        json["renderApi"] = current.renderApi;
+        json["enableVSync"] = current.enableVSync;
+        json["updateWhileMinimized"] = current.updateWhileMinimized;
+        json["useFullDetailRobotModel"] = current.useFullDetailRobotModel;
+        json["cacheModels"] = current.cacheModels;
+        json["writeObjectMotionVectors"] = current.writeObjectMotionVectors;
+        json["enableGTAO"] = current.enableGTAO;
+        json["enableTAA"] = current.enableTAA;
+        json["enableMotionBlur"] = current.enableMotionBlur;
+        json["enableBloom"] = current.enableBloom;
+        json["enableDebugMenu"] = current.enableDebugMenu;
 
         std::string jsonString = json.dump(4);
         bx::Error error;

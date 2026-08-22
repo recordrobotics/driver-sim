@@ -11,11 +11,19 @@ namespace ui
         bool *state;
     };
 
-    enum class TextAlign
+    enum class TextAlign : uint8_t
     {
         Left,
         Center,
         Right
+    };
+
+    struct LinkTextOptions
+    {
+        bool underline = false;
+        ImU32 color = blackboard::gui::string_hex_to_rgba_u32("#6C74FAFF");
+        ImU32 hoverColor = blackboard::gui::string_hex_to_rgba_u32("#5b63f0FF");
+        ImU32 activeColor = blackboard::gui::string_hex_to_rgba_u32("#767ce3FF");
     };
 
     void DrawCenteredText(const char *text, float yOffset = 0.0f);
@@ -25,6 +33,10 @@ namespace ui
     bool CircularButton(const char *id, float radius);
 
     void TextAlignedWrapped(TextAlign align, const char *text);
+    void DrawVerticallyCenteredText(const char *text, float heightAvailable);
+    bool DrawLinkText(const char *label, ui::TextAlign align = ui::TextAlign::Left,
+                      ui::LinkTextOptions options = {}, const char *id = nullptr,
+                      const char *url = nullptr);
 
     bool IconButton(ImFont *font, const char *id, std::string_view text, ImTextureID icon,
                     float size, float borderSize, float rounding, float fontSize, float textOffset,

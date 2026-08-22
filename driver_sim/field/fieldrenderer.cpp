@@ -994,14 +994,14 @@ void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float de
         instanceData.previousTransform = instanceData.transform;
     }
 
-    if (lastDataUpdate == -1)
+    if (lastDataUpdate == -1 || !settings::current.enableFrameInterpolation)
     {
         lastPosition = position;
         lastRotation = rotation;
     }
     else
     {
-        float interpolationFactor = deltaTime / settings::ntPeriodic;
+        float interpolationFactor = deltaTime / static_cast<float>(settings::current.ntPeriodic);
         lastPosition = bx::lerp(lastPosition, position, interpolationFactor);
         lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
     }
@@ -1017,7 +1017,7 @@ void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float de
 RobotData::RobotData(RobotModel *model)
     : model(model), components(model->components.size()), bumperBaseColor(model->bumperModelColor)
 {
-    uint16_t ledCount = static_cast<uint16_t>(floorf(model->ledCount));
+    auto ledCount = static_cast<uint16_t>(floorf(model->ledCount));
     ledColorData = std::make_unique<uint8_t[]>(ledCount * 4);
     TEXTURE(ledColorTexture, ledCount, 1, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA8,
             BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
@@ -1025,7 +1025,7 @@ RobotData::RobotData(RobotModel *model)
 
 void RobotData::update(
     int currentDataUpdateIndex, float deltaTime, bool freezeTemporalEffects,
-    std::function<frc::Pose3d(const frc::Pose3d &)> transformPose3dToLocalCoordinates)
+    const std::function<frc::Pose3d(const frc::Pose3d &)> &transformPose3dToLocalCoordinates)
 {
     if (poseSub.Exists() &&
         (alwaysEnabled || (enabledSub.Exists() && enabledSub.GetAtomic().value)))
@@ -1287,7 +1287,7 @@ static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory,
     std::filesystem::path glbPath = directory + name + ".glb";
     std::filesystem::path cachePath = directory + name + ".cache";
 
-    if (settings::cacheModels && std::filesystem::exists(cachePath))
+    if (settings::current.cacheModels && std::filesystem::exists(cachePath))
     {
         logger->info("Loading {0} meshes from cache.", directory + name);
         try
@@ -1313,7 +1313,7 @@ static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory,
             .get(),
         tags);
 
-    if (settings::cacheModels)
+    if (settings::current.cacheModels)
     {
         logger->info("Caching {0} meshes to disk.", directory + name);
         Mesh::toSerialized(meshes, cachePath);
@@ -1931,8 +1931,9 @@ void FieldRenderer::ensureTextures(uint16_t width, uint16_t height)
 void FieldRenderer::setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepass)
 {
     float pbrData[4] = {
-        (mesh.material.writesObjectMotionVectors && settings::writeObjectMotionVectors) ? 1.0f
-                                                                                        : 0.0f,
+        (mesh.material.writesObjectMotionVectors && settings::current.writeObjectMotionVectors)
+            ? 1.0f
+            : 0.0f,
         mesh.material.metallic, mesh.material.roughness, 0.0f};
 
     if (mesh.material.type == MaterialType::Transparent)
@@ -2005,25 +2006,29 @@ void FieldRenderer::addRobot(std::string_view poseTopic, std::string_view compon
     RobotData &robot = robots[&robotModels[0]].emplace_back(&robotModels[0]);
 
     robot.poseTopic = ntInst.GetStructTopic<frc::Pose3d>(poseTopic);
-    robot.poseSub = robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::ntPeriodic});
+    robot.poseSub =
+        robot.poseTopic.Subscribe(frc::Pose3d{}, {.periodic = settings::current.ntPeriodic});
     robot.componentPosesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>(componentPosesTopic);
     robot.componentPosesSub =
-        robot.componentPosesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+        robot.componentPosesTopic.Subscribe({}, {.periodic = settings::current.ntPeriodic});
 
     robot.rslStateTopic = ntInst.GetBooleanTopic(rslStateTopic);
-    robot.rslStateSub = robot.rslStateTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    robot.rslStateSub =
+        robot.rslStateTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     robot.allianceStationTopic = ntInst.GetIntegerTopic(allianceStationTopic);
     robot.allianceStationSub =
-        robot.allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
+        robot.allianceStationTopic.Subscribe(1, {.periodic = settings::current.ntPeriodic});
 
     robot.ledColorsTopic = ntInst.GetStringArrayTopic(ledColorsTopic);
-    robot.ledColorsSub = robot.ledColorsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+    robot.ledColorsSub =
+        robot.ledColorsTopic.Subscribe({}, {.periodic = settings::current.ntPeriodic});
 
     if (!enabledTopic.empty())
     {
         robot.enabledTopic = ntInst.GetBooleanTopic(enabledTopic);
-        robot.enabledSub = robot.enabledTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+        robot.enabledSub =
+            robot.enabledTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
     }
     else
     {
@@ -2043,7 +2048,7 @@ void FieldRenderer::drawDebugMenu()
 
     ImGui::Separator();
 
-    if (settings::enableMotionBlur)
+    if (settings::current.enableMotionBlur)
     {
         ImGui::Text("Motion Blur Settings");
         int tileSize = MB_TILE_SIZE;
@@ -2056,7 +2061,7 @@ void FieldRenderer::drawDebugMenu()
         ImGui::Separator();
     }
 
-    if (settings::enableBloom)
+    if (settings::current.enableBloom)
     {
         ImGui::Text("Bloom Settings");
         ImGui::SliderFloat("Threshold", &bloomThreshold, 0.0f, 8.0f);
@@ -2067,7 +2072,7 @@ void FieldRenderer::drawDebugMenu()
     ImGui::SliderFloat("Exposure", &tonemappingExposure, -15.0f, 10.0f);
     ImGui::Separator();
 
-    if (settings::enableGTAO)
+    if (settings::current.enableGTAO)
     {
         ImGui::Text("GTAO Settings");
 
@@ -2296,9 +2301,9 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
         if (ChoiceButton(font, "##field", "Orbit Field",
                          "Position your view around the field in a fixed location.",
                          viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale,
-                         settings::viewMode == CameraView::Field))
+                         settings::current.viewMode == CameraView::Field))
         {
-            settings::viewMode = CameraView::Field;
+            settings::current.viewMode = CameraView::Field;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
             bx::mtxIdentity(orbitCamera.originTransform);
         }
@@ -2308,9 +2313,9 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
         if (ChoiceButton(font, "##robot", "Orbit Robot",
                          "Position your view around the robot. Camera follows it as you drive.",
                          viewModeTexture.id, 136 * globalScale, 154 * globalScale, globalScale,
-                         settings::viewMode == CameraView::Robot))
+                         settings::current.viewMode == CameraView::Robot))
         {
-            settings::viewMode = CameraView::Robot;
+            settings::current.viewMode = CameraView::Robot;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
             bx::mtxIdentity(orbitCamera.originTransform);
         }
@@ -2321,9 +2326,9 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
                          "Position your view relative to the robot. Camera acts as if its part of "
                          "the robot when its moving.",
                          viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale,
-                         settings::viewMode == CameraView::RobotRelative))
+                         settings::current.viewMode == CameraView::RobotRelative))
         {
-            settings::viewMode = CameraView::RobotRelative;
+            settings::current.viewMode = CameraView::RobotRelative;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
             bx::mtxIdentity(orbitCamera.originTransform);
         }
@@ -2334,9 +2339,9 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
                          "Automatically position your view at the current alliance station and "
                          "follow the robot by rotating the camera.",
                          viewModeTexture.id, 136 * globalScale, 180 * globalScale, globalScale,
-                         settings::viewMode == CameraView::DriverStation))
+                         settings::current.viewMode == CameraView::DriverStation))
         {
-            settings::viewMode = CameraView::DriverStation;
+            settings::current.viewMode = CameraView::DriverStation;
             orbitCamera.target = {0.0f, 0.0f, 0.25f};
             bx::mtxIdentity(orbitCamera.originTransform);
         }
@@ -2349,7 +2354,7 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
         ImGui::LabelText("##fov", "Field of View");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
-        ImGui::SliderFloat("##fovslider", &settings::cameraFov, 10.0f, 160.0f, "%.1f");
+        ImGui::SliderFloat("##fovslider", &settings::current.cameraFov, 10.0f, 160.0f, "%.1f");
 
         ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
 
@@ -2362,8 +2367,8 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
 
         if (!ImGui::IsItemActive())
         {
-            std::string cameraTargetStr = std::to_string(settings::cameraTarget[0]) + "," +
-                                          std::to_string(settings::cameraTarget[1]);
+            std::string cameraTargetStr = std::to_string(settings::current.cameraTarget[0]) + "," +
+                                          std::to_string(settings::current.cameraTarget[1]);
             strncpy(buffer, cameraTargetStr.c_str(), sizeof(buffer));
             buffer[sizeof(buffer) - 1] = '\0';
         }
@@ -2402,7 +2407,7 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
                     tokens[1].data(), tokens[1].data() + tokens[1].size(), instanceIndex);
                 if (ec == std::errc{} && ec2 == std::errc{})
                 {
-                    settings::cameraTarget = {modelIndex, instanceIndex};
+                    settings::current.cameraTarget = {modelIndex, instanceIndex};
                 }
             }
         }
@@ -2422,7 +2427,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                            const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
-    if (settings::enableDebugMenu)
+    if (settings::current.enableDebugMenu)
     {
         drawDebugMenu();
     }
@@ -2465,11 +2470,11 @@ void FieldRenderer::render(const blackboard::app::Window &window,
             gamePiece.posesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>(
                 "/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Positions");
             gamePiece.posesSub =
-                gamePiece.posesTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+                gamePiece.posesTopic.Subscribe({}, {.periodic = settings::current.ntPeriodic});
             gamePiece.poseObjectsTopic = ntInst.GetStructArrayTopic<Pose3dObject>(
                 "/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Objects");
-            gamePiece.poseObjectsSub =
-                gamePiece.poseObjectsTopic.Subscribe({}, {.periodic = settings::ntPeriodic});
+            gamePiece.poseObjectsSub = gamePiece.poseObjectsTopic.Subscribe(
+                {}, {.periodic = settings::current.ntPeriodic});
             Mesh::createBuffersForMeshes(gamePiece.meshes);
         }
 
@@ -2560,12 +2565,13 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         gamePiece.update(currentDataUpdateIndex, deltaTime, freezeTemporalEffects, coordTransform);
     }
 
-    if (settings::viewMode == CameraView::Robot || settings::viewMode == CameraView::RobotRelative)
+    if (settings::current.viewMode == CameraView::Robot ||
+        settings::current.viewMode == CameraView::RobotRelative)
     {
-        if (settings::cameraTarget.size() == 2)
+        if (settings::current.cameraTarget.size() == 2)
         {
-            uint32_t modelIndex = settings::cameraTarget[0];
-            uint32_t instanceIndex = settings::cameraTarget[1];
+            uint32_t modelIndex = settings::current.cameraTarget[0];
+            uint32_t instanceIndex = settings::current.cameraTarget[1];
             if (robotModels.size() > modelIndex)
             {
                 auto &robotInstances = robots[&robotModels[modelIndex]];
@@ -2578,7 +2584,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                                      robotInstances[instanceIndex].dynamicData.lastPosition.x,
                                      robotInstances[instanceIndex].dynamicData.lastPosition.y,
                                      robotInstances[instanceIndex].dynamicData.lastPosition.z);
-                    if (settings::viewMode == CameraView::RobotRelative)
+                    if (settings::current.viewMode == CameraView::RobotRelative)
                     {
                         // also apply rotation
                         float rotationMtx[16];
@@ -2602,10 +2608,10 @@ void FieldRenderer::render(const blackboard::app::Window &window,
 
     auto updateCameraLambda = [this, &view, &allianceStation](float deltaTime)
     {
-        if (settings::cameraTarget.size() == 2)
+        if (settings::current.cameraTarget.size() == 2)
         {
-            uint32_t modelIndex = settings::cameraTarget[0];
-            uint32_t instanceIndex = settings::cameraTarget[1];
+            uint32_t modelIndex = settings::current.cameraTarget[0];
+            uint32_t instanceIndex = settings::current.cameraTarget[1];
 
             if (robotModels.size() > modelIndex)
             {
@@ -2615,7 +2621,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                 {
                     allianceStation =
                         robotInstances[instanceIndex].allianceStationSub.GetAtomic().value;
-                    if (settings::viewMode == CameraView::DriverStation)
+                    if (settings::current.viewMode == CameraView::DriverStation)
                     {
                         // 6 elements ordered [B1, B2, B3, R1, R2, R3]
                         int stationIndex =
@@ -2682,7 +2688,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     float jitterX;
     float jitterY;
 
-    if (settings::enableTAA)
+    if (settings::current.enableTAA)
     {
         float haltonX = 2.0f * Halton(jitterIndex + 1, 2) - 1.0f;
         float haltonY = 2.0f * Halton(jitterIndex + 1, 3) - 1.0f;
@@ -2696,7 +2702,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     }
 
     float proj[16];
-    bx::mtxProjInf(proj, settings::cameraFov, float(m_width) / float(m_height), 0.1f,
+    bx::mtxProjInf(proj, settings::current.cameraFov, float(m_width) / float(m_height), 0.1f,
                    bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
     proj[8] -= jitterX;
     proj[9] -= jitterY;
@@ -2843,7 +2849,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     int yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
 
     // GTAO
-    if (settings::enableGTAO)
+    if (settings::current.enableGTAO)
     {
         // force unbind gbuffer view fbo
         encoder->touch(VIEW_GTAO);
@@ -2906,9 +2912,9 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     // OIT Composition
 
     float gtaoIntensityField[4] = {
-        settings::enableGTAO ? gtaoIntensity : 0.0f,
-        settings::enableGTAO ? (gtaoIntensity * gtaoDirectIntensity) : 0.0f,
-        settings::enableGTAO ? (gtaoIntensity * gtaoBentNormalIntensity) : 0.0f, 0.0f};
+        settings::current.enableGTAO ? gtaoIntensity : 0.0f,
+        settings::current.enableGTAO ? (gtaoIntensity * gtaoDirectIntensity) : 0.0f,
+        settings::current.enableGTAO ? (gtaoIntensity * gtaoBentNormalIntensity) : 0.0f, 0.0f};
 
     encoder->setUniform(u_skyColor, skyColor.data());
     encoder->setUniform(u_gtaoIntensity, gtaoIntensityField);
@@ -2958,7 +2964,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     encoder->setImage(3, gFullVelocity.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, mbVelocityProgram, xGroups, yGroups);
 
-    if (settings::enableTAA)
+    if (settings::current.enableTAA)
     {
         xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
         yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
@@ -2992,7 +2998,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     }
 
     // Motion blur
-    if (settings::enableMotionBlur)
+    if (settings::current.enableMotionBlur)
     {
         float mbBlurData[8] = {0.0f,
                                0.0f,
@@ -3064,7 +3070,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     encoder->dispatch(VIEW_POSTPROCESS, exposureProgram, xGroups, yGroups);
 
     // Bloom
-    if (settings::enableBloom)
+    if (settings::current.enableBloom)
     {
         float bloomThresholdField[4] = {bloomThreshold, bloomThreshold - bloomKnee, 2 * bloomKnee,
                                         0.25f * bloomKnee};

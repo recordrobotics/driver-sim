@@ -35,40 +35,44 @@ constexpr ImU32 RED_TEAM_CENTER = string_hex_to_rgba_u32("#61090cff");
 Rebuilt2026FMSUI::Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst)
 {
     matchTimeTopic = ntInst.GetDoubleTopic("/AdvantageKit/DriverStation/MatchTime");
-    matchTimeSub = matchTimeTopic.Subscribe(-1.0, {.periodic = settings::ntPeriodic});
+    matchTimeSub = matchTimeTopic.Subscribe(-1.0, {.periodic = settings::current.ntPeriodic});
 
     redHubActiveTopic = ntInst.GetBooleanTopic(
         "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active");
-    redHubActiveSub = redHubActiveTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    redHubActiveSub =
+        redHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     blueHubActiveTopic = ntInst.GetBooleanTopic(
         "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active");
-    blueHubActiveSub = blueHubActiveTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    blueHubActiveSub =
+        blueHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     redHubLedTopic = ntInst.GetBooleanTopic(
         "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led");
-    redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     blueHubLedTopic = ntInst.GetBooleanTopic(
         "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led");
-    blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     redScoreTopic = ntInst.GetDoubleTopic(
         "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score");
-    redScoreSub = redScoreTopic.Subscribe(0.0, {.periodic = settings::ntPeriodic});
+    redScoreSub = redScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
 
     blueScoreTopic = ntInst.GetDoubleTopic(
         "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Score");
-    blueScoreSub = blueScoreTopic.Subscribe(0.0, {.periodic = settings::ntPeriodic});
+    blueScoreSub = blueScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
 
     isAutonomousTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Autonomous");
-    isAutonomousSub = isAutonomousTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    isAutonomousSub =
+        isAutonomousTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     isEnabledTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Enabled");
-    isEnabledSub = isEnabledTopic.Subscribe(false, {.periodic = settings::ntPeriodic});
+    isEnabledSub = isEnabledTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     allianceStationTopic = ntInst.GetIntegerTopic("/AdvantageKit/DriverStation/AllianceStation");
-    allianceStationSub = allianceStationTopic.Subscribe(1, {.periodic = settings::ntPeriodic});
+    allianceStationSub =
+        allianceStationTopic.Subscribe(1, {.periodic = settings::current.ntPeriodic});
 
     font = blackboard::gui::get_font("Roboto_Bold_ttf");
 
@@ -158,19 +162,19 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 
     // Center bar text
     std::string centerText;
-    if (settings::gameMatchType == 0)
+    if (settings::current.gameMatchType == 0)
     {
         centerText = "Test Match";
     }
-    else if (settings::gameMatchType == 1)
+    else if (settings::current.gameMatchType == 1)
     {
         centerText = "Practice ";
     }
-    else if (settings::gameMatchType == 2)
+    else if (settings::current.gameMatchType == 2)
     {
         centerText = "Qualification ";
     }
-    else if (settings::gameMatchType == 3)
+    else if (settings::current.gameMatchType == 3)
     {
         centerText = "Elimination ";
     }
@@ -180,9 +184,10 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     }
 
     Text({960, 37.5f},
-         (settings::gameMatchType == 0 ? centerText
-                                       : (centerText + std::to_string(settings::gameMatchNumber) +
-                                          " of " + std::to_string(settings::gameMatchTotal)))
+         (settings::current.gameMatchType == 0
+              ? centerText
+              : (centerText + std::to_string(settings::current.gameMatchNumber) + " of " +
+                 std::to_string(settings::current.gameMatchTotal)))
              .c_str(),
          32, IM_COL32_WHITE, true);
 
@@ -364,9 +369,9 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         drawList->AddImage(fuelBlueIcon.id, Transform({35, 67}), Transform({35 + 45, 67 + 45}));
     }
     Rect({80, 67}, {150, 45}, BLUE);
-    int rankingPointThresholdBlue = blueScore >= settings::rebuilt2026.energizedRPThreshold
-                                        ? settings::rebuilt2026.superchargedRPThreshold
-                                        : settings::rebuilt2026.energizedRPThreshold;
+    int rankingPointThresholdBlue = blueScore >= settings::current.rebuilt2026.energizedRPThreshold
+                                        ? settings::current.rebuilt2026.superchargedRPThreshold
+                                        : settings::current.rebuilt2026.energizedRPThreshold;
     Text({155, 89.5f},
          (std::to_string(blueScore) + " / " + std::to_string(rankingPointThresholdBlue)).c_str(),
          32, IM_COL32_WHITE, true);
@@ -378,9 +383,9 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         drawList->AddImage(fuelRedIcon.id, Transform({1689, 67}), Transform({1689 + 45, 67 + 45}));
     }
     Rect({1734, 67}, {150, 45}, RED);
-    int rankingPointThresholdRed = redScore >= settings::rebuilt2026.energizedRPThreshold
-                                       ? settings::rebuilt2026.superchargedRPThreshold
-                                       : settings::rebuilt2026.energizedRPThreshold;
+    int rankingPointThresholdRed = redScore >= settings::current.rebuilt2026.energizedRPThreshold
+                                       ? settings::current.rebuilt2026.superchargedRPThreshold
+                                       : settings::current.rebuilt2026.energizedRPThreshold;
     Text({1809, 89.5f},
          (std::to_string(redScore) + " / " + std::to_string(rankingPointThresholdRed)).c_str(), 32,
          IM_COL32_WHITE, true);
