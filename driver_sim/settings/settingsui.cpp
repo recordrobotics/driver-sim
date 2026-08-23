@@ -12,6 +12,8 @@
 
 #include <logo.png.h>
 
+#include <imgui/misc/cpp/imgui_stdlib.h>
+
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
@@ -128,70 +130,8 @@ void drawSubHeader(const char *text)
     ImGui::PopFont();
 }
 
-enum class SettingOptionType : uint8_t
-{
-    Bool,
-    Int,
-    U64,
-    U32,
-    U32List,
-    Float,
-    Double,
-    String,
-    StringList,
-};
-
-template <typename T> struct SettingOptionTypeOf;
-
-template <> struct SettingOptionTypeOf<bool>
-{
-    static constexpr auto value = SettingOptionType::Bool;
-};
-
-template <> struct SettingOptionTypeOf<int>
-{
-    static constexpr auto value = SettingOptionType::Int;
-};
-
-template <> struct SettingOptionTypeOf<std::uint64_t>
-{
-    static constexpr auto value = SettingOptionType::U64;
-};
-
-template <> struct SettingOptionTypeOf<std::uint32_t>
-{
-    static constexpr auto value = SettingOptionType::U32;
-};
-
-template <> struct SettingOptionTypeOf<std::vector<std::uint32_t>>
-{
-    static constexpr auto value = SettingOptionType::U32List;
-};
-
-template <> struct SettingOptionTypeOf<float>
-{
-    static constexpr auto value = SettingOptionType::Float;
-};
-
-template <> struct SettingOptionTypeOf<double>
-{
-    static constexpr auto value = SettingOptionType::Double;
-};
-
-template <> struct SettingOptionTypeOf<std::string>
-{
-    static constexpr auto value = SettingOptionType::String;
-};
-
-template <> struct SettingOptionTypeOf<std::vector<std::string>>
-{
-    static constexpr auto value = SettingOptionType::StringList;
-};
-
 template <typename T> struct SettingOptionData
 {
-    static constexpr SettingOptionType type = SettingOptionTypeOf<T>::value;
-
     T *value;
     T defaultValue;
 };
@@ -220,9 +160,72 @@ void drawSettingOption(const char *id, const char *name, const char *description
     ImGui::PopStyleColor();
     ImGui::PopFont();
 
-    ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                    52.0f * globalScale);
-    ui::ToggleSwitch((std::string("##value_") + id).c_str(), data.value);
+    if constexpr (std::is_same_v<T, bool>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        ui::ToggleSwitch((std::string("##value_") + id).c_str(), data.value);
+    }
+    else if constexpr (std::is_same_v<T, int>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_S32,
+                               data.value, nullptr, nullptr, "%d"))
+        {
+        }
+    }
+    else if constexpr (std::is_same_v<T, std::uint64_t>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_U64,
+                               data.value, nullptr, nullptr, "%llu"))
+        {
+        }
+    }
+    else if constexpr (std::is_same_v<T, std::uint32_t>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_U32,
+                               data.value, nullptr, nullptr, "%u"))
+        {
+        }
+    }
+    else if constexpr (std::is_same_v<T, std::vector<std::uint32_t>>)
+    {
+    }
+    else if constexpr (std::is_same_v<T, float>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_Float,
+                               data.value, nullptr, nullptr, "%.4f"))
+        {
+        }
+    }
+    else if constexpr (std::is_same_v<T, double>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_Double,
+                               data.value, nullptr, nullptr, "%.4f"))
+        {
+        }
+    }
+    else if constexpr (std::is_same_v<T, std::string>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        if (ImGui::InputText((std::string("##value_") + id).c_str(), data.value,
+                             ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+        }
+    }
+    else if constexpr (std::is_same_v<T, std::vector<std::string>>)
+    {
+    }
 
     ImGui::Dummy(ImVec2(0, 2.0f * globalScale));
 
@@ -243,10 +246,51 @@ void drawSettingOption(const char *id, const char *name, const char *description
     {
         ImGui::PushFont(nullptr, 11.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#F0F25FFF"));
-        ui::TextAlignedWrapped(
-            ui::TextAlign::Right,
-            std::format("This value is different from the default of '{}'.", data.defaultValue)
-                .c_str());
+
+        std::string str;
+        if constexpr (std::is_same_v<T, bool>)
+        {
+            str =
+                std::format("This value is different from the default of '{}'.", data.defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, int>)
+        {
+            str =
+                std::format("This value is different from the default of '{}'.", data.defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, std::uint64_t>)
+        {
+            str =
+                std::format("This value is different from the default of '{}'.", data.defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, std::uint32_t>)
+        {
+            str =
+                std::format("This value is different from the default of '{}'.", data.defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, std::vector<std::uint32_t>>)
+        {
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
+            str =
+                std::format("This value is different from the default of '{}'.", data.defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, double>)
+        {
+            str =
+                std::format("This value is different from the default of '{}'.", data.defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, std::string>)
+        {
+            str =
+                std::format("This value is different from the default of '{}'.", data.defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, std::vector<std::string>>)
+        {
+        }
+
+        ui::TextAlignedWrapped(ui::TextAlign::Right, str.c_str());
         ImGui::PopStyleColor();
         if (ui::DrawLinkText("Reset to default", ui::TextAlign::Right,
                              {.underline = true,
@@ -363,118 +407,120 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
         drawHeader("Game Specific");
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<uint32_t>(
             "gameTeam", "Team number",
             "This is your team number. It is shown in the FMS ui at the position "
             "your alliance station is set to.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.gameTeam,
+             .defaultValue = settings::makeDefault().gameTeam});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<std::vector<uint32_t>>(
             "gameTeamPool", "Team pool",
             "These are the other 5 team numbers to populate the FMS ui with. The "
             "order is chosen randomly based on your alliance station.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.gameTeamPool,
+             .defaultValue = settings::makeDefault().gameTeamPool});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>("gameMatchType", "Match type",
-                                "The match type shown in the FMS ui.",
-                                {.value = &settings::current.showMainMenu,
-                                 .defaultValue = settings::makeDefault().showMainMenu});
+        drawSettingOption<uint32_t>("gameMatchType", "Match type",
+                                    "The match type shown in the FMS ui.",
+                                    {.value = &settings::current.gameMatchType,
+                                     .defaultValue = settings::makeDefault().gameMatchType});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>("gameMatchNumber", "Match number",
-                                "The match number shown in the FMS ui.",
-                                {.value = &settings::current.showMainMenu,
-                                 .defaultValue = settings::makeDefault().showMainMenu});
+        drawSettingOption<uint32_t>("gameMatchNumber", "Match number",
+                                    "The match number shown in the FMS ui.",
+                                    {.value = &settings::current.gameMatchNumber,
+                                     .defaultValue = settings::makeDefault().gameMatchNumber});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>("gameMatchTotal", "Total matches",
-                                "The total match number shown in the FMS ui.",
-                                {.value = &settings::current.showMainMenu,
-                                 .defaultValue = settings::makeDefault().showMainMenu});
+        drawSettingOption<uint32_t>("gameMatchTotal", "Total matches",
+                                    "The total match number shown in the FMS ui.",
+                                    {.value = &settings::current.gameMatchTotal,
+                                     .defaultValue = settings::makeDefault().gameMatchTotal});
         ImGui::Dummy(spacer);
 
         drawSubHeader("Rebuilt 2026");
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>("rebuilt2026.energizedRPThreshold", "Energized RP threshold",
-                                "The displayed energized RP threshold in the FMS score ui.",
-                                {.value = &settings::current.showMainMenu,
-                                 .defaultValue = settings::makeDefault().showMainMenu});
+        drawSettingOption<int>(
+            "rebuilt2026.energizedRPThreshold", "Energized RP threshold",
+            "The displayed energized RP threshold in the FMS score ui.",
+            {.value = &settings::current.rebuilt2026.energizedRPThreshold,
+             .defaultValue = settings::makeDefault().rebuilt2026.energizedRPThreshold});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>("rebuilt2026.superchargedRPThreshold", "Supercharged RP threshold",
-                                "The displayed supercharged RP threshold in the FMS score ui.",
-                                {.value = &settings::current.showMainMenu,
-                                 .defaultValue = settings::makeDefault().showMainMenu});
+        drawSettingOption<int>(
+            "rebuilt2026.superchargedRPThreshold", "Supercharged RP threshold",
+            "The displayed supercharged RP threshold in the FMS score ui.",
+            {.value = &settings::current.rebuilt2026.superchargedRPThreshold,
+             .defaultValue = settings::makeDefault().rebuilt2026.superchargedRPThreshold});
         ImGui::Dummy(spacer);
 
         drawSubHeader("3D Field");
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<uint32_t>(
             "viewMode", "View mode",
             "The targeting mode used by the camera in the 3D field. The preferred "
             "way to change this is in the View Mode menu.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = reinterpret_cast<uint32_t *>(&settings::current.viewMode),
+             .defaultValue = static_cast<uint32_t>(settings::makeDefault().viewMode)});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<float>(
             "cameraFov", "Camera field of view",
             "The vertical field of view in degrees to use for the camera in the 3D field.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.cameraFov,
+             .defaultValue = settings::makeDefault().cameraFov});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<std::vector<uint32_t>>(
             "cameraTarget", "Camera robot target",
             "The robot to target when the camera is in one of the robot view modes. "
             "The preferred way to change this is in the View Mode menu.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.cameraTarget,
+             .defaultValue = settings::makeDefault().cameraTarget});
         ImGui::Dummy(spacer);
 
         drawHeader("Simulation");
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<std::unordered_set<std::string>>(
             "enabledExtensions", "Enabled extensions",
             "The extensions to enable when running the simulation. The preferred way "
             "to change these is in the main menu.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.enabledExtensions,
+             .defaultValue = settings::makeDefault().enabledExtensions});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<std::vector<std::string>>(
             "jvmArguments", "JVM arguments",
             "The arguments to pass to the JVM when running the simulation. Use this "
             "to set system flags or properties.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.jvmArguments,
+             .defaultValue = settings::makeDefault().jvmArguments});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<std::vector<std::string>>(
             "codeArguments", "Code arguments",
             "The arguments to pass to the robot code main method when running the simulation.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.codeArguments,
+             .defaultValue = settings::makeDefault().codeArguments});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<uint64_t>(
             "javaLogMaxBytes", "Max log size",
             "The maximum size of the robot code logs. Accepts values in the general formats: 64, "
             "64 b(B), 8 kb(KB), 64 mb(MB), 2 gb(GB), 1 tb(TB), etc. When this limit is reached "
             "Driver Sim deletes oldest logs first until enough storage space is restored. This "
             "process is run on both startup and exit.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.javaLogMaxBytes,
+             .defaultValue = settings::makeDefault().javaLogMaxBytes});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<double>(
             "ntPeriodic", "NetworkTables update interval",
             "The interval in seconds at which to subscribe for updates to the simulation "
             "NetworkTables server. A larger interval results in a more “sluggish” or “overly "
@@ -482,8 +528,8 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
             "but can occasionally stutter depending on system performance. It is recommended to "
             "set this value slightly above the robot simulation periodic interval to avoid "
             "aliasing issues with the frame interpolation logic.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.ntPeriodic,
+             .defaultValue = settings::makeDefault().ntPeriodic});
         ImGui::Dummy(spacer);
 
         drawSettingOption<bool>(
@@ -499,13 +545,13 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
         drawHeader("Graphics");
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<std::string>(
             "renderApi", "Render API",
             "Specify which rendering API Driver Sim should use. Auto uses 'd3d11' on Windows and "
             "'metal' on macOS. It is strongly recommended to use either 'vulkan' or 'd3d12' on "
             "Windows due to graphical inconsistencies on d3d11. Requires restart.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = &settings::current.renderApi,
+             .defaultValue = settings::makeDefault().renderApi});
         ImGui::Dummy(spacer);
 
         drawSettingOption<bool>(
@@ -527,14 +573,15 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
              .defaultValue = settings::makeDefault().updateWhileMinimized});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<bool>(
+        drawSettingOption<uint32_t>(
             "useFullDetailRobotModel", "Use full detail robot model",
             "The full detail robot model is the original unmodified 3D model provided by the robot "
             "asset. Driver Sim automatically performs simplification and optimization steps on the "
             "model to increase performance. This setting lets you optionally choose where to bring "
             "back the full detail robot model.",
-            {.value = &settings::current.showMainMenu,
-             .defaultValue = settings::makeDefault().showMainMenu});
+            {.value = reinterpret_cast<uint32_t *>(&settings::current.useFullDetailRobotModel),
+             .defaultValue =
+                 static_cast<uint32_t>(settings::makeDefault().useFullDetailRobotModel)});
         ImGui::Dummy(spacer);
 
         drawSettingOption<bool>(
