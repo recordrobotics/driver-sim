@@ -37,6 +37,11 @@ class ProcessRunner
     void restart();
     void stop();
 
+    void updateCommandLine(const std::vector<std::string> &newCommandLine)
+    {
+        config.commandLine = newCommandLine;
+    }
+
   private:
     Config config;
     std::shared_ptr<spdlog::logger> logger;

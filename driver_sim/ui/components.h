@@ -2,6 +2,7 @@
 
 #include <list>
 #include <string>
+#include <vector>
 
 namespace ui
 {
@@ -47,4 +48,8 @@ namespace ui
                       float globalScale, bool selected = false);
 
     bool ToggleSwitch(const char *label, bool *value, float animation_speed = 12.0f);
+    bool InputUInt32Vector(const char *label, std::vector<std::uint32_t> &values,
+                           ImVec2 size = ImVec2(0, 0));
+    bool InputStringVector(const char *label, std::vector<std::string> &values,
+                           ImVec2 size = ImVec2(0, 0));
 } // namespace ui

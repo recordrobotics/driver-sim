@@ -217,6 +217,23 @@ void initApp()
 
 bool hasInitializedFieldView = false;
 
+std::vector<std::string> getJavaCommandLine()
+{
+    std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
+
+    std::vector<std::string> javaCommandLine = {prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
+                                                "-Djava.library.path=" + prefPath + "jni/release",
+                                                "-jar", prefPath + "code/libs/2026-robot.jar"};
+    javaCommandLine.insert(
+        javaCommandLine.end() - 2, settings::current.jvmArguments.begin(),
+        settings::current.jvmArguments.end()); // insert JVM arguments before the -jar argument
+    javaCommandLine.insert(
+        javaCommandLine.end(), settings::current.codeArguments.begin(),
+        settings::current.codeArguments.end()); // insert code arguments at the end
+
+    return javaCommandLine;
+}
+
 void initFieldView()
 {
     if (hasInitializedFieldView)
@@ -244,19 +261,9 @@ void initFieldView()
                                                                            .use_existing_process = true /* elastic is single-instance (new instance exits immediately killing driver sim) */},
                                                      logger::logger);
 
-    std::vector<std::string> javaCommandLine = {prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
-                                                "-Djava.library.path=" + prefPath + "jni/release",
-                                                "-jar", prefPath + "code/libs/2026-robot.jar"};
-    javaCommandLine.insert(
-        javaCommandLine.end() - 2, settings::current.jvmArguments.begin(),
-        settings::current.jvmArguments.end()); // insert JVM arguments before the -jar argument
-    javaCommandLine.insert(
-        javaCommandLine.end(), settings::current.codeArguments.begin(),
-        settings::current.codeArguments.end()); // insert code arguments at the end
-
     javaProcess = std::make_unique<ProcessRunner>(
         ProcessRunner::Config{
-            .commandLine = javaCommandLine,
+            .commandLine = getJavaCommandLine(),
             .working_directory = prefPath + "code",
             .environment = {{"HALSIM_EXTENSIONS",
                              std::accumulate(
@@ -286,6 +293,8 @@ void initFieldView()
         {
             if (settings::current.launchRobotCode)
             {
+                // update to include any changed settings
+                javaProcess->updateCommandLine(getJavaCommandLine());
                 javaProcess->restart();
             }
         });
@@ -689,8 +698,17 @@ int main(int argc, char *argv[])
         settings::saveSettings();
     }
 
-    blackboard::app::App app("Driver Sim", getRendererApiFromString(api), initApp, app_update,
-                             app_after_events);
+    blackboard::renderer::Api renderer_api = getRendererApiFromString(api);
+
+#ifdef _WIN32
+    // On Windows use Vulkan instead of D3D11 when Auto is selected due to visual glitches.
+    if (renderer_api == blackboard::renderer::Api::AUTO)
+    {
+        renderer_api = blackboard::renderer::Api::VULKAN;
+    }
+#endif
+
+    blackboard::app::App app("Driver Sim", renderer_api, initApp, app_update, app_after_events);
     app_ptr = &app;
     app.run();
 

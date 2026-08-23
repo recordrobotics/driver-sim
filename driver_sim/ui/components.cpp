@@ -1,8 +1,12 @@
 #include <algorithm>
 #include <blackboard_app/gui.h>
+#include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
+#include <limits>
+#include <string_view>
 #include <unordered_map>
 
 #include "components.h"
@@ -773,6 +777,169 @@ bool ui::ToggleSwitch(const char *label, bool *value, float animation_speed)
     }
 
     return pressed;
+}
+
+static bool ParseU32(std::string_view text, std::uint32_t &value)
+{
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t' || text.front() == '\r'))
+    {
+        text.remove_prefix(1);
+    }
+
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r'))
+    {
+        text.remove_suffix(1);
+    }
+
+    if (text.empty())
+    {
+        return false;
+    }
+
+    std::uint32_t result{};
+    const char *begin = text.data();
+    const char *end = text.data() + text.size();
+
+    const auto [ptr, ec] = std::from_chars(begin, end, result, 10);
+
+    if (ec != std::errc{} || ptr != end)
+    {
+        return false;
+    }
+
+    value = result;
+    return true;
+}
+
+bool ui::InputUInt32Vector(const char *label, std::vector<std::uint32_t> &values, ImVec2 size)
+{
+    std::string text;
+
+    for (std::size_t i = 0; i < values.size(); ++i)
+    {
+        if (i != 0)
+        {
+            text += '\n';
+        }
+
+        text += std::to_string(values[i]);
+    }
+
+    // extra space
+    text.reserve(text.size() + 4096);
+
+    std::vector<char> buffer(text.size() + 4096, '\0');
+    std::ranges::copy(text, buffer.begin());
+
+    bool changed = false;
+
+    if (ImGui::InputTextMultiline(label, buffer.data(), buffer.size(), size,
+                                  ImGuiInputTextFlags_AllowTabInput))
+    {
+        changed = true;
+
+        std::vector<std::uint32_t> newValues;
+
+        std::string_view input(buffer.data());
+
+        while (!input.empty())
+        {
+            const std::size_t newline = input.find('\n');
+
+            std::string_view line = input.substr(0, newline);
+
+            if (!line.empty() && line.back() == '\r')
+            {
+                line.remove_suffix(1);
+            }
+
+            std::uint32_t value{};
+
+            if (ParseU32(line, value))
+            {
+                newValues.push_back(value);
+            }
+            else if (!line.empty())
+            {
+                return false;
+            }
+
+            if (newline == std::string_view::npos)
+            {
+                break;
+            }
+
+            input.remove_prefix(newline + 1);
+        }
+
+        if (newValues != values)
+        {
+            values = std::move(newValues);
+        }
+    }
+
+    return changed;
+}
+
+bool ui::InputStringVector(const char *label, std::vector<std::string> &values, ImVec2 size)
+{
+    std::string text;
+
+    for (std::size_t i = 0; i < values.size(); ++i)
+    {
+        if (i != 0)
+        {
+            text += '\n';
+        }
+
+        text += values[i];
+    }
+
+    // extra space
+    text.reserve(text.size() + 4096);
+
+    std::vector<char> buffer(text.size() + 4096, '\0');
+    std::ranges::copy(text, buffer.begin());
+
+    bool changed = false;
+
+    if (ImGui::InputTextMultiline(label, buffer.data(), buffer.size(), size,
+                                  ImGuiInputTextFlags_AllowTabInput))
+    {
+        changed = true;
+
+        std::vector<std::string> newValues;
+
+        std::string_view input(buffer.data());
+
+        while (!input.empty())
+        {
+            const std::size_t newline = input.find('\n');
+
+            std::string_view line = input.substr(0, newline);
+
+            if (!line.empty() && line.back() == '\r')
+            {
+                line.remove_suffix(1);
+            }
+
+            newValues.emplace_back(line);
+
+            if (newline == std::string_view::npos)
+            {
+                break;
+            }
+
+            input.remove_prefix(newline + 1);
+        }
+
+        if (newValues != values)
+        {
+            values = std::move(newValues);
+        }
+    }
+
+    return changed;
 }
 
 // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-type-vararg)

@@ -2,10 +2,12 @@
 #include "settingsstore.h"
 
 #include "../ui/components.h"
+#include "../utils.h"
 #include <blackboard_app/gui.h>
 
 #include <cstdint>
 #include <format>
+#include <ranges>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -193,9 +195,6 @@ void drawSettingOption(const char *id, const char *name, const char *description
         {
         }
     }
-    else if constexpr (std::is_same_v<T, std::vector<std::uint32_t>>)
-    {
-    }
     else if constexpr (std::is_same_v<T, float>)
     {
         ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
@@ -222,9 +221,6 @@ void drawSettingOption(const char *id, const char *name, const char *description
                              ImGuiInputTextFlags_EnterReturnsTrue))
         {
         }
-    }
-    else if constexpr (std::is_same_v<T, std::vector<std::string>>)
-    {
     }
 
     ImGui::Dummy(ImVec2(0, 2.0f * globalScale));
@@ -270,6 +266,11 @@ void drawSettingOption(const char *id, const char *name, const char *description
         }
         else if constexpr (std::is_same_v<T, std::vector<std::uint32_t>>)
         {
+            str = std::format(
+                "This value is different from the default of '{}'.",
+                string_join(data.defaultValue |
+                                std::views::transform([](auto v) { return std::to_string(v); }),
+                            ", "));
         }
         else if constexpr (std::is_same_v<T, float>)
         {
@@ -288,6 +289,8 @@ void drawSettingOption(const char *id, const char *name, const char *description
         }
         else if constexpr (std::is_same_v<T, std::vector<std::string>>)
         {
+            str = std::format("This value is different from the default of '{}'.",
+                              string_join(data.defaultValue, ", "));
         }
 
         ui::TextAlignedWrapped(ui::TextAlign::Right, str.c_str());
@@ -305,6 +308,15 @@ void drawSettingOption(const char *id, const char *name, const char *description
     }
 
     ImGui::Columns(1);
+
+    if constexpr (std::is_same_v<T, std::vector<std::uint32_t>>)
+    {
+        ui::InputUInt32Vector((std::string("##value_") + id).c_str(), *data.value);
+    }
+    else if constexpr (std::is_same_v<T, std::vector<std::string>>)
+    {
+        ui::InputStringVector((std::string("##value_") + id).c_str(), *data.value);
+    }
 }
 
 void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
@@ -547,7 +559,7 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
 
         drawSettingOption<std::string>(
             "renderApi", "Render API",
-            "Specify which rendering API Driver Sim should use. Auto uses 'd3d11' on Windows and "
+            "Specify which rendering API Driver Sim should use. Auto uses 'vulkan' on Windows and "
             "'metal' on macOS. It is strongly recommended to use either 'vulkan' or 'd3d12' on "
             "Windows due to graphical inconsistencies on d3d11. Requires restart.",
             {.value = &settings::current.renderApi,

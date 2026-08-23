@@ -1,8 +1,12 @@
 #pragma once
 
 #include <bit>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <ranges>
+#include <string>
+#include <string_view>
 
 template <typename T> constexpr void hash_combine(std::size_t &seed, const T &value)
 {
@@ -65,4 +69,39 @@ constexpr float pow2(float x)
     }
 
     return ipow(2.0f, floorc(x)) * pow2_frac(x - floorc(x));
+}
+
+template <typename T>
+concept StringLike = std::convertible_to<T, std::string_view>;
+
+template <std::ranges::input_range R>
+    requires StringLike<std::ranges::range_reference_t<R>>
+inline std::string string_join(R &&values, std::string_view delimiter)
+{
+    std::size_t size = 0;
+
+    for (const auto &value : values)
+    {
+        size += value.size();
+    }
+
+    if (values.size() > 1)
+    {
+        size += (values.size() - 1) * delimiter.size();
+    }
+
+    std::string result;
+    result.reserve(size);
+
+    for (std::size_t i = 0; i < values.size(); ++i)
+    {
+        if (i != 0)
+        {
+            result += delimiter;
+        }
+
+        result += values[i];
+    }
+
+    return result;
 }
