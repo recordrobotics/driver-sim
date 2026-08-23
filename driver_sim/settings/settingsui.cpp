@@ -221,8 +221,8 @@ void drawSettingOption(const char *id, const char *name, const char *description
     ImGui::PopFont();
 
     ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                    20.0f * globalScale);
-    ImGui::Checkbox((std::string("value_") + id).c_str(), data.value);
+                    52.0f * globalScale);
+    ui::ToggleSwitch((std::string("##value_") + id).c_str(), data.value);
 
     ImGui::Dummy(ImVec2(0, 2.0f * globalScale));
 

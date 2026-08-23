@@ -1,6 +1,9 @@
+#include <algorithm>
 #include <blackboard_app/gui.h>
+#include <cmath>
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
+#include <unordered_map>
 
 #include "components.h"
 
@@ -580,6 +583,194 @@ bool ui::ChoiceButton(ImFont *font, const char *id, std::string_view name,
                                      nameSize.y + (5.0f * globalScale)),
                           textWidth, descriptionColor, TextAlign::Center, description.data(),
                           description.data() + description.size());
+
+    return pressed;
+}
+
+struct SwitchState
+{
+    bool initialized = false;
+    bool last_value = false;
+    float animation = 0.0f;
+};
+
+static std::unordered_map<ImGuiID, SwitchState> states;
+
+static float EaseEmphasized(float t)
+{
+    t = std::clamp(t, 0.0f, 1.0f);
+
+    // cubic ease-in-out
+    if (t < 0.5f)
+    {
+        return 4.0f * t * t * t;
+    }
+
+    const float f = (2.0f * t) - 2.0f;
+    return (0.5f * f * f * f) + 1.0f;
+}
+
+bool ui::ToggleSwitch(const char *label, bool *value, float animation_speed)
+{
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    ImGuiWindow *window = ImGui::GetCurrentWindow();
+
+    if (window->SkipItems)
+    {
+        return false;
+    }
+
+    ImGuiContext &g = *GImGui;
+
+    const ImGuiID id = window->GetID(label);
+
+    const float track_w = 52.0f * globalScale;
+    const float track_h = 24.0f * globalScale;
+
+    const float rounding = track_h * 0.5f;
+
+    const float off_thumb_r = 8.0f * globalScale;
+    const float on_thumb_r = 12.0f * globalScale;
+
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    const ImVec2 track_min = pos;
+    const ImVec2 track_max = ImVec2(pos.x + track_w, pos.y + track_h);
+    const ImRect box(track_min, track_max);
+
+    ImGui::ItemSize(ImVec2(track_w, track_h));
+
+    if (!ImGui::ItemAdd(box, id))
+    {
+        return false;
+    }
+
+    SwitchState &state = states[id];
+
+    if (!state.initialized)
+    {
+        state.initialized = true;
+        state.last_value = *value;
+        state.animation = *value ? 1.0f : 0.0f;
+    }
+
+    if (state.last_value != *value)
+    {
+        state.last_value = *value;
+    }
+
+    bool hovered = false;
+    bool held = false;
+
+    const bool pressed = ImGui::ButtonBehavior(box, id, &hovered, &held, ImGuiButtonFlags_None);
+
+    if (pressed)
+    {
+        *value = !*value;
+        state.last_value = *value;
+    }
+
+    if (hovered)
+    {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    const float target = *value ? 1.0f : 0.0f;
+    const float dt = g.IO.DeltaTime;
+
+    if (std::abs(state.animation - target) > 0.0001f)
+    {
+        state.animation = ImLerp(state.animation, target, 1.0f - std::exp(-animation_speed * dt));
+    }
+    else
+    {
+        state.animation = target;
+    }
+
+    const float t = EaseEmphasized(state.animation);
+
+    constexpr ImVec4 on_track = ImVec4(0.404f, 0.314f, 0.706f, 1.0f);
+    constexpr ImVec4 on_thumb = ImVec4(1.000f, 1.000f, 1.000f, 1.0f);
+
+    constexpr ImVec4 on_track_hover = ImVec4(0.455f, 0.365f, 0.765f, 1.0f);
+    constexpr ImVec4 on_thumb_hover = ImVec4(0.965f, 0.950f, 1.000f, 1.0f);
+
+    constexpr ImVec4 on_track_active = ImVec4(0.340f, 0.255f, 0.620f, 1.0f);
+    constexpr ImVec4 on_thumb_active = ImVec4(0.930f, 0.915f, 0.990f, 1.0f);
+
+    constexpr ImVec4 off_track = ImVec4(0.230f, 0.220f, 0.240f, 1.0f);
+    constexpr ImVec4 off_thumb = ImVec4(0.580f, 0.560f, 0.600f, 1.0f);
+
+    constexpr ImVec4 off_track_hover = ImVec4(0.275f, 0.265f, 0.285f, 1.0f);
+    constexpr ImVec4 off_thumb_hover = ImVec4(0.650f, 0.630f, 0.670f, 1.0f);
+
+    constexpr ImVec4 off_track_active = ImVec4(0.315f, 0.305f, 0.330f, 1.0f);
+    constexpr ImVec4 off_thumb_active = ImVec4(0.710f, 0.690f, 0.730f, 1.0f);
+
+    ImVec4 track_color;
+    ImVec4 thumb_color;
+
+    if (held)
+    {
+        track_color = ImLerp(off_track_active, on_track_active, t);
+        thumb_color = ImLerp(off_thumb_active, on_thumb_active, t);
+    }
+    else if (hovered)
+    {
+        track_color = ImLerp(off_track_hover, on_track_hover, t);
+        thumb_color = ImLerp(off_thumb_hover, on_thumb_hover, t);
+    }
+    else
+    {
+        track_color = ImLerp(off_track, on_track, t);
+        thumb_color = ImLerp(off_thumb, on_thumb, t);
+    }
+
+    const ImVec4 outline_color = ImVec4(0.520f, 0.500f, 0.540f, 1.0f);
+
+    ImDrawList *draw = window->DrawList;
+
+    const float outline_alpha = 1.0f - t;
+
+    if (outline_alpha > 0.001f)
+    {
+        float outlineSize = 1.0f * globalScale;
+        draw->AddRectFilled(ImVec2(track_min.x - outlineSize, track_min.y - outlineSize),
+                            ImVec2(track_max.x + outlineSize, track_max.y + outlineSize),
+                            ImGui::ColorConvertFloat4ToU32(ImVec4(outline_color.x, outline_color.y,
+                                                                  outline_color.z, outline_alpha)),
+                            rounding + outlineSize);
+    }
+
+    draw->AddRectFilled(track_min, track_max, ImGui::ColorConvertFloat4ToU32(track_color),
+                        rounding);
+
+    const float thumb_r = ImLerp(off_thumb_r, on_thumb_r, t);
+
+    const float left_x = track_min.x + off_thumb_r + 4.0f * globalScale;
+    const float right_x = track_max.x - on_thumb_r - 4.0f * globalScale;
+
+    const float thumb_x = ImLerp(left_x, right_x, t);
+
+    const float thumb_y = track_min.y + track_h * 0.5f;
+
+    // shadow
+    draw->AddCircleFilled(ImVec2(thumb_x, thumb_y + 1.0f * globalScale),
+                          thumb_r + 1.0f * globalScale, IM_COL32(0, 0, 0, 25));
+    draw->AddCircleFilled(ImVec2(thumb_x, thumb_y), thumb_r,
+                          ImGui::ColorConvertFloat4ToU32(thumb_color));
+
+    if (hovered || held)
+    {
+        const float state_alpha = held ? 0.12f : 0.02f;
+
+        const ImU32 state_color =
+            ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, state_alpha));
+
+        draw->AddCircleFilled(ImVec2(thumb_x, thumb_y), thumb_r + 4.0f * globalScale, state_color);
+    }
 
     return pressed;
 }

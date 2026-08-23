@@ -45,4 +45,6 @@ namespace ui
     bool ChoiceButton(ImFont *font, const char *id, std::string_view name,
                       std::string_view description, ImTextureID icon, float width, float height,
                       float globalScale, bool selected = false);
+
+    bool ToggleSwitch(const char *label, bool *value, float animation_speed = 12.0f);
 } // namespace ui
