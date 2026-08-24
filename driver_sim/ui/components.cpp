@@ -9,6 +9,8 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "../utils.h"
+
 #include "components.h"
 
 using blackboard::gui::string_hex_to_rgba_float;
@@ -813,17 +815,8 @@ static bool ParseU32(std::string_view text, std::uint32_t &value)
 
 bool ui::InputUInt32Vector(const char *label, std::vector<std::uint32_t> &values, ImVec2 size)
 {
-    std::string text;
-
-    for (std::size_t i = 0; i < values.size(); ++i)
-    {
-        if (i != 0)
-        {
-            text += '\n';
-        }
-
-        text += std::to_string(values[i]);
-    }
+    std::string text =
+        string_join(values | std::views::transform([](auto v) { return std::to_string(v); }), "\n");
 
     // extra space
     text.reserve(text.size() + 4096);
@@ -883,17 +876,7 @@ bool ui::InputUInt32Vector(const char *label, std::vector<std::uint32_t> &values
 
 bool ui::InputStringVector(const char *label, std::vector<std::string> &values, ImVec2 size)
 {
-    std::string text;
-
-    for (std::size_t i = 0; i < values.size(); ++i)
-    {
-        if (i != 0)
-        {
-            text += '\n';
-        }
-
-        text += values[i];
-    }
+    std::string text = string_join(values, "\n");
 
     // extra space
     text.reserve(text.size() + 4096);
@@ -924,6 +907,57 @@ bool ui::InputStringVector(const char *label, std::vector<std::string> &values, 
             }
 
             newValues.emplace_back(line);
+
+            if (newline == std::string_view::npos)
+            {
+                break;
+            }
+
+            input.remove_prefix(newline + 1);
+        }
+
+        if (newValues != values)
+        {
+            values = std::move(newValues);
+        }
+    }
+
+    return changed;
+}
+
+bool ui::InputStringSet(const char *label, std::unordered_set<std::string> &values, ImVec2 size)
+{
+    std::string text = string_join(values, "\n");
+
+    // extra space
+    text.reserve(text.size() + 4096);
+
+    std::vector<char> buffer(text.size() + 4096, '\0');
+    std::ranges::copy(text, buffer.begin());
+
+    bool changed = false;
+
+    if (ImGui::InputTextMultiline(label, buffer.data(), buffer.size(), size,
+                                  ImGuiInputTextFlags_AllowTabInput))
+    {
+        changed = true;
+
+        std::unordered_set<std::string> newValues;
+
+        std::string_view input(buffer.data());
+
+        while (!input.empty())
+        {
+            const std::size_t newline = input.find('\n');
+
+            std::string_view line = input.substr(0, newline);
+
+            if (!line.empty() && line.back() == '\r')
+            {
+                line.remove_suffix(1);
+            }
+
+            newValues.emplace(line);
 
             if (newline == std::string_view::npos)
             {

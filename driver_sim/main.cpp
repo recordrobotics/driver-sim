@@ -10,6 +10,7 @@
 #include <blackboard_app/app.h>
 #include <blackboard_app/gui.h>
 #include <blackboard_app/logger.h>
+#include <blackboard_app/platform/imgui_impl_sdl_bgfx.h>
 #include <blackboard_app/resources.h>
 #include <blackboard_app/window.h>
 
@@ -615,7 +616,28 @@ void app_after_events()
         int drawable_width{0};
         int drawable_height{0};
         SDL_GetWindowSizeInPixels(main_window->window, &drawable_width, &drawable_height);
-        bgfx::reset(drawable_width, drawable_height, BGFX_RESET_VSYNC);
+        bgfx::reset(drawable_width, drawable_height, blackboard::renderer::get_bgfx_reset_flags());
+    }
+
+    if (main_window->vsync != settings::current.enableVSync)
+    {
+        main_window->vsync = settings::current.enableVSync;
+
+        if (main_window->vsync)
+        {
+            blackboard::renderer::set_bgfx_reset_flags(
+                blackboard::renderer::get_bgfx_reset_flags() | BGFX_RESET_VSYNC);
+        }
+        else
+        {
+            blackboard::renderer::set_bgfx_reset_flags(
+                blackboard::renderer::get_bgfx_reset_flags() & ~BGFX_RESET_VSYNC);
+        }
+
+        int drawable_width{0};
+        int drawable_height{0};
+        SDL_GetWindowSizeInPixels(main_window->window, &drawable_width, &drawable_height);
+        bgfx::reset(drawable_width, drawable_height, blackboard::renderer::get_bgfx_reset_flags());
     }
 }
 
@@ -708,7 +730,10 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    blackboard::app::App app("Driver Sim", renderer_api, initApp, app_update, app_after_events);
+    blackboard::app::App app("Driver Sim", renderer_api, initApp, app_update, app_after_events,
+                             blackboard::app::Window::DEFAULT_WIDTH,
+                             blackboard::app::Window::DEFAULT_HEIGHT, settings::current.fullscreen,
+                             settings::current.enableVSync);
     app_ptr = &app;
     app.run();
 

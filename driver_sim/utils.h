@@ -93,14 +93,17 @@ inline std::string string_join(R &&values, std::string_view delimiter)
     std::string result;
     result.reserve(size);
 
-    for (std::size_t i = 0; i < values.size(); ++i)
+    bool first = true;
+
+    for (const auto &value : values)
     {
-        if (i != 0)
+        if (!first)
         {
             result += delimiter;
         }
 
-        result += values[i];
+        result += value;
+        first = false;
     }
 
     return result;

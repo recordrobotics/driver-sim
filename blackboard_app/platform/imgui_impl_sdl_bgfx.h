@@ -88,4 +88,7 @@ namespace blackboard::renderer
     bool ImGui_Impl_sdl_bgfx_CreateDeviceObjects();
 
     void *native_window_handle(ImGuiViewport *viewport, SDL_WindowID window_id);
+
+    void set_bgfx_reset_flags(uint32_t flags);
+    uint32_t get_bgfx_reset_flags();
 } // namespace blackboard::renderer

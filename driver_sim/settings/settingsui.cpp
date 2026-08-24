@@ -132,12 +132,6 @@ void drawSubHeader(const char *text)
     ImGui::PopFont();
 }
 
-template <typename T> struct SettingOptionData
-{
-    T *value;
-    T defaultValue;
-};
-
 template <typename T>
 void drawSettingOption(const char *id, const char *name, const char *description,
                        SettingOptionData<T> data)
@@ -222,6 +216,28 @@ void drawSettingOption(const char *id, const char *name, const char *description
         {
         }
     }
+    else if constexpr (ReflectableEnum<T>)
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+        if (ImGui::BeginCombo((std::string("##value_") + id).c_str(),
+                              std::string(enum_to_string(*data.value)).c_str()))
+        {
+            for (auto option : enum_all_values<T>())
+            {
+                bool isSelected = (*data.value == option);
+                if (ImGui::Selectable(std::string(enum_to_string(option)).c_str(), isSelected))
+                {
+                    *data.value = option;
+                }
+                if (isSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
 
     ImGui::Dummy(ImVec2(0, 2.0f * globalScale));
 
@@ -292,6 +308,16 @@ void drawSettingOption(const char *id, const char *name, const char *description
             str = std::format("This value is different from the default of '{}'.",
                               string_join(data.defaultValue, ", "));
         }
+        else if constexpr (std::is_same_v<T, std::unordered_set<std::string>>)
+        {
+            str = std::format("This value is different from the default of '{}'.",
+                              string_join(data.defaultValue, ", "));
+        }
+        else if constexpr (ReflectableEnum<T>)
+        {
+            str = std::format("This value is different from the default of '{}'.",
+                              enum_to_string(data.defaultValue));
+        }
 
         ui::TextAlignedWrapped(ui::TextAlign::Right, str.c_str());
         ImGui::PopStyleColor();
@@ -316,6 +342,10 @@ void drawSettingOption(const char *id, const char *name, const char *description
     else if constexpr (std::is_same_v<T, std::vector<std::string>>)
     {
         ui::InputStringVector((std::string("##value_") + id).c_str(), *data.value);
+    }
+    else if constexpr (std::is_same_v<T, std::unordered_set<std::string>>)
+    {
+        ui::InputStringSet((std::string("##value_") + id).c_str(), *data.value);
     }
 }
 
@@ -473,12 +503,12 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
         drawSubHeader("3D Field");
         ImGui::Dummy(spacer);
 
-        drawSettingOption<uint32_t>(
+        drawSettingOption<CameraView>(
             "viewMode", "View mode",
             "The targeting mode used by the camera in the 3D field. The preferred "
             "way to change this is in the View Mode menu.",
-            {.value = reinterpret_cast<uint32_t *>(&settings::current.viewMode),
-             .defaultValue = static_cast<uint32_t>(settings::makeDefault().viewMode)});
+            {.value = &settings::current.viewMode,
+             .defaultValue = settings::makeDefault().viewMode});
         ImGui::Dummy(spacer);
 
         drawSettingOption<float>(
@@ -585,15 +615,14 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
              .defaultValue = settings::makeDefault().updateWhileMinimized});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<uint32_t>(
+        drawSettingOption<RobotModelSimplificationMode>(
             "useFullDetailRobotModel", "Use full detail robot model",
             "The full detail robot model is the original unmodified 3D model provided by the robot "
             "asset. Driver Sim automatically performs simplification and optimization steps on the "
             "model to increase performance. This setting lets you optionally choose where to bring "
             "back the full detail robot model.",
-            {.value = reinterpret_cast<uint32_t *>(&settings::current.useFullDetailRobotModel),
-             .defaultValue =
-                 static_cast<uint32_t>(settings::makeDefault().useFullDetailRobotModel)});
+            {.value = &settings::current.useFullDetailRobotModel,
+             .defaultValue = settings::makeDefault().useFullDetailRobotModel});
         ImGui::Dummy(spacer);
 
         drawSettingOption<bool>(

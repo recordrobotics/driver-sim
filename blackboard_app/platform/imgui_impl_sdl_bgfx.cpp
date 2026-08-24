@@ -73,6 +73,11 @@ namespace blackboard::renderer
     static std::vector<bgfx::ViewId> free_view_ids;
     static bgfx::ViewId sub_view_id = 200;
 
+    static uint32_t bgfx_reset_flags = BGFX_RESET_HIDPI | BGFX_RESET_VSYNC;
+
+    void set_bgfx_reset_flags(uint32_t flags) { bgfx_reset_flags = flags; }
+    uint32_t get_bgfx_reset_flags() { return bgfx_reset_flags; }
+
     static bgfx::ViewId allocate_view_id()
     {
         if (!free_view_ids.empty())
@@ -204,7 +209,7 @@ namespace blackboard::renderer
         ImGuiIO &io = ImGui::GetIO();
         io.DisplaySize =
             ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height));
-        bgfx::reset(drawable_width, drawable_height, BGFX_RESET_VSYNC);
+        bgfx::reset(drawable_width, drawable_height, bgfx_reset_flags);
     }
 
     void ImGui_Impl_sdl_bgfx_UpdateTextures(ImVector<ImTextureData *> *Textures)

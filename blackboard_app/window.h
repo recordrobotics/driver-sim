@@ -34,6 +34,7 @@ namespace blackboard::app
         uint16_t height{DEFAULT_HEIGHT};
         uint16_t imgui_view_id{IMGUI_VIEW_ID}; // might be possible to remove this id
         bool fullscreen{false};
+        bool vsync{true};
         SDL_Window *window{nullptr};
         bool is_dragging{false};
     };

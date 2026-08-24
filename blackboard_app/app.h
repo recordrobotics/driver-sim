@@ -18,7 +18,7 @@ namespace blackboard::app
         App(const char *app_name, renderer::Api renderer_api, const std::function<void()> &on_init,
             const std::function<void()> &on_update, const std::function<void()> &after_events,
             uint16_t width = DEFAULT_WIDTH, uint16_t height = DEFAULT_HEIGHT,
-            bool fullscreen = false);
+            bool fullscreen = false, bool vsync = true);
         ~App();
 
         App(const App &) = delete;

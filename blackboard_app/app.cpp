@@ -26,7 +26,7 @@ namespace blackboard::app
     App::App(const char *app_name, const renderer::Api renderer_api,
              const std::function<void()> &on_init, const std::function<void()> &on_update,
              const std::function<void()> &after_events, const uint16_t width, const uint16_t height,
-             const bool fullscreen)
+             const bool fullscreen, const bool vsync)
         : main_window{std::make_unique<Window>()}, m_renderer_api{renderer_api}, on_init{on_init},
           on_update{on_update}, after_events{after_events}
     {
@@ -62,10 +62,12 @@ namespace blackboard::app
         }
 
         main_window->fullscreen = fullscreen;
+        main_window->vsync = vsync;
         main_window->init_platform_window();
 
         gui::init();
-        if (!renderer::init(*main_window, m_renderer_api, main_window->width, main_window->height))
+        if (!renderer::init(*main_window, m_renderer_api, main_window->width, main_window->height,
+                            main_window->vsync))
         {
             logger::logger->error("Renderer not initialized");
             main_window.reset();

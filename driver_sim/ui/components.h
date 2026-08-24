@@ -2,6 +2,7 @@
 
 #include <list>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ui
@@ -52,4 +53,6 @@ namespace ui
                            ImVec2 size = ImVec2(0, 0));
     bool InputStringVector(const char *label, std::vector<std::string> &values,
                            ImVec2 size = ImVec2(0, 0));
+    bool InputStringSet(const char *label, std::unordered_set<std::string> &values,
+                        ImVec2 size = ImVec2(0, 0));
 } // namespace ui
