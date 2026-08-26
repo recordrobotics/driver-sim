@@ -161,15 +161,31 @@ void drawSettingOption(
     ImGui::PopStyleColor();
     ImGui::PopFont();
 
+    float regionWidth = ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                        ImVec2(11.5f * globalScale, 8.5f * globalScale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f * globalScale);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f * globalScale);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(11.5f * globalScale, 8.5f * globalScale));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, string_hex_to_rgba_u32("#131313FF"));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, string_hex_to_rgba_u32("#171717FF"));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, string_hex_to_rgba_u32("#292929FF"));
+    ImGui::PushStyleColor(ImGuiCol_Border, string_hex_to_rgba_u32("#2F2F2FFF"));
+    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_u32("#FFFFFFFF"));
+    ImGui::PushFont(nullptr, 12.0f);
+
     if (comboMapping.has_value())
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
-
         auto itr = std::find_if(std::begin(comboMapping.value()), std::end(comboMapping.value()),
                                 [&data](auto &&p) { return p.second == *data.value; });
 
         std::string previewValue = (itr != std::end(comboMapping.value())) ? itr->first : "Unknown";
+
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
 
         if (ImGui::BeginCombo((std::string("##value_") + id).c_str(), previewValue.c_str()))
         {
@@ -190,14 +206,13 @@ void drawSettingOption(
     }
     else if constexpr (std::is_same_v<T, bool>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SameLine(regionWidth - 52.0f * globalScale);
         ui::ToggleSwitch((std::string("##value_") + id).c_str(), data.value);
     }
     else if constexpr (std::is_same_v<T, int>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
         if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_S32,
                                data.value, nullptr, nullptr, "%d"))
         {
@@ -205,8 +220,8 @@ void drawSettingOption(
     }
     else if constexpr (std::is_same_v<T, std::uint64_t>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
         std::string humanReadable = settings::humanReadableSize(*data.value);
         if (ImGui::InputText((std::string("##value_") + id).c_str(), &humanReadable,
                              ImGuiInputTextFlags_EnterReturnsTrue))
@@ -223,8 +238,8 @@ void drawSettingOption(
     }
     else if constexpr (std::is_same_v<T, std::uint32_t>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
         if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_U32,
                                data.value, nullptr, nullptr, "%u"))
         {
@@ -232,8 +247,8 @@ void drawSettingOption(
     }
     else if constexpr (std::is_same_v<T, float>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
         if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_Float,
                                data.value, nullptr, nullptr, "%.4f"))
         {
@@ -241,8 +256,8 @@ void drawSettingOption(
     }
     else if constexpr (std::is_same_v<T, double>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
         if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_Double,
                                data.value, nullptr, nullptr, "%.4f"))
         {
@@ -250,8 +265,8 @@ void drawSettingOption(
     }
     else if constexpr (std::is_same_v<T, std::string>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
         if (ImGui::InputText((std::string("##value_") + id).c_str(), data.value,
                              ImGuiInputTextFlags_EnterReturnsTrue))
         {
@@ -259,8 +274,8 @@ void drawSettingOption(
     }
     else if constexpr (ReflectableEnum<T>)
     {
-        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
-                        52.0f * globalScale);
+        ImGui::SetNextItemWidth(147.0f * globalScale);
+        ImGui::SameLine(regionWidth - 147.0f * globalScale);
         if (ImGui::BeginCombo((std::string("##value_") + id).c_str(),
                               std::string(enum_to_string(*data.value)).c_str()))
         {
@@ -367,6 +382,10 @@ void drawSettingOption(
     {
         ui::InputStringSet((std::string("##value_") + id).c_str(), *data.value);
     }
+
+    ImGui::PopFont();
+    ImGui::PopStyleColor(5);
+    ImGui::PopStyleVar(5);
 }
 
 void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
