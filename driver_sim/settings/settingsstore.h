@@ -150,6 +150,9 @@ namespace settings
     void loadSettings();
     void saveSettings();
 
+    uint64_t parseHumanSizeToBytes(const std::string &sizeStr);
+    std::string humanReadableSize(uint64_t bytes);
+
     Store makeDefault();
 
     // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)

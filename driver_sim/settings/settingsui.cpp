@@ -4,9 +4,11 @@
 #include "../ui/components.h"
 #include "../utils.h"
 #include <blackboard_app/gui.h>
+#include <blackboard_app/logger.h>
 
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <type_traits>
@@ -20,6 +22,8 @@ using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
 using blackboard::gui::string_hex_to_rgba_u32;
+
+using namespace blackboard::logger;
 
 namespace settings
 {
@@ -133,8 +137,9 @@ void drawSubHeader(const char *text)
 }
 
 template <typename T>
-void drawSettingOption(const char *id, const char *name, const char *description,
-                       SettingOptionData<T> data)
+void drawSettingOption(
+    const char *id, const char *name, const char *description, const SettingOptionData<T> &data,
+    const std::optional<std::vector<std::pair<std::string, T>>> &comboMapping = std::nullopt)
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
@@ -156,7 +161,34 @@ void drawSettingOption(const char *id, const char *name, const char *description
     ImGui::PopStyleColor();
     ImGui::PopFont();
 
-    if constexpr (std::is_same_v<T, bool>)
+    if (comboMapping.has_value())
+    {
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
+                        52.0f * globalScale);
+
+        auto itr = std::find_if(std::begin(comboMapping.value()), std::end(comboMapping.value()),
+                                [&data](auto &&p) { return p.second == *data.value; });
+
+        std::string previewValue = (itr != std::end(comboMapping.value())) ? itr->first : "Unknown";
+
+        if (ImGui::BeginCombo((std::string("##value_") + id).c_str(), previewValue.c_str()))
+        {
+            for (const auto &[key, value] : *comboMapping)
+            {
+                bool isSelected = (*data.value == value);
+                if (ImGui::Selectable(key.c_str(), isSelected))
+                {
+                    *data.value = value;
+                }
+                if (isSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
+    else if constexpr (std::is_same_v<T, bool>)
     {
         ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
                         52.0f * globalScale);
@@ -175,9 +207,18 @@ void drawSettingOption(const char *id, const char *name, const char *description
     {
         ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize -
                         52.0f * globalScale);
-        if (ImGui::InputScalar((std::string("##value_") + id).c_str(), ImGuiDataType_U64,
-                               data.value, nullptr, nullptr, "%llu"))
+        std::string humanReadable = settings::humanReadableSize(*data.value);
+        if (ImGui::InputText((std::string("##value_") + id).c_str(), &humanReadable,
+                             ImGuiInputTextFlags_EnterReturnsTrue))
         {
+            try
+            {
+                *data.value = settings::parseHumanSizeToBytes(humanReadable);
+            }
+            catch (const std::exception &e)
+            {
+                logger->error("Failed to parse human-readable size: {0}", e.what());
+            }
         }
     }
     else if constexpr (std::is_same_v<T, std::uint32_t>)
@@ -260,22 +301,20 @@ void drawSettingOption(const char *id, const char *name, const char *description
         ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#F0F25FFF"));
 
         std::string str;
-        if constexpr (std::is_same_v<T, bool>)
+        if (comboMapping.has_value())
         {
-            str =
-                std::format("This value is different from the default of '{}'.", data.defaultValue);
+            auto itr =
+                std::find_if(std::begin(comboMapping.value()), std::end(comboMapping.value()),
+                             [&data](auto &&p) { return p.second == data.defaultValue; });
+
+            std::string previewValue =
+                (itr != std::end(comboMapping.value())) ? itr->first : "Unknown";
+            str = std::format("This value is different from the default of '{}'.", previewValue);
         }
-        else if constexpr (std::is_same_v<T, int>)
-        {
-            str =
-                std::format("This value is different from the default of '{}'.", data.defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, std::uint64_t>)
-        {
-            str =
-                std::format("This value is different from the default of '{}'.", data.defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, std::uint32_t>)
+        else if constexpr (std::is_same_v<T, bool> || std::is_same_v<T, int> ||
+                           std::is_same_v<T, std::uint64_t> || std::is_same_v<T, std::uint32_t> ||
+                           std::is_same_v<T, float> || std::is_same_v<T, double> ||
+                           std::is_same_v<T, std::string>)
         {
             str =
                 std::format("This value is different from the default of '{}'.", data.defaultValue);
@@ -288,27 +327,8 @@ void drawSettingOption(const char *id, const char *name, const char *description
                                 std::views::transform([](auto v) { return std::to_string(v); }),
                             ", "));
         }
-        else if constexpr (std::is_same_v<T, float>)
-        {
-            str =
-                std::format("This value is different from the default of '{}'.", data.defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, double>)
-        {
-            str =
-                std::format("This value is different from the default of '{}'.", data.defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, std::string>)
-        {
-            str =
-                std::format("This value is different from the default of '{}'.", data.defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, std::vector<std::string>>)
-        {
-            str = std::format("This value is different from the default of '{}'.",
-                              string_join(data.defaultValue, ", "));
-        }
-        else if constexpr (std::is_same_v<T, std::unordered_set<std::string>>)
+        else if constexpr (std::is_same_v<T, std::vector<std::string>> ||
+                           std::is_same_v<T, std::unordered_set<std::string>>)
         {
             str = std::format("This value is different from the default of '{}'.",
                               string_join(data.defaultValue, ", "));
@@ -465,10 +485,12 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
              .defaultValue = settings::makeDefault().gameTeamPool});
         ImGui::Dummy(spacer);
 
-        drawSettingOption<uint32_t>("gameMatchType", "Match type",
-                                    "The match type shown in the FMS ui.",
-                                    {.value = &settings::current.gameMatchType,
-                                     .defaultValue = settings::makeDefault().gameMatchType});
+        drawSettingOption<uint32_t>(
+            "gameMatchType", "Match type", "The match type shown in the FMS ui.",
+            {.value = &settings::current.gameMatchType,
+             .defaultValue = settings::makeDefault().gameMatchType},
+            std::vector<std::pair<std::string, uint32_t>>{
+                {"Test Match", 0}, {"Practice", 1}, {"Qualification", 2}, {"Elimination", 3}});
         ImGui::Dummy(spacer);
 
         drawSettingOption<uint32_t>("gameMatchNumber", "Match number",
@@ -593,7 +615,13 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
             "'metal' on macOS. It is strongly recommended to use either 'vulkan' or 'd3d12' on "
             "Windows due to graphical inconsistencies on d3d11. Requires restart.",
             {.value = &settings::current.renderApi,
-             .defaultValue = settings::makeDefault().renderApi});
+             .defaultValue = settings::makeDefault().renderApi},
+            std::vector<std::pair<std::string, std::string>>{{"Auto", "auto"},
+                                                             {"Vulkan", "vulkan"},
+                                                             {"Direct3D 12", "d3d12"},
+                                                             {"Direct3D 11", "d3d11"},
+                                                             {"OpenGL", "opengl"},
+                                                             {"Metal", "metal"}});
         ImGui::Dummy(spacer);
 
         drawSettingOption<bool>(

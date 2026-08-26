@@ -7,6 +7,12 @@
 
 #include <blackboard_app/logger.h>
 
+#include <cctype>
+#include <cmath>
+#include <iomanip>
+#include <limits>
+#include <sstream>
+
 using namespace blackboard::logger;
 
 namespace nlohmann
@@ -211,62 +217,92 @@ namespace settings
         constexpr uint64_t MULTIPLIER_GB = 1024ull * MULTIPLIER_MB;
         constexpr uint64_t MULTIPLIER_TB = 1024ull * MULTIPLIER_GB;
 
-        std::string numberPart;
-        std::string unitPart;
-
-        for (char chr : sizeStr)
-        {
-            if (std::isdigit(chr) != 0)
-            {
-                numberPart += chr;
-            }
-            else if (std::isalpha(chr) != 0)
-            {
-                unitPart += static_cast<char>(std::tolower(chr));
-            }
-        }
-
-        uint64_t number = std::stoull(numberPart);
+        size_t offset = 0;
+        const double number = std::stod(sizeStr, &offset);
         uint64_t multiplier = 1;
 
-        if (unitPart == "kb")
+        while (offset < sizeStr.size() &&
+               std::isspace(static_cast<unsigned char>(sizeStr.at(offset))) != 0)
+        {
+            offset++;
+        }
+
+        std::string unitPart;
+        while (offset < sizeStr.size() &&
+               std::isalpha(static_cast<unsigned char>(sizeStr.at(offset))) != 0)
+        {
+            unitPart +=
+                static_cast<char>(std::tolower(static_cast<unsigned char>(sizeStr.at(offset))));
+            offset++;
+        }
+
+        if (unitPart == "k" || unitPart == "kb")
         {
             multiplier = MULTIPLIER_KB;
         }
-        else if (unitPart == "mb")
+        else if (unitPart == "m" || unitPart == "mb")
         {
             multiplier = MULTIPLIER_MB;
         }
-        else if (unitPart == "gb")
+        else if (unitPart == "g" || unitPart == "gb")
         {
             multiplier = MULTIPLIER_GB;
         }
-        else if (unitPart == "tb")
+        else if (unitPart == "t" || unitPart == "tb")
         {
             multiplier = MULTIPLIER_TB;
         }
+        else if (!unitPart.empty() && unitPart != "b")
+        {
+            throw std::invalid_argument("Invalid size unit: " + unitPart);
+        }
 
-        return number * multiplier;
+        const double bytesValue = number * static_cast<double>(multiplier);
+
+        if (!std::isfinite(bytesValue) || bytesValue < 0.0 ||
+            bytesValue > static_cast<double>(std::numeric_limits<uint64_t>::max()))
+        {
+            throw std::out_of_range("Invalid size value");
+        }
+
+        return static_cast<uint64_t>(std::llround(bytesValue));
     }
 
     std::string humanReadableSize(uint64_t bytes)
     {
         constexpr uint64_t MULTIPLIER = 1024ull;
         constexpr std::array<const char *, 5> units = {"B", "KB", "MB", "GB", "TB"};
+
+        auto value = static_cast<double>(bytes);
         int unitIndex = 0;
 
-        while (bytes >= MULTIPLIER && unitIndex < static_cast<int>(units.size()) - 1)
+        while (value >= static_cast<double>(MULTIPLIER) &&
+               unitIndex < static_cast<int>(units.size()) - 1)
         {
-            bytes /= MULTIPLIER;
+            value /= static_cast<double>(MULTIPLIER);
             unitIndex++;
         }
 
-        constexpr size_t MAX_BUFFER_SIZE = 64;
+        const auto clampedUnitIndex = std::clamp(unitIndex, 0, static_cast<int>(units.size()) - 1);
 
-        std::array<char, MAX_BUFFER_SIZE> buffer{};
-        std::snprintf(buffer.data(), buffer.size(), "%llu %s", bytes,
-                      units.at(std::clamp(unitIndex, 0, static_cast<int>(units.size()) - 1)));
-        return {buffer.data()};
+        if (unitIndex == 0)
+        {
+            return std::to_string(bytes) + " " + units.at(clampedUnitIndex);
+        }
+
+        std::ostringstream valueStream;
+        valueStream << std::fixed << std::setprecision(2) << value;
+        std::string valueText = valueStream.str();
+        while (!valueText.empty() && valueText.back() == '0')
+        {
+            valueText.pop_back();
+        }
+        if (!valueText.empty() && valueText.back() == '.')
+        {
+            valueText.pop_back();
+        }
+
+        return valueText + " " + units.at(clampedUnitIndex);
     }
 
     void loadSettings()
