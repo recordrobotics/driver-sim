@@ -2185,7 +2185,7 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking;
+        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollWithMouse;
 
     ImGui::SetNextWindowViewport(viewportId);
     ImGui::SetNextWindowPos(ImVec2(xOffset, yOffset));
