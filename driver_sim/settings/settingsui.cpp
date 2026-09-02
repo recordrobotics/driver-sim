@@ -164,8 +164,9 @@ void drawSettingOption(
     float regionWidth = ImGui::GetWindowWidth() - style.WindowPadding.x - style.ScrollbarSize;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
-                        ImVec2(11.5f * globalScale, 8.5f * globalScale));
+                        ImVec2(0.0f * globalScale, 0.0f * globalScale));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f * globalScale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * globalScale);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f * globalScale);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
@@ -385,7 +386,7 @@ void drawSettingOption(
 
     ImGui::PopFont();
     ImGui::PopStyleColor(5);
-    ImGui::PopStyleVar(5);
+    ImGui::PopStyleVar(6);
 }
 
 void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
