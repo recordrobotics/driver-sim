@@ -2110,27 +2110,22 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     const std::chrono::duration<float> stayDuration = std::chrono::seconds(5);
 
     ImGuiIO &io = ImGui::GetIO();
-    if (!io.WantCaptureMouse)
+    if (io.MousePos.x >= viewportPos.x && io.MousePos.x < viewportPos.x + viewportSize.x &&
+        io.MousePos.y >= viewportPos.y && io.MousePos.y < viewportPos.y + 300.0f * globalScale &&
+        (std::abs(io.MouseDelta.x) > 1.0f || std::abs(io.MouseDelta.y) > 1.0f))
     {
-        if (io.MousePos.x >= viewportPos.x && io.MousePos.x < viewportPos.x + viewportSize.x &&
-            io.MousePos.y >= viewportPos.y &&
-            io.MousePos.y < viewportPos.y + 300.0f * globalScale &&
-            (std::abs(io.MouseDelta.x) > 1.0f || std::abs(io.MouseDelta.y) > 1.0f))
+        if (!isTopUISummoned)
         {
-            if (!isTopUISummoned)
-            {
-                firstTopUISummonTime = std::chrono::steady_clock::now();
-                isTopUISummoned = true;
-            }
+            firstTopUISummonTime = std::chrono::steady_clock::now();
+            isTopUISummoned = true;
+        }
 
-            lastTopUISummonTime = std::chrono::steady_clock::now();
-        }
-        else if (std::chrono::duration<float>(std::chrono::steady_clock::now() -
-                                              lastTopUISummonTime)
-                     .count() >= stayDuration.count())
-        {
-            isTopUISummoned = false;
-        }
+        lastTopUISummonTime = std::chrono::steady_clock::now();
+    }
+    else if (std::chrono::duration<float>(std::chrono::steady_clock::now() - lastTopUISummonTime)
+                 .count() >= stayDuration.count())
+    {
+        isTopUISummoned = false;
     }
 
     const float inAnimationTime = 0.2f;
