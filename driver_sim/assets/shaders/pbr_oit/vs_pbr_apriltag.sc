@@ -17,8 +17,8 @@ void main()
 	v_viewNormal = normalize(mul(modelView, vec4(normal, 0.0))).xyz;
 
     vec2 gridSize = vec2_splat(10.0 / 250.0);
-    uint gridX = id % uint(10);
-    uint gridY = id / uint(10);
+    uint gridX = id % uint(25);
+    uint gridY = id / uint(25);
     vec2 gridOffset = vec2(float(gridX), float(gridY)) * gridSize;
     v_texcoord0 = a_texcoord0 * gridSize + gridOffset;
 
