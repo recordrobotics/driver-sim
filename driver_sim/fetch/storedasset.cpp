@@ -4,6 +4,7 @@
 #include <blackboard_app/logger.h>
 #include <fstream>
 #include <miniz.h>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -212,12 +213,15 @@ void StoredAsset::cleanupExtractedFiles()
 }
 
 StoredAsset::StoredAsset(const std::string &relativeExtractPath, std::string hash,
-                         const std::string &sdlPrefPath)
+                         const std::string &sdlPrefPath, const std::string &sourceType)
     : expectedSha256(std::move(hash))
 {
     localExtractPath = fs::path(sdlPrefPath) / relativeExtractPath;
     localHashPath = fs::path(sdlPrefPath) / (relativeExtractPath + ".sha256");
     localTempZipPath = fs::path(sdlPrefPath) / (relativeExtractPath + ".tmp.zip");
+
+    getCreatedAssets().push_back(relativeExtractPath + ":" + expectedSha256 + " (" + sourceType +
+                                 ")");
 }
 
 StoredAsset::~StoredAsset()
@@ -225,6 +229,14 @@ StoredAsset::~StoredAsset()
     if (workerThread.joinable())
     {
         workerThread.request_stop();
+    }
+
+    // erase from getCreatedAssets entries whose hash matches expectedSha256
+    auto &createdAssets = getCreatedAssets();
+    if (!createdAssets.empty())
+    {
+        std::erase_if(createdAssets, [this](const std::string &entry)
+                      { return entry.find(expectedSha256) != std::string::npos; });
     }
 }
 
@@ -291,4 +303,10 @@ std::string StoredAsset::getError()
 {
     std::scoped_lock lock(errorMutex);
     return errorMessage;
+}
+
+std::vector<std::string> &StoredAsset::getCreatedAssets()
+{
+    static std::vector<std::string> createdAssets;
+    return createdAssets;
 }

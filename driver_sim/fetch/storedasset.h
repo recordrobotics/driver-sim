@@ -52,7 +52,7 @@ class StoredAsset
 
   public:
     StoredAsset(const std::string &relativeExtractPath, std::string hash,
-                const std::string &sdlPrefPath);
+                const std::string &sdlPrefPath, const std::string &sourceType);
 
     virtual ~StoredAsset();
 
@@ -69,4 +69,6 @@ class StoredAsset
     bool isQuickLoaded() const { return quickLoaded; }
 
     std::vector<std::string> keepPaths; // folders/files to keep when deleting old files
+
+    static std::vector<std::string> &getCreatedAssets();
 };

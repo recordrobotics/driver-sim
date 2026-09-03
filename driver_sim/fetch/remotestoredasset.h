@@ -11,7 +11,7 @@ class RemoteStoredAsset : public StoredAsset
   public:
     RemoteStoredAsset(const std::string &relativeExtractPath, const std::string &hash,
                       const std::string &sdlPrefPath, std::string url)
-        : StoredAsset(relativeExtractPath, hash, sdlPrefPath), remoteUrl(std::move(url))
+        : StoredAsset(relativeExtractPath, hash, sdlPrefPath, "remote"), remoteUrl(std::move(url))
     {
     }
 

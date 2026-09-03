@@ -18,6 +18,8 @@
 
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "../fetch/storedasset.h"
+
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
@@ -65,35 +67,14 @@ void drawAboutPanel(ImFont *font)
     ImGui::TextUnformatted("Stored Assets");
     ImGui::Dummy(ImVec2(0, 6.0f * globalScale));
 
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
-    ImGui::TextUnformatted(
-        "jdk:8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5 (remote)");
-    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
-    ImGui::TextUnformatted(
-        "elastic:6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7 (remote)");
-    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
-    ImGui::TextUnformatted(
-        "field:0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31 (remote)");
-    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
-    ImGui::TextUnformatted(
-        "robot:b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462 (remote)");
-    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
-    ImGui::TextUnformatted(
-        "jni:0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5 (remote)");
-    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
-    ImGui::TextUnformatted(
-        "code:7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878 (packaged)");
-    ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
-    ImGui::TextUnformatted(
-        "discord_sdk:2a7c8b043ca04a14a10c64b4f1116fe2a93bb6f6f4f0b4784c0ca1fc06ca832e (remote)");
+    for (const auto &asset : StoredAsset::getCreatedAssets())
+    {
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 7.0f * globalScale);
+        ImGui::TextUnformatted(asset.data(), asset.data() + asset.size());
+        ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
+    }
 
-    ImGui::Dummy(ImVec2(0, 6.0f * globalScale));
+    ImGui::Dummy(ImVec2(0, 5.0f * globalScale));
 
     ImGui::PopStyleColor();
 
