@@ -29,6 +29,8 @@
 #include <settings.png.h>
 #include <viewmode.png.h>
 
+#include "../manifest.h"
+
 using namespace ui;
 using blackboard::gui::load_image;
 
@@ -2669,12 +2671,14 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     if (now - lastDiscordUpdateTime > DISCORD_UPDATE_INTERVAL)
     {
         lastDiscordUpdateTime = now;
+
+        Manifest &manifest = Manifest::getCurrent();
+
         discord->setField(GAME_YEAR, allianceStation, fmsUI ? fmsUI->getDriverScore() : 0,
                           fmsUI ? fmsUI->getOpponentScore() : 0,
                           robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
                           fmsUI ? fmsUI->getDriveMode() : "<Unknown>",
-                          "https://github.com/recordrobotics/2026-robot",
-                          "https://github.com/recordrobotics/2026-robot/releases/latest",
+                          manifest.getRobotCodeRepoUrl(), manifest.getRobotDownloadUrl(),
                           fmsUI ? fmsUI->getMatchEndTime() : 0);
     }
 

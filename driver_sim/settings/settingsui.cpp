@@ -20,6 +20,7 @@
 
 #include "../fetch/storedasset.h"
 
+#include "../manifest.h"
 #include <version.h>
 
 using blackboard::gui::ImTexture;
@@ -59,15 +60,18 @@ void drawAboutPanel(ImFont *font)
 
     ImGui::PushFont(nullptr, 10.0f);
 
+    Manifest &manifest = Manifest::getCurrent();
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));
-    ImGui::TextUnformatted("Version " DRIVERSIM_VERSION " (" STR(
-        GAME_YEAR) ") Build 2026.7.16+ (Packaged) " DRIVERSIM_COMMIT " d1d8cba");
+    std::string versionText = ("Version " DRIVERSIM_VERSION " (" STR(GAME_YEAR) ") Build ") +
+                              manifest.getBuildVersion() + " (" + manifest.getSourceType() +
+                              ") " DRIVERSIM_COMMIT " " + manifest.getCommitHash();
+    ImGui::TextUnformatted(versionText.data(), versionText.data() + versionText.size());
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
     ImGui::PopStyleColor();
 
-    ui::DrawLinkText("https://github.com/recordrobotics/2026-robot");
+    ui::DrawLinkText(manifest.getRobotCodeRepoUrl().c_str());
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ui::DrawLinkText("https://github.com/recordrobotics/driver-sim");
+    ui::DrawLinkText(manifest.getDriverSimRepoUrl().c_str());
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
 
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));

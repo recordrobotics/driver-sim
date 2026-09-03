@@ -1,4 +1,5 @@
 #include "discord.h"
+#include "manifest.h"
 #include "settings/settingsstore.h"
 #include <SDL3/SDL.h>
 #include <blackboard_app/logger.h>
@@ -144,13 +145,13 @@ void Discord::setField(int gameYear, int allianceStation, int driverScore, int o
     activity.SetTimestamps(timestamps);
 
     discordpp::ActivityButton downloadButton;
-    downloadButton.SetLabel("Get Microwave");
+    downloadButton.SetLabel("Get " + robotName);
     downloadButton.SetUrl(robotDownloadUrl);
     activity.AddButton(downloadButton);
 
     discordpp::ActivityButton viewButton;
     viewButton.SetLabel("View on GitHub");
-    viewButton.SetUrl("https://github.com/recordrobotics/driver-sim");
+    viewButton.SetUrl(Manifest::getCurrent().getDriverSimRepoUrl());
     activity.AddButton(viewButton);
 
     updateActivity(activity);
