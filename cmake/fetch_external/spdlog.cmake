@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.25)
 
 include(FetchContent)
 
@@ -12,5 +12,6 @@ FetchContent_Declare(
     GIT_TAG v1.17.0
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/spdlog
+    SYSTEM
 )
 FetchContent_MakeAvailable(spdlog)

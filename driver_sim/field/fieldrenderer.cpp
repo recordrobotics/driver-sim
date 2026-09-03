@@ -1310,8 +1310,7 @@ static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory,
         meshes,
         parser
             .loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory,
-                            fastgltf::Options::LoadGLBBuffers |
-                                fastgltf::Options::DontRequireValidAssetMember)
+                            fastgltf::Options::DontRequireValidAssetMember)
             .get(),
         tags);
 

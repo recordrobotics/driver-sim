@@ -19,7 +19,7 @@ zip up the jni folder from /build/jni and zip up the 2026-robot.jar from /build/
 
 ### Requirements
 
-- CMake 3.21+
+- CMake 3.25+
 - A C++20-capable compiler
 
 ### Configure and build (Ninja)
