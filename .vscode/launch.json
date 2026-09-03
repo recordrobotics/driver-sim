@@ -28,6 +28,18 @@
             "console": "internalConsole"
         },
         {
+            "name": "Debug GDB",
+            "type": "cppdbg",
+            "request": "launch",
+            "MIMode": "lldb",
+            "program": "${workspaceFolder}/build/driver_sim/driver_sim.app/Contents/MacOS/driver_sim",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false
+        },
+        {
             "name": "Launch (RenderDoc Capture)",
             "type": "cppvsdbg",
             "request": "launch",
