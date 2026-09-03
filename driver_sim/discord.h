@@ -20,8 +20,8 @@ class Discord
     void update();
 
     void setMenu();
-    void setField(int gameYear, int allianceStation, int driverScore, int opponentScore,
-                  const std::string &robotName, const std::string &driveMode,
+    void setField(const std::string &gameYear, int allianceStation, int driverScore,
+                  int opponentScore, const std::string &robotName, const std::string &driveMode,
                   const std::string &robotRepoUrl, const std::string &robotDownloadUrl,
                   uint64_t matchEndTimeMs);
 

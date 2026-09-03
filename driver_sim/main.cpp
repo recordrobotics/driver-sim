@@ -48,6 +48,7 @@
 
 #include "discord.h"
 
+#include "manifest.h"
 #include "version.h"
 
 using blackboard::gui::ImTexture;
@@ -73,14 +74,14 @@ enum Page
 
 ui::Transition pageTransition{PAGE_LOADING};
 
-std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> javaAsset;
-std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> dashboardAsset;
-std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> fieldAsset;
-std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> robotAsset;
-std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> jniAsset;
-std::unique_ptr<PackagedStoredAsset, std::default_delete<PackagedStoredAsset>> robotCodeAsset;
-std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> elasticProcess;
-std::unique_ptr<ProcessRunner, std::default_delete<ProcessRunner>> javaProcess;
+std::unique_ptr<StoredAsset> javaAsset;
+std::unique_ptr<StoredAsset> dashboardAsset;
+std::unique_ptr<StoredAsset> fieldAsset;
+std::unique_ptr<StoredAsset> robotAsset;
+std::unique_ptr<StoredAsset> jniAsset;
+std::unique_ptr<StoredAsset> robotCodeAsset;
+std::unique_ptr<ProcessRunner> elasticProcess;
+std::unique_ptr<ProcessRunner> javaProcess;
 
 std::shared_ptr<Discord> discord;
 
@@ -170,30 +171,30 @@ void initApp()
 
     settings::init(logo);
 
+    Manifest &manifest = Manifest::getCurrent();
+
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
-    javaAsset = std::make_unique<RemoteStoredAsset>(
-        "jdk", "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5", prefPath,
-        "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/"
-        "eclipse?project=jdk");
+    javaAsset = std::make_unique<RemoteStoredAsset>("jdk", manifest.getJdkHash(), prefPath,
+                                                    manifest.getJdkDownloadUrl());
     dashboardAsset = std::make_unique<RemoteStoredAsset>(
-        "elastic", "6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7", prefPath,
-        "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/"
-        "Elastic-Windows_portable.zip");
-    fieldAsset = std::make_unique<RemoteStoredAsset>(
-        "field", "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31", prefPath,
-        "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/"
-        "Field3d_2026FRCFieldV1.zip");
-    robotAsset = std::make_unique<RemoteStoredAsset>(
-        "robot", "b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462", prefPath,
-        "https://hamster1.ddns.net/"
-        "robot-b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462.zip");
-    jniAsset = std::make_unique<RemoteStoredAsset>(
-        "jni", "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5", prefPath,
-        "https://hamster1.ddns.net/"
-        "jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip");
-    robotCodeAsset = std::make_unique<PackagedStoredAsset>(
-        "code", "7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878", prefPath,
-        std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
+        "elastic", manifest.getElasticHash(), prefPath, manifest.getElasticDownloadUrl());
+    fieldAsset = std::make_unique<RemoteStoredAsset>("field", manifest.getFieldHash(), prefPath,
+                                                     manifest.getFieldDownloadUrl());
+    robotAsset = std::make_unique<RemoteStoredAsset>("robot", manifest.getRobotAssetHash(),
+                                                     prefPath, manifest.getRobotAssetDownloadUrl());
+    jniAsset = std::make_unique<RemoteStoredAsset>("jni", manifest.getJniHash(), prefPath,
+                                                   manifest.getJniDownloadUrl());
+    if (manifest.getRobotCodeDownloadUrl().empty())
+    {
+        robotCodeAsset = std::make_unique<PackagedStoredAsset>(
+            "code", manifest.getRobotCodeHash(), prefPath,
+            std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
+    }
+    else
+    {
+        robotCodeAsset = std::make_unique<RemoteStoredAsset>(
+            "code", manifest.getRobotCodeHash(), prefPath, manifest.getRobotCodeDownloadUrl());
+    }
 
     // make sure we keep logs and settings
     robotCodeAsset->keepPaths = {"logs", "ctre_sim", "networktables.json"};
@@ -224,9 +225,10 @@ std::vector<std::string> getJavaCommandLine()
 {
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
-    std::vector<std::string> javaCommandLine = {prefPath + "jdk/jdk-17.0.16+8/bin/java.exe",
-                                                "-Djava.library.path=" + prefPath + "jni/release",
-                                                "-jar", prefPath + "code/libs/2026-robot.jar"};
+    std::vector<std::string> javaCommandLine = {
+        prefPath + "jdk/jdk-" + Manifest::getCurrent().getJdkVersion() + "/bin/java.exe",
+        "-Djava.library.path=" + prefPath + "jni/release", "-jar",
+        prefPath + "code/libs/" + Manifest::getCurrent().getRobotCodeJarName()};
     javaCommandLine.insert(
         javaCommandLine.end() - 2, settings::current.jvmArguments.begin(),
         settings::current.jvmArguments.end()); // insert JVM arguments before the -jar argument
@@ -443,7 +445,9 @@ void drawPageLoading()
 
     if (settings::current.launchRobotCode)
     {
-        drawAssetProgress("Java 17", *javaAsset);
+        std::string javaMajorVersion = Manifest::getCurrent().getJdkVersion().substr(
+            0, Manifest::getCurrent().getJdkVersion().find('.'));
+        drawAssetProgress("Java " + javaMajorVersion, *javaAsset);
     }
     if (settings::current.launchElastic)
     {
@@ -682,7 +686,8 @@ int main(int argc, char *argv[])
 {
     std::string api;
 
-    argparse::ArgumentParser program("driver_sim", "1.0", argparse::default_arguments::none, false);
+    argparse::ArgumentParser program("driver_sim", DRIVERSIM_VERSION,
+                                     argparse::default_arguments::none, false);
     program.add_argument("--api")
         .default_value("auto")
         .choices("auto", "metal", "d3d11", "d3d12", "vulkan", "opengl")

@@ -202,7 +202,6 @@ target_compile_definitions(${PROJECT_NAME}
 target_compile_definitions(${PROJECT_NAME}
     PRIVATE
     NOMINMAX
-    GAME_YEAR=2026
 )
 
 # Create tree group to tidy the files inside IDEs

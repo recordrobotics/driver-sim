@@ -30,11 +30,6 @@ using blackboard::gui::string_hex_to_rgba_u32;
 
 using namespace blackboard::logger;
 
-#ifndef STR_HELPER
-#define STR_HELPER(x) #x
-#define STR(x) STR_HELPER(x)
-#endif
-
 namespace settings
 {
     ImTexture logo = {};
@@ -62,9 +57,10 @@ void drawAboutPanel(ImFont *font)
 
     Manifest &manifest = Manifest::getCurrent();
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));
-    std::string versionText = ("Version " DRIVERSIM_VERSION " (" STR(GAME_YEAR) ") Build ") +
-                              manifest.getBuildVersion() + " (" + manifest.getSourceType() +
-                              ") " DRIVERSIM_COMMIT " " + manifest.getCommitHash();
+    std::string versionText = ("Version " DRIVERSIM_VERSION " (") + manifest.getTbaYear() +
+                              ") Build " + manifest.getBuildVersion() + " (" +
+                              manifest.getSourceType() + (") " DRIVERSIM_COMMIT " ") +
+                              manifest.getCommitHash();
     ImGui::TextUnformatted(versionText.data(), versionText.data() + versionText.size());
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
     ImGui::PopStyleColor();

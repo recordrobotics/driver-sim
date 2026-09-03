@@ -12,11 +12,6 @@
 #include <fastgltf/tools.hpp>
 #include <fastgltf/types.hpp>
 
-#ifndef STR_HELPER
-#define STR_HELPER(x) #x
-#define STR(x) STR_HELPER(x)
-#endif
-
 constexpr std::array<uint8_t, 4> MESH_SERIALIZATION_MAGIC = {0x67, 0x31, 0x67, 0x31};
 constexpr uint8_t MESH_SERIALIZATION_VERSION = 9; // increment to force reload cache
 
@@ -64,7 +59,8 @@ struct Material
     {
     }
 
-    Material(const fastgltf::Material &mat, const std::string &nodeName = "")
+    Material(const fastgltf::Material &mat, const std::string &carpetNodeName,
+             const std::string &nodeName = "")
         : baseColor{mat.pbrData.baseColorFactor[0], mat.pbrData.baseColorFactor[1],
                     mat.pbrData.baseColorFactor[2], mat.pbrData.baseColorFactor[3]},
           emissionColor{mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2],
@@ -74,7 +70,7 @@ struct Material
           writesObjectMotionVectors(false)
     {
         // cad export pbrData is wrong, base it off the node name instead
-        if (nodeName.find("FE-" STR(GAME_YEAR) "-01") != std::string::npos)
+        if (nodeName.find(carpetNodeName) != std::string::npos)
         {
             // playing field carpet floor is rough
             metallic = 0.0f;

@@ -16,10 +16,8 @@
 
 #include <blackboard_app/platform/imgui_impl_sdl_bgfx.h>
 
+#include "../../manifest.h"
 #include <teamplaceholder.png.h>
-
-#define STR_HELPER(x) #x
-#define STR(x) STR_HELPER(x)
 
 using namespace blackboard::logger;
 
@@ -151,9 +149,10 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
     {
         logoStates[teamNumber] = LogoState::Loading;
 
-        std::filesystem::path localPath =
-            logoCacheDirectory / STR(GAME_YEAR) / (std::to_string(teamNumber) + ".png");
-        std::string remoteUrl = "https://www.thebluealliance.com/avatar/" STR(GAME_YEAR) "/frc" +
+        std::filesystem::path localPath = logoCacheDirectory / Manifest::getCurrent().getTbaYear() /
+                                          (std::to_string(teamNumber) + ".png");
+        std::string remoteUrl = "https://www.thebluealliance.com/avatar/" +
+                                Manifest::getCurrent().getTbaYear() + "/frc" +
                                 std::to_string(teamNumber) + ".png";
 
         // Load the logo asynchronously

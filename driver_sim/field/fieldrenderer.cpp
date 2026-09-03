@@ -1435,9 +1435,10 @@ void FieldRenderer::loadFieldModel()
             driverStationCameraPositions = j["driverStations"].get<std::vector<bx::Vec3>>();
         }
 
-#if GAME_YEAR == 2026
-        Rebuilt2026::addHubLedTags(tags);
-#endif
+        if (Manifest::getCurrent().getGameYear() == "2026")
+        {
+            Rebuilt2026::addHubLedTags(tags);
+        }
 
         loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model", tags);
 
@@ -1761,7 +1762,10 @@ void FieldRenderer::startNTClient()
                                      }
                                  });
 
-    fmsUI = std::make_unique<Rebuilt2026FMSUI>(ntInst);
+    if (Manifest::getCurrent().getGameYear() == "2026")
+    {
+        fmsUI = std::make_unique<Rebuilt2026FMSUI>(ntInst);
+    }
 
     ntInst.SetServer("127.0.0.1");
     ntInst.StartClient4("driver-sim");
@@ -2674,12 +2678,12 @@ void FieldRenderer::render(const blackboard::app::Window &window,
 
         Manifest &manifest = Manifest::getCurrent();
 
-        discord->setField(GAME_YEAR, allianceStation, fmsUI ? fmsUI->getDriverScore() : 0,
-                          fmsUI ? fmsUI->getOpponentScore() : 0,
-                          robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
-                          fmsUI ? fmsUI->getDriveMode() : "<Unknown>",
-                          manifest.getRobotCodeRepoUrl(), manifest.getRobotDownloadUrl(),
-                          fmsUI ? fmsUI->getMatchEndTime() : 0);
+        discord->setField(
+            manifest.getGameYear(), allianceStation, fmsUI ? fmsUI->getDriverScore() : 0,
+            fmsUI ? fmsUI->getOpponentScore() : 0,
+            robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
+            fmsUI ? fmsUI->getDriveMode() : "<Unknown>", manifest.getRobotCodeRepoUrl(),
+            manifest.getRobotDownloadUrl(), fmsUI ? fmsUI->getMatchEndTime() : 0);
     }
 
     ensureTextures(m_width, m_height);

@@ -40,10 +40,8 @@
 #include <frc/geometry/Pose3d.h>
 #include <frc/geometry/struct/Pose3dStruct.h>
 
-#if GAME_YEAR == 2026
 #include "seasonspecific/rebuilt2026/fmsui.h"
 #include "seasonspecific/rebuilt2026/hublights.h"
-#endif
 
 inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
 {
@@ -755,9 +753,7 @@ class FieldRenderer
 
     nt::NetworkTableInstance ntInst;
 
-#if GAME_YEAR == 2026
     std::unique_ptr<Rebuilt2026FMSUI> fmsUI;
-#endif
 
     DebugView debugView = DebugView::None;
 

@@ -102,10 +102,10 @@ void Discord::setMenu()
     updateActivity(activity);
 }
 
-void Discord::setField(int gameYear, int allianceStation, int driverScore, int opponentScore,
-                       const std::string &robotName, const std::string &driveMode,
-                       const std::string &robotRepoUrl, const std::string &robotDownloadUrl,
-                       uint64_t matchEndTimeMs)
+void Discord::setField(const std::string &gameYear, int allianceStation, int driverScore,
+                       int opponentScore, const std::string &robotName,
+                       const std::string &driveMode, const std::string &robotRepoUrl,
+                       const std::string &robotDownloadUrl, uint64_t matchEndTimeMs)
 {
     if (!available)
     {
@@ -117,10 +117,15 @@ void Discord::setField(int gameYear, int allianceStation, int driverScore, int o
 
     discordpp::ActivityAssets assets;
 
-    if (gameYear == 2026)
+    if (gameYear == "2026")
     {
         assets.SetLargeImage("2026");
         assets.SetLargeText("2026 Rebuilt");
+    }
+    else
+    {
+        assets.SetLargeImage("blue");
+        assets.SetLargeText(gameYear);
     }
 
     int dsIndex = allianceStation < 1 ? 1 : ((allianceStation - 1) % 3) + 1;
