@@ -48,6 +48,8 @@
 
 #include "discord.h"
 
+#include "version.h"
+
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
@@ -706,6 +708,8 @@ int main(int argc, char *argv[])
         logger::logger->error("Error parsing arguments: {}", err.what());
         logger::logger->info(program.help().str());
     }
+
+    logger::logger->info("Driver Sim version: {} {}", DRIVERSIM_VERSION, DRIVERSIM_COMMIT);
 
     settings::loadSettings();
 

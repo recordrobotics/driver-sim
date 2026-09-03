@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.21)
 
 project(driver_sim C CXX)
 
+include(../cmake/GitVersion.cmake)
+get_version_from_git()
+
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ./**.cpp ./**.c)
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ./**.hpp ./**.h)
 file(GLOB_RECURSE ASSETS CONFIGURE_DEPENDS ./assets/*)
@@ -126,6 +129,11 @@ bgfx_compile_shaders(
   AS_HEADERS
 )
 
+configure_file(
+    ${CMAKE_CURRENT_LIST_DIR}/version.h.in
+    ${CMAKE_BINARY_DIR}/include/generated/templates/version.h
+)
+
 if(WINDOWS)
     add_executable(${PROJECT_NAME} WIN32 
             ${SOURCES} ${HEADERS}
@@ -139,10 +147,10 @@ elseif(MACOS)
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUNDLE True
         RESOURCE True
-        MACOSX_BUNDLE_GUI_IDENTIFIER ll.dashandslash.${PROJECT_NAME}
-        MACOSX_BUNDLE_BUNDLE_NAME ${PROJECT_NAME}
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.1"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
+        MACOSX_BUNDLE_GUI_IDENTIFIER org.recordrobotics.driversim
+        MACOSX_BUNDLE_BUNDLE_NAME driversim
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
 )
 elseif(LINUX)
     add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
@@ -174,6 +182,7 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_BINARY_DIR}/include/generated/images
     ${CMAKE_BINARY_DIR}/include/generated/shaders
     ${CMAKE_BINARY_DIR}/include/generated/packaged
+    ${CMAKE_BINARY_DIR}/include/generated/templates
 )
 
 if(WINDOWS)

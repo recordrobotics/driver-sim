@@ -1,0 +1,4 @@
+#pragma once
+
+#define DRIVERSIM_VERSION "@FULL_VERSION@"
+#define DRIVERSIM_COMMIT "@PROJECT_COMMIT_HASH@"
