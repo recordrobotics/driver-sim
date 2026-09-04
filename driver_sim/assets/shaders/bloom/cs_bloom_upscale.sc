@@ -90,9 +90,7 @@ void main()
         {
             uv.x = uv.x * (screenAspect / DIRT_TEXTURE_ASPECT_RATIO) + 0.5 * (1.0 - screenAspect / DIRT_TEXTURE_ASPECT_RATIO);
         }
-#if !(BGFX_SHADER_LANGUAGE_HLSL || BGFX_SHADER_LANGUAGE_METAL || BGFX_SHADER_LANGUAGE_SPIRV)
-        uv.y = 1.0 - uv.y;
-#endif
+
         out_pixel += texture2DLod(s_bloomDirt, uv, 0.0) * u_bloom_intensity.y * bloom * u_bloom_intensity.x;
     }
 

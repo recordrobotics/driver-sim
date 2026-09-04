@@ -75,9 +75,7 @@ void main()
     color.rgb *= color.a;
 
     vec2 uv = (v_currentPosition.xy / v_currentPosition.w) * 0.5 + 0.5;
-#if BGFX_SHADER_LANGUAGE_HLSL || BGFX_SHADER_LANGUAGE_METAL || BGFX_SHADER_LANGUAGE_SPIRV
 	uv.y = 1.0 - uv.y;
-#endif
 
     vec4 moments = texture2DLod(s_momentsTex, uv, 0.0);
     float totalDepth = texture2DLod(s_totalDepthTex, uv, 0.0).r;

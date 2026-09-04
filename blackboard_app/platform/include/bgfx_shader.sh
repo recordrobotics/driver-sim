@@ -628,6 +628,10 @@ bvec2 greaterThanEqual(vec2 _a, vec2 _b) { return _a >= _b; }
 bvec3 greaterThanEqual(vec3 _a, vec3 _b) { return _a >= _b; }
 bvec4 greaterThanEqual(vec4 _a, vec4 _b) { return _a >= _b; }
 
+bvec2 greaterThanEqual(ivec2 _a, ivec2 _b) { return _a >= _b; }
+bvec3 greaterThanEqual(ivec3 _a, ivec3 _b) { return _a >= _b; }
+bvec4 greaterThanEqual(ivec4 _a, ivec4 _b) { return _a >= _b; }
+
 bvec2 notEqual(vec2 _a, vec2 _b) { return _a != _b; }
 bvec3 notEqual(vec3 _a, vec3 _b) { return _a != _b; }
 bvec4 notEqual(vec4 _a, vec4 _b) { return _a != _b; }
@@ -635,6 +639,10 @@ bvec4 notEqual(vec4 _a, vec4 _b) { return _a != _b; }
 bvec2 equal(vec2 _a, vec2 _b) { return _a == _b; }
 bvec3 equal(vec3 _a, vec3 _b) { return _a == _b; }
 bvec4 equal(vec4 _a, vec4 _b) { return _a == _b; }
+
+bvec2 equal(uvec2 _a, uvec2 _b) { return _a == _b; }
+bvec3 equal(uvec3 _a, uvec3 _b) { return _a == _b; }
+bvec4 equal(uvec4 _a, uvec4 _b) { return _a == _b; }
 
 float mix(float _a, float _b, float _t) { return lerp(_a, _b, _t); }
 vec2  mix(vec2  _a, vec2  _b, vec2  _t) { return lerp(_a, _b, _t); }
@@ -858,6 +866,18 @@ uvec3 select(bvec3 _cond, uvec3 _true, uvec3 _false) { return (uvec3(_cond) * _t
 uvec4 select(bvec4 _cond, uvec4 _true, uvec4 _false) { return (uvec4(_cond) * _true) + (uvec4(not(_cond) ) * _false); }
 #		endif // BGFX_SHADER_LANGUAGE_GLSL
 #endif // !BGFX_SHADER_LANGUAGE_DXIL
+
+#if BGFX_SHADER_LANGUAGE_GLSL
+
+bool all(bvec2 _v) { return _v.x && _v.y; }
+bool all(bvec3 _v) { return _v.x && _v.y && _v.z; }
+bool all(bvec4 _v) { return _v.x && _v.y && _v.z && _v.w; }
+
+bool any(bvec2 _v) { return _v.x || _v.y; }
+bool any(bvec3 _v) { return _v.x || _v.y || _v.z; }
+bool any(bvec4 _v) { return _v.x || _v.y || _v.z || _v.w; }
+
+#endif // BGFX_SHADER_LANGUAGE_GLSL
 
 uniform vec4 u_viewRect;
 uniform vec4 u_viewTexel;

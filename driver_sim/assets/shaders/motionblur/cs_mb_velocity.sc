@@ -52,9 +52,8 @@ void main()
 	float depth = texture2DLod(s_depth, uvn, 0.0).x;
 
     vec3 current_ndc = vec3(uvn * 2.0 - 1.0, depth);
-#if BGFX_SHADER_LANGUAGE_HLSL || BGFX_SHADER_LANGUAGE_METAL || BGFX_SHADER_LANGUAGE_SPIRV
     current_ndc.y *= -1.0;
-#endif
+
     vec3 current_uv = vec3((current_ndc.xy - u_jitter.xy) * 0.5 + 0.5, current_ndc.z);
 
     vec4 view_past_ndc;
@@ -162,10 +161,8 @@ void main()
 	float total_velocity_length = max(FLT_MIN, length(total_velocity));
 	total_velocity = total_velocity * clamp(total_velocity_length, 0, 1) / total_velocity_length;
 
-#if BGFX_SHADER_LANGUAGE_HLSL || BGFX_SHADER_LANGUAGE_METAL || BGFX_SHADER_LANGUAGE_SPIRV
     base_velocity.y *= -1; // flip y
     total_velocity.y *= -1; // flip y
-#endif
 
 	imageStore(s_output, uvi, vec4(total_velocity * (view_past_ndc_cache.w < 0 ? -1 : 1), depth));
 	imageStore(s_full_velocity_output, uvi, vec4(base_velocity * (view_past_ndc_cache.w < 0 ? -1 : 1), depth));

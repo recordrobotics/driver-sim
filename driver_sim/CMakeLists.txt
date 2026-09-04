@@ -80,7 +80,7 @@ set(BIG_SHADER_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/blackboard_app/platform/include
 )
 
-set(SHADER_PROFILES spirv 430 300_es)
+set(SHADER_PROFILES spirv 430)
 
 if(IOS)
     list(APPEND SHADER_PROFILES metal)

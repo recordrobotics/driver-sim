@@ -159,7 +159,7 @@ void main()
     vec2 historyTexCoord = uv + motionVector;
     vec3 sourceSample = max(vec3_splat(0.0), sourceSampleTotal / sourceSampleWeight);
 
-    if(any(historyTexCoord != saturate(historyTexCoord)))
+    if(any(notEqual(historyTexCoord, saturate(historyTexCoord))))
     {
         imageStore(s_taaOutput, pixel, vec4(sourceSample, 1.0));
         return;

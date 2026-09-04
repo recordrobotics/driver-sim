@@ -2751,8 +2751,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     bgfx::setViewTransform(VIEW_GBUFFER, view, proj);
     bgfx::setViewRect(VIEW_GBUFFER, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_GBUFFER, gBufFbo.handle);
-    bgfx::setViewClear(VIEW_GBUFFER, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x00000000,
-                       bgfx::getCaps()->homogeneousDepth ? -1.0f : 0.0f);
+    bgfx::setViewClear(VIEW_GBUFFER, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x00000000, 0.0f);
 
     // GTAO PASS
     bgfx::setViewName(VIEW_GTAO, "Field - GTAO");

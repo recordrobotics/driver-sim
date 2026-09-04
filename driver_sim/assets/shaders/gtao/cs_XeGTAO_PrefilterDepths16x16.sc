@@ -97,7 +97,7 @@ void main()
 
   // MIP 2
   BRANCH
-  if( all( ( uvec2(gl_LocalInvocationID.xy) % uvec2_splat(2) ) == 0 ) )
+  if( all( equal( ( uvec2(gl_LocalInvocationID.xy) % uvec2_splat(2) ), uvec2_splat(0) ) ) )
   {
       float inTL = g_scratchDepths[gl_LocalInvocationID.x+0][gl_LocalInvocationID.y+0];
       float inTR = g_scratchDepths[gl_LocalInvocationID.x+1][gl_LocalInvocationID.y+0];
@@ -114,7 +114,7 @@ void main()
 
   // MIP 3
   BRANCH
-  if( all( ( uvec2(gl_LocalInvocationID.xy) % uvec2_splat(4) ) == 0 ) )
+  if( all( equal( ( uvec2(gl_LocalInvocationID.xy) % uvec2_splat(4) ), uvec2_splat(0) ) ) )
   {
       float inTL = g_scratchDepths[gl_LocalInvocationID.x+0][gl_LocalInvocationID.y+0];
       float inTR = g_scratchDepths[gl_LocalInvocationID.x+2][gl_LocalInvocationID.y+0];
@@ -131,7 +131,7 @@ void main()
 
   // MIP 4
   BRANCH
-  if( all( ( uvec2(gl_LocalInvocationID.xy) % uvec2_splat(8) ) == 0 ) )
+  if( all( equal( ( uvec2(gl_LocalInvocationID.xy) % uvec2_splat(8) ), uvec2_splat(0) ) ) )
   {
       float inTL = g_scratchDepths[gl_LocalInvocationID.x+0][gl_LocalInvocationID.y+0];
       float inTR = g_scratchDepths[gl_LocalInvocationID.x+4][gl_LocalInvocationID.y+0];

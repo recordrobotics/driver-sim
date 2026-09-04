@@ -69,9 +69,8 @@ void main()
         }
         
         vec3 current_ndc = vec3(uvn * 2.0 - 1.0, depth);
-#if BGFX_SHADER_LANGUAGE_HLSL || BGFX_SHADER_LANGUAGE_METAL || BGFX_SHADER_LANGUAGE_SPIRV
         current_ndc.y *= -1.0;
-#endif
+        
         vec3 current_uv = vec3((current_ndc.xy - u_jitter.xy) * 0.5 + 0.5, current_ndc.z);
 
         vec4 view_position = mul(u_invProj, vec4(current_ndc, 1.0));

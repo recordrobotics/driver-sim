@@ -5,7 +5,7 @@ include(FetchContent)
 FetchContent_Declare(
     bgfx
     GIT_REPOSITORY https://github.com/bkaradzic/bgfx.cmake.git
-    GIT_TAG v1.153.9385-563
+    GIT_TAG v1.157.9472-571
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/bgfx
     PATCH_COMMAND
@@ -24,38 +24,15 @@ set( BGFX_INSTALL  OFF CACHE INTERNAL "" )
 set (MINIZ_LIBRARIES "miniz" CACHE INTERNAL "" FORCE)
 set (MINIZ_INCLUDE_DIR "${FETCHCONTENT_BASE_DIR}/" CACHE INTERNAL "" FORCE)
 
-add_compile_definitions(BGFX_PLATFORM_SUPPORTS_WGSL=0)
+add_compile_definitions(
+    BGFX_PLATFORM_SUPPORTS_WGSL=0
+    BGFX_PLATFORM_SUPPORTS_ESSL=0
+    BGFX_CONFIG_GL_NORMALIZE_NDC_CONVENTIONS=1
+    )
 
 FetchContent_GetProperties(bgfx)
 if(NOT bgfx_POPULATED)
     FetchContent_Populate(bgfx)
-endif()
-
-# Patch bgfx OpenGL clip control block
-set(_bgfx_gl_file "${bgfx_SOURCE_DIR}/bgfx/src/renderer_gl.cpp")
-
-if(EXISTS "${_bgfx_gl_file}")
-    file(READ "${_bgfx_gl_file}" _bgfx_gl_contents)
-
-    # Replace the commented block with the uncommented version
-    string(REPLACE
-"//				if (s_extension[Extension::ARB_clip_control].m_supported)
-//				{
-//					GL_CHECK(glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE) );
-//					g_caps.originBottomLeft = true;
-//				}
-//				else"
-"				if (s_extension[Extension::ARB_clip_control].m_supported)
-				{
-					GL_CHECK(glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE) );
-					g_caps.originBottomLeft = true;
-				}
-				else"
-        _bgfx_gl_contents
-        "${_bgfx_gl_contents}"
-    )
-
-    file(WRITE "${_bgfx_gl_file}" "${_bgfx_gl_contents}")
 endif()
 
 # Patch bimg_decode miniz.c redefinition
