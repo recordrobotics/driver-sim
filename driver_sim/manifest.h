@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 
 class Manifest
 {
@@ -39,6 +40,9 @@ class Manifest
 
     bool &getShowFMSUI() { return showFMSUI; }
 
+    std::unordered_map<std::string, std::string> &getNTTopics() { return ntTopics; }
+    std::string getNTTopic(const std::string &key);
+
     static Manifest &getCurrent();
     static Manifest &getPackaged();
 
@@ -50,7 +54,8 @@ class Manifest
              std::string elasticDownloadUrl, std::string elasticHash, std::string fieldDownloadUrl,
              std::string fieldHash, std::string robotAssetDownloadUrl, std::string robotAssetHash,
              std::string jniDownloadUrl, std::string jniHash, std::string robotCodeDownloadUrl,
-             std::string robotCodeHash, std::string robotCodeJarName, bool showFMSUI)
+             std::string robotCodeHash, std::string robotCodeJarName, bool showFMSUI,
+             std::unordered_map<std::string, std::string> ntTopics)
         : manifestVersion(std::move(manifestVersion)), sourceType(std::move(sourceType)),
           buildVersion(std::move(buildVersion)), commitHash(std::move(commitHash)),
           driverSimRepoUrl(std::move(driverSimRepoUrl)),
@@ -64,7 +69,7 @@ class Manifest
           robotAssetHash(std::move(robotAssetHash)), jniDownloadUrl(std::move(jniDownloadUrl)),
           jniHash(std::move(jniHash)), robotCodeDownloadUrl(std::move(robotCodeDownloadUrl)),
           robotCodeHash(std::move(robotCodeHash)), robotCodeJarName(std::move(robotCodeJarName)),
-          showFMSUI(showFMSUI)
+          showFMSUI(showFMSUI), ntTopics(std::move(ntTopics))
     {
     }
 
@@ -101,4 +106,6 @@ class Manifest
     std::string robotCodeJarName;
 
     bool showFMSUI;
+
+    std::unordered_map<std::string, std::string> ntTopics;
 };

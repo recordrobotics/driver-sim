@@ -2503,11 +2503,13 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         for (auto &gamePiece : gamePieces)
         {
             gamePiece.posesTopic = ntInst.GetStructArrayTopic<frc::Pose3d>(
-                "/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Positions");
+                std::vformat(Manifest::getCurrent().getNTTopic("gamepiece.poses"),
+                             std::make_format_args(gamePiece.name)));
             gamePiece.posesSub =
                 gamePiece.posesTopic.Subscribe({}, {.periodic = settings::current.ntPeriodic});
             gamePiece.poseObjectsTopic = ntInst.GetStructArrayTopic<Pose3dObject>(
-                "/AdvantageKit/RealOutputs/RobotModel/" + gamePiece.name + "Objects");
+                std::vformat(Manifest::getCurrent().getNTTopic("gamepiece.poseobjects"),
+                             std::make_format_args(gamePiece.name)));
             gamePiece.poseObjectsSub = gamePiece.poseObjectsTopic.Subscribe(
                 {}, {.periodic = settings::current.ntPeriodic});
             Mesh::createBuffersForMeshes(gamePiece.meshes);
@@ -2529,23 +2531,26 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     {
         if (robotModels.size() > 0)
         {
-            addRobot("/AdvantageKit/RealOutputs/RobotModel/Robot",
-                     "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses",
-                     "/AdvantageKit/SystemStats/RSLState",
-                     "/AdvantageKit/DriverStation/AllianceStation",
-                     "/AdvantageKit/RealOutputs/LedManager/HexStrings");
+            addRobot(Manifest::getCurrent().getNTTopic("robot.pose"),
+                     Manifest::getCurrent().getNTTopic("robot.componentposes"),
+                     Manifest::getCurrent().getNTTopic("robot.rslstate"),
+                     Manifest::getCurrent().getNTTopic("fms.alliancestation"),
+                     Manifest::getCurrent().getNTTopic("robot.ledhexstrings"));
 
             for (size_t i = 0; i < 6; ++i)
             {
-                addRobot("/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) + "/Pose",
-                         "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) +
-                             "/MechanismPoses",
-                         "/AdvantageKit/SystemStats/RSLState",
-                         "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) +
-                             "/AllianceStation",
-                         "/AdvantageKit/RealOutputs/LedManager/HexStrings",
-                         "/AdvantageKit/RealOutputs/OpponentRobot/" + std::to_string(i) +
-                             "/Enabled");
+                addRobot(std::vformat(Manifest::getCurrent().getNTTopic("opponent.pose"),
+                                      std::make_format_args(i)),
+                         std::vformat(Manifest::getCurrent().getNTTopic("opponent.componentposes"),
+                                      std::make_format_args(i)),
+                         std::vformat(Manifest::getCurrent().getNTTopic("opponent.rslstate"),
+                                      std::make_format_args(i)),
+                         std::vformat(Manifest::getCurrent().getNTTopic("opponent.alliancestation"),
+                                      std::make_format_args(i)),
+                         std::vformat(Manifest::getCurrent().getNTTopic("opponent.ledhexstrings"),
+                                      std::make_format_args(i)),
+                         std::vformat(Manifest::getCurrent().getNTTopic("opponent.enabled"),
+                                      std::make_format_args(i)));
             }
         }
 

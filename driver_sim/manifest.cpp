@@ -33,7 +33,51 @@ Manifest &Manifest::getPackaged()
         // robot code
         "", "7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878", "2026-robot.jar",
         // show FMS UI
-        true);
+        true,
+        // NT topics
+        {
+            // When applicable, {} is used to format the topic with a variable
+
+            {"fms.alliancestation", "/AdvantageKit/DriverStation/AllianceStation"},
+            {"fms.enabled", "/AdvantageKit/DriverStation/Enabled"},
+            {"fms.autonomous", "/AdvantageKit/DriverStation/Autonomous"},
+            {"fms.matchtime", "/AdvantageKit/DriverStation/MatchTime"},
+
+            {"fms.bluescore",
+             "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Score"},
+            {"fms.redscore",
+             "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score"},
+
+            {"fms.rebuilt2026.bluehubactive",
+             "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active"},
+            {"fms.rebuilt2026.redhubactive",
+             "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active"},
+            {"fms.rebuilt2026.bluehubled",
+             "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led"},
+            {"fms.rebuilt2026.redhubled",
+             "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led"},
+
+            // Game piece topics are formatted with the game piece name, e.g. "coral" or
+            // "fuel". The name is based off of the AdvantageScope field asset config.json
+            {"gamepiece.poses", "/AdvantageKit/RealOutputs/RobotModel/{}Positions"},
+            {"gamepiece.poseobjects", "/AdvantageKit/RealOutputs/RobotModel/{}Objects"},
+
+            {"robot.pose", "/AdvantageKit/RealOutputs/RobotModel/Robot"},
+            {"robot.componentposes", "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses"},
+            {"robot.rslstate", "/AdvantageKit/SystemStats/RSLState"},
+            {"robot.ledhexstrings", "/AdvantageKit/RealOutputs/LedManager/HexStrings"},
+
+            // Opponent robot topics are formated with robot index 0-5, where 0 is the first
+            // opponent robot, 1 is the second, etc.
+            {"opponent.pose", "/AdvantageKit/RealOutputs/OpponentRobot/{}/Pose"},
+            {"opponent.componentposes",
+             "/AdvantageKit/RealOutputs/OpponentRobot/{}/MechanismPoses"},
+            {"opponent.rslstate", "/AdvantageKit/SystemStats/RSLState"},
+            {"opponent.alliancestation",
+             "/AdvantageKit/RealOutputs/OpponentRobot/{}/AllianceStation"},
+            {"opponent.ledhexstrings", "/AdvantageKit/RealOutputs/LedManager/HexStrings"},
+            {"opponent.enabled", "/AdvantageKit/RealOutputs/OpponentRobot/{}/Enabled"},
+        });
     return packagedManifest;
 }
 
@@ -41,4 +85,20 @@ Manifest &Manifest::getCurrent()
 {
     static Manifest currentManifest = Manifest::getPackaged();
     return currentManifest;
+}
+
+std::string Manifest::getNTTopic(const std::string &key)
+{
+    if (ntTopics.contains(key))
+    {
+        return ntTopics[key];
+    }
+    else if (getPackaged().getNTTopics().contains(key))
+    {
+        return getPackaged().getNTTopics()[key];
+    }
+    else
+    {
+        return "";
+    }
 }

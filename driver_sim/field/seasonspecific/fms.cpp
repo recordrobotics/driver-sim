@@ -2,31 +2,31 @@
 
 #include "fms.h"
 
+#include "../../manifest.h"
 #include "../../settings/settingsstore.h"
 
 using namespace blackboard::logger;
 
 void FMS::onNTCreated(nt::NetworkTableInstance &ntInst)
 {
-    matchTimeTopic = ntInst.GetDoubleTopic("/AdvantageKit/DriverStation/MatchTime");
+    matchTimeTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.matchtime"));
     matchTimeSub = matchTimeTopic.Subscribe(-1.0, {.periodic = settings::current.ntPeriodic});
 
-    redScoreTopic = ntInst.GetDoubleTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score");
+    redScoreTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.redscore"));
     redScoreSub = redScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
 
-    blueScoreTopic = ntInst.GetDoubleTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Score");
+    blueScoreTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.bluescore"));
     blueScoreSub = blueScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
 
-    isAutonomousTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Autonomous");
+    isAutonomousTopic = ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.autonomous"));
     isAutonomousSub =
         isAutonomousTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
-    isEnabledTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Enabled");
+    isEnabledTopic = ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.enabled"));
     isEnabledSub = isEnabledTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
-    allianceStationTopic = ntInst.GetIntegerTopic("/AdvantageKit/DriverStation/AllianceStation");
+    allianceStationTopic =
+        ntInst.GetIntegerTopic(Manifest::getCurrent().getNTTopic("fms.alliancestation"));
     allianceStationSub =
         allianceStationTopic.Subscribe(1, {.periodic = settings::current.ntPeriodic});
 }

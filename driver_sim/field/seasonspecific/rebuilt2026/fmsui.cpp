@@ -2,6 +2,7 @@
 
 #include "fmsui.h"
 
+#include "../../../manifest.h"
 #include "../../../settings/settingsstore.h"
 
 #include <rebuilt2026/arrow.png.h>
@@ -58,22 +59,22 @@ Rebuilt2026FMSUI::~Rebuilt2026FMSUI()
 
 void Rebuilt2026FMSUI::onNTCreated(nt::NetworkTableInstance &ntInst)
 {
-    redHubActiveTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active");
+    redHubActiveTopic =
+        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.redhubactive"));
     redHubActiveSub =
         redHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
-    blueHubActiveTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active");
+    blueHubActiveTopic =
+        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.bluehubactive"));
     blueHubActiveSub =
         blueHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
-    redHubLedTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led");
+    redHubLedTopic =
+        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.redhubled"));
     redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
-    blueHubLedTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led");
+    blueHubLedTopic =
+        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.bluehubled"));
     blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 }
 
