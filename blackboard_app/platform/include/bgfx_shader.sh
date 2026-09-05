@@ -551,6 +551,7 @@ vec3 bgfxTextureSize(BgfxSampler3D _sampler, int _lod)
 #		define textureSize(_sampler, _lod) bgfxTextureSize(_sampler, _lod)
 #		define textureGather(_sampler, _coord, _comp) bgfxTextureGather ## _comp(_sampler, _coord)
 #		define textureGatherOffset(_sampler, _coord, _offset, _comp) bgfxTextureGatherOffset ## _comp(_sampler, _coord, _offset)
+#		define texture2DGatherOffset(_sampler, _coord, _offset, _comp) bgfxTextureGatherOffset ## _comp(_sampler, _coord, _offset)
 #	else
 
 #		define sampler2DShadow sampler2D
@@ -690,6 +691,33 @@ vec4  mod(vec4  _a, vec4  _b) { return _a - _b * floor(_a / _b); }
 #	define textureCubeGrad(_sampler, _coord, _dPdx, _dPdy)          textureGrad(_sampler, _coord, _dPdx, _dPdy)
 #	define texture2DBias(_sampler, _coord, _bias)      texture(_sampler, _coord, _bias)
 #	define textureCubeBias(_sampler, _coord, _bias)    texture(_sampler, _coord, _bias)
+#	define texture2DGatherOffset(_sampler, _coord, _offset, _comp) bgfxTextureGatherOffset ## _comp(_sampler, _coord, _offset)
+
+vec4 bgfxTextureGatherOffset0(sampler2D _sampler, vec2 _coord, ivec2 _offset)
+{
+	ivec2 size = textureSize(_sampler, 0);
+	ivec2 texelCoord = ivec2(_coord * vec2(size) + vec2(-1.0, 0.0)) + _offset;
+
+	float r1 = texelFetch(_sampler, texelCoord + ivec2(0, 0), 0).x;
+	float r2 = texelFetch(_sampler, texelCoord + ivec2(1, 0), 0).x;
+	float r3 = texelFetch(_sampler, texelCoord + ivec2(0, 1), 0).x;
+	float r4 = texelFetch(_sampler, texelCoord + ivec2(1, 1), 0).x;
+
+	return vec4(r1, r2, r3, r4);
+}
+
+uvec4 bgfxTextureGatherOffset0(usampler2D _sampler, vec2 _coord, ivec2 _offset)
+{
+	ivec2 size = textureSize(_sampler, 0);
+	ivec2 texelCoord = ivec2(_coord * vec2(size) + vec2(-1.0, 0.0)) + _offset;
+
+	uint r1 = texelFetch(_sampler, texelCoord + ivec2(0, 0), 0).x;
+	uint r2 = texelFetch(_sampler, texelCoord + ivec2(1, 0), 0).x;
+	uint r3 = texelFetch(_sampler, texelCoord + ivec2(0, 1), 0).x;
+	uint r4 = texelFetch(_sampler, texelCoord + ivec2(1, 1), 0).x;
+
+	return uvec4(r1, r2, r3, r4);
+}
 
 float rcp(float _a) { return 1.0/_a; }
 vec2  rcp(vec2  _a) { return vec2(1.0)/_a; }

@@ -807,7 +807,8 @@ void FieldRenderer::initGTAO(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
 
-    u_XeGTAOData = bgfx::createUniform("u_XeGTAOData", bgfx::UniformType::Vec4, 3);
+    u_XeGTAOData =
+        bgfx::createUniform("u_XeGTAOData", bgfx::UniformFreq::Frame, bgfx::UniformType::Vec4, 3);
     if (!bgfx::isValid(u_XeGTAOData))
     {
         logger->error("Failed to create uniform: u_XeGTAOData");
@@ -2858,12 +2859,12 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         float XeGTAOData[12] = {gtaoEffectRadius,
                                 gtaoRadiusMultiplier,
                                 gtaoEffectFalloffRange,
-                                float(gtaoNoiseIndex) + 0.5f,
+                                static_cast<float>(gtaoNoiseIndex) + 0.5f,
 
                                 gtaoSampleDistributionPower,
                                 gtaoThinOccluderCompensation,
-                                2.0f / (proj[0] * float(m_width)),
-                                -2.0f / (proj[5] * float(m_height)),
+                                2.0f / (proj[0] * static_cast<float>(m_width)),
+                                -2.0f / (proj[5] * static_cast<float>(m_height)),
 
                                 gtaoDepthMipSamplingOffset,
                                 gtaoFinalValuePower,
@@ -2875,7 +2876,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
             gtaoNoiseIndex = (gtaoNoiseIndex + 1) % 64;
         }
 
-        encoder->setUniform(u_XeGTAOData, XeGTAOData, 3);
+        bgfx::setFrameUniform(u_XeGTAOData, XeGTAOData, 3);
 
         encoder->setTexture(0, s_depth, gbufDepth.handle,
                             BGFX_SAMPLER_POINT | BGFX_SAMPLER_UVW_CLAMP);

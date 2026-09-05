@@ -66,14 +66,14 @@ void main()
 
     // gather edge and visibility quads, used later
     const vec2 gatherCenter = vec2( pixCoordBase.x, pixCoordBase.y ) / vec2( render_size );
-    vec4 edgesQ0        = textureGatherOffset( s_workingEdges, gatherCenter, ivec2( 0, 0 ), 0 );
-    vec4 edgesQ1        = textureGatherOffset( s_workingEdges, gatherCenter, ivec2( 2, 0 ), 0 );
-    vec4 edgesQ2        = textureGatherOffset( s_workingEdges, gatherCenter, ivec2( 1, 2 ), 0 );
+    vec4 edgesQ0        = texture2DGatherOffset( s_workingEdges, gatherCenter, ivec2( 0, 0 ), 0 );
+    vec4 edgesQ1        = texture2DGatherOffset( s_workingEdges, gatherCenter, ivec2( 2, 0 ), 0 );
+    vec4 edgesQ2        = texture2DGatherOffset( s_workingEdges, gatherCenter, ivec2( 1, 2 ), 0 );
 
-    AOTermType visQ0[4];    XeGTAO_DecodeGatherPartial( textureGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 0, 0 ), 0 ), visQ0 );
-    AOTermType visQ1[4];    XeGTAO_DecodeGatherPartial( textureGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 2, 0 ), 0 ), visQ1 );
-    AOTermType visQ2[4];    XeGTAO_DecodeGatherPartial( textureGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 0, 2 ), 0 ), visQ2 );
-    AOTermType visQ3[4];    XeGTAO_DecodeGatherPartial( textureGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 2, 2 ), 0 ), visQ3 );
+    AOTermType visQ0[4];    XeGTAO_DecodeGatherPartial( texture2DGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 0, 0 ), 0 ), visQ0 );
+    AOTermType visQ1[4];    XeGTAO_DecodeGatherPartial( texture2DGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 2, 0 ), 0 ), visQ1 );
+    AOTermType visQ2[4];    XeGTAO_DecodeGatherPartial( texture2DGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 0, 2 ), 0 ), visQ2 );
+    AOTermType visQ3[4];    XeGTAO_DecodeGatherPartial( texture2DGatherOffset( s_workingAOTerm, gatherCenter, ivec2( 2, 2 ), 0 ), visQ3 );
 
     for( int side = 0; side < 2; side++ )
     {
