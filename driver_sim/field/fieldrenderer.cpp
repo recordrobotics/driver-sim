@@ -17,17 +17,20 @@
 
 #include <ledmask.png.h>
 
-#include "../ui/components.h"
-
-#include "../settings/settingsstore.h"
-#include "../settings/settingsui.h"
-
 #include <shadow.png.h>
 
 #include <mainmenu.png.h>
 #include <restartjava.png.h>
 #include <settings.png.h>
 #include <viewmode.png.h>
+
+#include "../ui/components.h"
+
+#include "../settings/settingsstore.h"
+#include "../settings/settingsui.h"
+
+#include "seasonspecific/generic/fmsui.h"
+#include "seasonspecific/rebuilt2026/fmsui.h"
 
 #include "../manifest.h"
 
@@ -80,11 +83,11 @@ enum class ModelRotationAxis
     Z
 };
 
-typedef struct ModelRotationConfig
+struct ModelRotationConfig
 {
     ModelRotationAxis axis;
     float angleDegrees;
-} ModelRotationConfig;
+};
 
 static ModelRotationAxis axisFromString(const std::string &s)
 {
@@ -181,12 +184,12 @@ static uint8_t calculateBloomMipmapLevels(uint16_t width, uint16_t height)
     return mip_levels + 1;
 }
 
-typedef struct MBVelocityComponent
+struct MBVelocityComponent
 {
     float multiplier = 1.0f;
     float lowerThreshold = 0.0f;
     float upperThreshold = 0.0f;
-} MBVelocityComponent;
+};
 
 static constexpr MBVelocityComponent MB_CAMERA_ROTATION_COMPONENT = {1.0f, 0.0f, 1.0f};
 static constexpr MBVelocityComponent MB_CAMERA_MOVEMENT_COMPONENT = {1.0f, 0.0f, 1.0f};
@@ -1435,9 +1438,9 @@ void FieldRenderer::loadFieldModel()
             driverStationCameraPositions = j["driverStations"].get<std::vector<bx::Vec3>>();
         }
 
-        if (Manifest::getCurrent().getGameYear() == "2026")
+        if (fmsUI)
         {
-            Rebuilt2026::addHubLedTags(tags);
+            fmsUI->tagFieldObjects(tags);
         }
 
         loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model", tags);
@@ -1738,6 +1741,20 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
     initMotionBlur(window.width, window.height);
     initBloom(window.width, window.height);
     initGTAO(window.width, window.height);
+
+    fms = std::make_shared<FMS>();
+
+    if (Manifest::getCurrent().getShowFMSUI())
+    {
+        if (Manifest::getCurrent().getGameYear() == "2026")
+        {
+            fmsUI = std::make_unique<Rebuilt2026FMSUI>(fms);
+        }
+        else
+        {
+            fmsUI = std::make_unique<GenericFMSUI>(fms);
+        }
+    }
 }
 
 void FieldRenderer::startNTClient()
@@ -1762,9 +1779,11 @@ void FieldRenderer::startNTClient()
                                      }
                                  });
 
-    if (Manifest::getCurrent().getGameYear() == "2026")
+    fms->onNTCreated(ntInst);
+
+    if (fmsUI)
     {
-        fmsUI = std::make_unique<Rebuilt2026FMSUI>(ntInst);
+        fmsUI->onNTCreated(ntInst);
     }
 
     ntInst.SetServer("127.0.0.1");
@@ -2266,6 +2285,21 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     ImGui::End();
 }
 
+std::string driveModeToString(DriveMode mode)
+{
+    switch (mode)
+    {
+    case DriveMode::DISABLED:
+        return "Disabled";
+    case DriveMode::TELEOP:
+        return "Teleop";
+    case DriveMode::AUTONOMOUS:
+        return "Auto";
+    default:
+        return "Unknown";
+    }
+}
+
 void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
 {
     auto &style{ImGui::GetStyle()};
@@ -2481,7 +2515,11 @@ void FieldRenderer::render(const blackboard::app::Window &window,
 
         Mesh::createBuffersForMeshes(fieldMeshes);
         Mesh::createBuffersForMeshes(aprilTagMesh);
-        fmsUI->postProcessField(fieldMeshes);
+
+        if (fmsUI)
+        {
+            fmsUI->postProcessField(fieldMeshes);
+        }
 
         createdFieldMeshBuffers = true;
     }
@@ -2678,12 +2716,11 @@ void FieldRenderer::render(const blackboard::app::Window &window,
 
         Manifest &manifest = Manifest::getCurrent();
 
-        discord->setField(
-            manifest.getGameYear(), allianceStation, fmsUI ? fmsUI->getDriverScore() : 0,
-            fmsUI ? fmsUI->getOpponentScore() : 0,
-            robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
-            fmsUI ? fmsUI->getDriveMode() : "<Unknown>", manifest.getRobotCodeRepoUrl(),
-            manifest.getRobotDownloadUrl(), fmsUI ? fmsUI->getMatchEndTime() : 0);
+        discord->setField(manifest.getGameYear(), allianceStation, fms->getDriverScore(),
+                          fms->getOpponentScore(),
+                          robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
+                          driveModeToString(fms->getDriveMode()), manifest.getRobotCodeRepoUrl(),
+                          manifest.getRobotDownloadUrl(), fms->getMatchEndTime());
     }
 
     ensureTextures(m_width, m_height);
@@ -3278,6 +3315,7 @@ FieldRenderer::~FieldRenderer()
     exitingFlag = false;
 
     fmsUI.reset();
+    fms.reset();
     nt::NetworkTableInstance::Destroy(ntInst);
 
     for (auto &mesh : fieldMeshes)

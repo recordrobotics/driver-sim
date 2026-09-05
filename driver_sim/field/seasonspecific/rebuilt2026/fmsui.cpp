@@ -32,48 +32,8 @@ constexpr ImU32 BLUE_TEAM_CENTER = string_hex_to_rgba_u32("#002e54ff");
 constexpr ImU32 RED_TEAM_OUTER = string_hex_to_rgba_u32("#820c14ff");
 constexpr ImU32 RED_TEAM_CENTER = string_hex_to_rgba_u32("#61090cff");
 
-Rebuilt2026FMSUI::Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst)
+Rebuilt2026FMSUI::Rebuilt2026FMSUI(std::shared_ptr<FMS> fms) : fms(std::move(fms))
 {
-    matchTimeTopic = ntInst.GetDoubleTopic("/AdvantageKit/DriverStation/MatchTime");
-    matchTimeSub = matchTimeTopic.Subscribe(-1.0, {.periodic = settings::current.ntPeriodic});
-
-    redHubActiveTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active");
-    redHubActiveSub =
-        redHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
-
-    blueHubActiveTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active");
-    blueHubActiveSub =
-        blueHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
-
-    redHubLedTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led");
-    redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
-
-    blueHubLedTopic = ntInst.GetBooleanTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led");
-    blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
-
-    redScoreTopic = ntInst.GetDoubleTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score");
-    redScoreSub = redScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
-
-    blueScoreTopic = ntInst.GetDoubleTopic(
-        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Score");
-    blueScoreSub = blueScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
-
-    isAutonomousTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Autonomous");
-    isAutonomousSub =
-        isAutonomousTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
-
-    isEnabledTopic = ntInst.GetBooleanTopic("/AdvantageKit/DriverStation/Enabled");
-    isEnabledSub = isEnabledTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
-
-    allianceStationTopic = ntInst.GetIntegerTopic("/AdvantageKit/DriverStation/AllianceStation");
-    allianceStationSub =
-        allianceStationTopic.Subscribe(1, {.periodic = settings::current.ntPeriodic});
-
     font = blackboard::gui::get_font("Roboto_Bold_ttf");
 
     load_image(static_cast<const void *>(firstage_png_bytes), sizeof(firstage_png_bytes),
@@ -94,6 +54,27 @@ Rebuilt2026FMSUI::~Rebuilt2026FMSUI()
     arrowIcon.destroy();
     fuelBlueIcon.destroy();
     fuelRedIcon.destroy();
+}
+
+void Rebuilt2026FMSUI::onNTCreated(nt::NetworkTableInstance &ntInst)
+{
+    redHubActiveTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active");
+    redHubActiveSub =
+        redHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
+
+    blueHubActiveTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active");
+    blueHubActiveSub =
+        blueHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
+
+    redHubLedTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led");
+    redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
+
+    blueHubLedTopic = ntInst.GetBooleanTopic(
+        "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led");
+    blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 }
 
 void Rebuilt2026FMSUI::render(ImVec2 winSize)
@@ -118,7 +99,7 @@ void Rebuilt2026FMSUI::updateHubMaterials()
 
 void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
 {
-    teamAssigner.update(static_cast<int>(allianceStationSub.Get()));
+    teamAssigner.update(fms->getAllianceStation());
     logoCache.update();
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -210,9 +191,6 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     // red panel
     Rect({1020, 60}, {450, 70}, RED);
 
-    int blueScore = static_cast<int>(blueScoreSub.Get());
-    int redScore = static_cast<int>(redScoreSub.Get());
-
     constexpr int blueTeamX = 450;
     constexpr int redTeamX = 1140;
     constexpr int teamY = 70;
@@ -235,11 +213,11 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     constexpr int redScoreCY = teamY + teamPanelH; // bottom edge
 
     // Blue score
-    Text({blueScoreCX, blueScoreCY - (blueScoreH / 2)}, std::to_string(blueScore).c_str(), 48,
-         IM_COL32_WHITE, true);
+    Text({blueScoreCX, blueScoreCY - (blueScoreH / 2)}, std::to_string(fms->getBlueScore()).c_str(),
+         48, IM_COL32_WHITE, true);
 
     // Red score
-    Text({redScoreCX, redScoreCY - (redScoreH / 2)}, std::to_string(redScore).c_str(), 48,
+    Text({redScoreCX, redScoreCY - (redScoreH / 2)}, std::to_string(fms->getRedScore()).c_str(), 48,
          IM_COL32_WHITE, true);
 
     // Team numbers
@@ -280,7 +258,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     }
 
     // Match time
-    int matchTime = static_cast<int>(std::ceil(matchTimeSub.Get()));
+    int matchTime = fms->getMatchTime();
     if (matchTime < 0)
     {
         matchTime = 140;
@@ -300,7 +278,7 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
          45, IM_COL32_BLACK, true);
 
     // Shift timer
-    if (!isAutonomousSub.Get())
+    if (fms->getDriveMode() == DriveMode::TELEOP)
     {
         constexpr int shiftPanelX = 450 + 450; // right edge of blue panel
         constexpr int shiftPanelY = timerPanelY + timerPanelH + 1;
@@ -369,11 +347,13 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         drawList->AddImage(fuelBlueIcon.id, Transform({35, 67}), Transform({35 + 45, 67 + 45}));
     }
     Rect({80, 67}, {150, 45}, BLUE);
-    int rankingPointThresholdBlue = blueScore >= settings::current.rebuilt2026.energizedRPThreshold
-                                        ? settings::current.rebuilt2026.superchargedRPThreshold
-                                        : settings::current.rebuilt2026.energizedRPThreshold;
+    int rankingPointThresholdBlue =
+        fms->getBlueScore() >= settings::current.rebuilt2026.energizedRPThreshold
+            ? settings::current.rebuilt2026.superchargedRPThreshold
+            : settings::current.rebuilt2026.energizedRPThreshold;
     Text({155, 89.5f},
-         (std::to_string(blueScore) + " / " + std::to_string(rankingPointThresholdBlue)).c_str(),
+         (std::to_string(fms->getBlueScore()) + " / " + std::to_string(rankingPointThresholdBlue))
+             .c_str(),
          32, IM_COL32_WHITE, true);
 
     // Red fuel counter
@@ -383,12 +363,14 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
         drawList->AddImage(fuelRedIcon.id, Transform({1689, 67}), Transform({1689 + 45, 67 + 45}));
     }
     Rect({1734, 67}, {150, 45}, RED);
-    int rankingPointThresholdRed = redScore >= settings::current.rebuilt2026.energizedRPThreshold
-                                       ? settings::current.rebuilt2026.superchargedRPThreshold
-                                       : settings::current.rebuilt2026.energizedRPThreshold;
+    int rankingPointThresholdRed =
+        fms->getRedScore() >= settings::current.rebuilt2026.energizedRPThreshold
+            ? settings::current.rebuilt2026.superchargedRPThreshold
+            : settings::current.rebuilt2026.energizedRPThreshold;
     Text({1809, 89.5f},
-         (std::to_string(redScore) + " / " + std::to_string(rankingPointThresholdRed)).c_str(), 32,
-         IM_COL32_WHITE, true);
+         (std::to_string(fms->getRedScore()) + " / " + std::to_string(rankingPointThresholdRed))
+             .c_str(),
+         32, IM_COL32_WHITE, true);
 
     // Left arrow
     if (blueHubActiveSub.Get())
@@ -419,71 +401,15 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     }
 }
 
+void Rebuilt2026FMSUI::tagFieldObjects(std::unordered_map<std::string, std::string> &tags)
+{
+    Rebuilt2026::addHubLedTags(tags);
+}
+
 void Rebuilt2026FMSUI::postProcessField(std::vector<Mesh> &fieldMeshes)
 {
     hubRedLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::redHubLedTag);
     hubBlueLightMaterial = Mesh::getTaggedMaterial(fieldMeshes, Rebuilt2026::blueHubLedTag);
     logger->info("Post-processed field meshes for hub light materials: red={}, blue={}",
                  (hubRedLightMaterial != nullptr), (hubBlueLightMaterial != nullptr));
-}
-
-int Rebuilt2026FMSUI::getDriverScore() const
-{
-    int allianceStation = static_cast<int>(allianceStationSub.Get());
-    if (allianceStation >= 1 && allianceStation <= 3)
-    {
-        return static_cast<int>(redScoreSub.Get());
-    }
-    if (allianceStation >= 4 && allianceStation <= 6)
-    {
-        return static_cast<int>(blueScoreSub.Get());
-    }
-
-    return 0;
-}
-
-int Rebuilt2026FMSUI::getOpponentScore() const
-{
-    int allianceStation = static_cast<int>(allianceStationSub.Get());
-    if (allianceStation >= 1 && allianceStation <= 3)
-    {
-        return static_cast<int>(blueScoreSub.Get());
-    }
-    if (allianceStation >= 4 && allianceStation <= 6)
-    {
-        return static_cast<int>(redScoreSub.Get());
-    }
-
-    return 0;
-}
-
-std::string Rebuilt2026FMSUI::getDriveMode() const
-{
-    if (!isEnabledSub.Get())
-    {
-        return "Disabled";
-    }
-
-    if (isAutonomousSub.Get())
-    {
-        return "Auto";
-    }
-
-    return "Teleop";
-}
-
-uint64_t Rebuilt2026FMSUI::getMatchEndTime() const
-{
-    double matchTime = matchTimeSub.Get();
-    if (matchTime < 0)
-    {
-        return 0;
-    }
-
-    uint64_t currentTimeMillis =
-        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  std::chrono::system_clock::now().time_since_epoch())
-                                  .count());
-    uint64_t matchEndTimeMillis = currentTimeMillis + static_cast<uint64_t>(matchTime * 1000.0);
-    return matchEndTimeMillis;
 }

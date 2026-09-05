@@ -37,6 +37,8 @@ class Manifest
     std::string &getRobotCodeHash() { return robotCodeHash; }
     std::string &getRobotCodeJarName() { return robotCodeJarName; }
 
+    bool &getShowFMSUI() { return showFMSUI; }
+
     static Manifest &getCurrent();
     static Manifest &getPackaged();
 
@@ -48,7 +50,7 @@ class Manifest
              std::string elasticDownloadUrl, std::string elasticHash, std::string fieldDownloadUrl,
              std::string fieldHash, std::string robotAssetDownloadUrl, std::string robotAssetHash,
              std::string jniDownloadUrl, std::string jniHash, std::string robotCodeDownloadUrl,
-             std::string robotCodeHash, std::string robotCodeJarName)
+             std::string robotCodeHash, std::string robotCodeJarName, bool showFMSUI)
         : manifestVersion(std::move(manifestVersion)), sourceType(std::move(sourceType)),
           buildVersion(std::move(buildVersion)), commitHash(std::move(commitHash)),
           driverSimRepoUrl(std::move(driverSimRepoUrl)),
@@ -61,7 +63,8 @@ class Manifest
           robotAssetDownloadUrl(std::move(robotAssetDownloadUrl)),
           robotAssetHash(std::move(robotAssetHash)), jniDownloadUrl(std::move(jniDownloadUrl)),
           jniHash(std::move(jniHash)), robotCodeDownloadUrl(std::move(robotCodeDownloadUrl)),
-          robotCodeHash(std::move(robotCodeHash)), robotCodeJarName(std::move(robotCodeJarName))
+          robotCodeHash(std::move(robotCodeHash)), robotCodeJarName(std::move(robotCodeJarName)),
+          showFMSUI(showFMSUI)
     {
     }
 
@@ -96,4 +99,6 @@ class Manifest
     std::string robotCodeDownloadUrl;
     std::string robotCodeHash;
     std::string robotCodeJarName;
+
+    bool showFMSUI;
 };

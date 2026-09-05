@@ -7,7 +7,7 @@ Manifest &Manifest::getPackaged()
         "https://github.com/recordrobotics/driver-sim",
         "https://github.com/recordrobotics/2026-robot",
         "https://github.com/recordrobotics/2026-robot/releases/latest",
-        // game year
+        // game year | tba (logo) year
         "2026", "2026",
         // jdk
         "17.0.16+8",
@@ -31,7 +31,9 @@ Manifest &Manifest::getPackaged()
         "jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip",
         "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5",
         // robot code
-        "", "7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878", "2026-robot.jar");
+        "", "7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878", "2026-robot.jar",
+        // show FMS UI
+        true);
     return packagedManifest;
 }
 

@@ -14,35 +14,31 @@
 #include "../../mesh.h"
 #include <vector>
 
-using blackboard::gui::string_hex_to_rgba_float;
+#include "../fms.h"
+#include "../ifmsui.h"
 
-class Rebuilt2026FMSUI
+class Rebuilt2026FMSUI : public IFMSUI
 {
   public:
-    Rebuilt2026FMSUI(nt::NetworkTableInstance &ntInst);
-    ~Rebuilt2026FMSUI();
+    explicit Rebuilt2026FMSUI(std::shared_ptr<FMS> fms);
+    ~Rebuilt2026FMSUI() override;
 
     Rebuilt2026FMSUI(const Rebuilt2026FMSUI &) = delete;
     Rebuilt2026FMSUI &operator=(const Rebuilt2026FMSUI &) = delete;
     Rebuilt2026FMSUI(Rebuilt2026FMSUI &&) noexcept = default;
     Rebuilt2026FMSUI &operator=(Rebuilt2026FMSUI &&) noexcept = default;
 
-    void render(ImVec2 winSize);
-    void postProcessField(std::vector<Mesh> &fieldMeshes);
+    void onNTCreated(nt::NetworkTableInstance &ntInst) override;
 
-    [[nodiscard]] int getDriverScore() const;
-    [[nodiscard]] int getOpponentScore() const;
-
-    [[nodiscard]] std::string getDriveMode() const;
-
-    [[nodiscard]] uint64_t getMatchEndTime() const;
+    void render(ImVec2 winSize) override;
+    void tagFieldObjects(std::unordered_map<std::string, std::string> &tags) override;
+    void postProcessField(std::vector<Mesh> &fieldMeshes) override;
 
   private:
     void drawFMSUI(ImVec2 winSize);
     void updateHubMaterials();
 
-    nt::DoubleTopic matchTimeTopic;
-    nt::DoubleSubscriber matchTimeSub;
+    std::shared_ptr<FMS> fms;
 
     nt::BooleanTopic redHubActiveTopic;
     nt::BooleanSubscriber redHubActiveSub;
@@ -55,21 +51,6 @@ class Rebuilt2026FMSUI
 
     nt::BooleanTopic blueHubLedTopic;
     nt::BooleanSubscriber blueHubLedSub;
-
-    nt::DoubleTopic redScoreTopic;
-    nt::DoubleSubscriber redScoreSub;
-
-    nt::DoubleTopic blueScoreTopic;
-    nt::DoubleSubscriber blueScoreSub;
-
-    nt::BooleanTopic isAutonomousTopic;
-    nt::BooleanSubscriber isAutonomousSub;
-
-    nt::BooleanTopic isEnabledTopic;
-    nt::BooleanSubscriber isEnabledSub;
-
-    nt::IntegerTopic allianceStationTopic;
-    nt::IntegerSubscriber allianceStationSub;
 
     TeamAssigner teamAssigner;
     TeamLogoCache logoCache;

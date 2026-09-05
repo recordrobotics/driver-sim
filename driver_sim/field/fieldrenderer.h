@@ -40,8 +40,8 @@
 #include <frc/geometry/Pose3d.h>
 #include <frc/geometry/struct/Pose3dStruct.h>
 
-#include "seasonspecific/rebuilt2026/fmsui.h"
-#include "seasonspecific/rebuilt2026/hublights.h"
+#include "seasonspecific/fms.h"
+#include "seasonspecific/ifmsui.h"
 
 inline constexpr bx::Quaternion rotation3dToQuaternion(const frc::Rotation3d &rotation)
 {
@@ -308,13 +308,13 @@ enum class DebugView
     GTAOWorkingEdges,
     GTAOFinalAOTermNormals,
     GTAOFinalAOTermVisibility,
-    Count
+    Count,
 };
 
 class FieldRenderer
 {
   public:
-    FieldRenderer(const blackboard::app::Window &window);
+    explicit FieldRenderer(const blackboard::app::Window &window);
     ~FieldRenderer();
 
     FieldRenderer(const FieldRenderer &) = delete;
@@ -753,7 +753,8 @@ class FieldRenderer
 
     nt::NetworkTableInstance ntInst;
 
-    std::unique_ptr<Rebuilt2026FMSUI> fmsUI;
+    std::shared_ptr<FMS> fms;
+    std::unique_ptr<IFMSUI> fmsUI;
 
     DebugView debugView = DebugView::None;
 
