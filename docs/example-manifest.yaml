@@ -1,0 +1,180 @@
+manifest:
+    version: "1.0.0"
+    # Packaged or Remote depending on where this manifest is loaded from
+    source: "Packaged"
+    # Url to get this manifest/build
+    shareUrl: "https://github.com/recordrobotics/2026-robot/releases/latest"
+    # Repository url for the actual driver-sim repo
+    driverSimRepoUrl: "https://github.com/recordrobotics/driver-sim"
+
+game:
+    # Used for FMS UI and Discord Logo
+    # If this is an unofficial game, put the name instead of the year
+    # to get the generic FMS UI
+    year: "2026"
+    # Team logo year to use for FMS UI
+    # Always has to be a valid official game year
+    tbaYear: "2026"
+    # Whether to show the FMS UI in the field view
+    showFmsUI: true
+
+code:
+    # Version and commit of robot code
+    version: "2026.7.16+"
+    commit: "d1d8cba"
+    # Repository url for robot code
+    repoUrl: "https://github.com/recordrobotics/2026-robot"
+
+    # Path to the jar file to launch relative to the code asset directory
+    jarPath: "libs/2026-robot.jar"
+
+    assets:
+        # Platform should be either windows-x64, linux-x64, macos-x64, or macos-aarch64
+        # Combinations are valid with comma separation, e.g. "macos-x64,macos-aarch64"
+        # Or use "all" to download for all platforms
+        - platform: "all"
+          # Robot code is packaged, so no url
+          hash: "7998021ca2a0f0d8867173cd7fcf8f4b15fb36d011d98df55b00bebb76732878"
+
+jni:
+    assets:
+        # Platform should be either windows-x64, linux-x64, macos-x64, or macos-aarch64
+        # Combinations are valid with comma separation, e.g. "macos-x64,macos-aarch64"
+        # Or use "all" to download for all platforms
+        - platform: "windows-x64"
+          url: "https://hamster1.ddns.net/jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip"
+          hash: "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5"
+
+robot:
+    assets:
+        # Platform should be either windows-x64, linux-x64, macos-x64, or macos-aarch64
+        # Combinations are valid with comma separation, e.g. "macos-x64,macos-aarch64"
+        # Or use "all" to download for all platforms
+        - platform: "all"
+          url: "https://hamster1.ddns.net/robot-b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462.zip"
+          hash: "b9d455ae13870531b35a6f87021d62feb606df146238b419c057af1c9a4d1462"
+
+field:
+    assets:
+        # Platform should be either windows-x64, linux-x64, macos-x64, or macos-aarch64
+        # Combinations are valid with comma separation, e.g. "macos-x64,macos-aarch64"
+        # Or use "all" to download for all platforms
+        - platform: "all"
+          url: "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip"
+          hash: "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31"
+
+jdk:
+    # Version of JDK to use
+    version: "17.0.16+8"
+    assets:
+        # Platform should be either windows-x64, linux-x64, macos-x64, or macos-aarch64
+        # Combinations are valid with comma separation, e.g. "macos-x64,macos-aarch64"
+        # Or use "all" to download for all platforms
+        - platform: "windows-x64"
+          # Url to download JDK from
+          url: "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/eclipse?project=jdk"
+          # Hash of the JDK zip file
+          hash: "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5"
+
+elastic:
+    assets:
+        # Platform should be either windows-x64, linux-x64, macos-x64, or macos-aarch64
+        # Combinations are valid with comma separation, e.g. "macos-x64,macos-aarch64"
+        # Or use "all" to download for all platforms
+        - platform: "windows-x64"
+          url: "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/Elastic-Windows_portable.zip"
+          hash: "6581e66eb237f9d615afb94077d89a03e2cdd7ce2d57f11c8cc5153821493ad7"
+        - platform: "linux-x64"
+          url: "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/Elastic-Linux.zip"
+          hash: "6103b70fe1788cee4929916f8f8b9987efe3cf469aaf122f47cecfb83f6267c1"
+        - platform: "macos-x64,macos-aarch64"
+          url: "https://github.com/Gold872/elastic_dashboard/releases/download/v2026.1.2/Elastic-macOS.zip"
+          hash: "5f733a6299fe7ddfb127b61beec3ca62e2cfc61205976400bc0c686a2c948bc0"
+
+# NT topics (customize to your robot code output)
+networktables:
+    fms:
+        # Integer topic
+        alliancestation: "/AdvantageKit/DriverStation/AllianceStation"
+        # Boolean topic
+        enabled: "/AdvantageKit/DriverStation/Enabled"
+        # Boolean topic
+        autonomous: "/AdvantageKit/DriverStation/Autonomous"
+        # Double topic
+        matchtime: "/AdvantageKit/DriverStation/MatchTime"
+
+        score:
+            # Double topic
+            blue: "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Score"
+            # Double topic
+            red: "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Score"
+
+        rebuilt2026:
+            hub:
+                blue:
+                    # Boolean topic
+                    active: "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Active"
+                    # Boolean topic
+                    led: "/SmartDashboard/MapleSim/MatchData/Breakdown/Blue Alliance/Improved Hub Led"
+                red:
+                    # Boolean topic
+                    active: "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Active"
+                    # Boolean topic
+                    led: "/SmartDashboard/MapleSim/MatchData/Breakdown/Red Alliance/Improved Hub Led"
+
+    # Game piece topics are formatted with the game piece name, e.g. "Coral" or
+    # "Fuel". The name is based off of the AdvantageScope field asset config.json
+    # Use {} or {0} to indicate where the game piece name should be inserted in the topic.
+    gamepiece:
+        # StructArray<Pose3d> topic
+        poses: "/AdvantageKit/RealOutputs/RobotModel/{}Positions"
+        # StructArray<Pose3dObject> topic
+        #
+        # The PoseObjects topic is optional but allows driver-sim to track the position
+        # of the game pieces over time, even as their index in the array changes.
+        # This is used for motion vector generation and is recommended when TAA or motion blur is enabled.
+        # This is also required for frame interpolation to work, as it needs to match to the previous positions.
+        #
+        # Java example:
+        #
+        #  public record Pose3dObject(Pose3d pose, int identity) {}
+        #
+        #  public Pose3dObject[] getFuelObjects() {
+        #
+        #      // System.identityHashCode returns a unique integer for each instance
+        #      // Could be replaced with a custom code-managed identifier instead
+        #      // if game pieces instances are recreated (e.g. field->intake->shoot->field)
+        #      List<Pose3dObject> arenaFuelObjects = SimulatedArena.getInstance().getGamePiecesByType("Fuel").stream()
+        #          .map(fuelObject -> new Pose3dObject(fuelObject.getPose3d(), System.identityHashCode(fuelObject)))
+        #          .collect(Collectors.toList());
+        #      return arenaFuelObjects.toArray(Pose3dObject[]::new);
+        #  }
+        #
+        poseobjects: "/AdvantageKit/RealOutputs/RobotModel/{}Objects"
+
+    robot:
+        # Pose3d topic
+        pose: "/AdvantageKit/RealOutputs/RobotModel/Robot"
+        # StructArray<Pose3d> topic
+        componentposes: "/AdvantageKit/RealOutputs/RobotModel/MechanismPoses"
+        # Boolean topic
+        rslstate: "/AdvantageKit/SystemStats/RSLState"
+        # StringArray topic of hex strings for each LED
+        ledhexstrings: "/AdvantageKit/RealOutputs/LedManager/HexStrings"
+
+    # Opponent robot topics are formated with robot index 0-5, where 0 is the first
+    # opponent robot, 1 is the second, etc.
+    # Use {} or {0} to indicate where the opponent robot index should be inserted in the topic.
+    opponent:
+        # Pose3d topic
+        pose: "/AdvantageKit/RealOutputs/OpponentRobot/{}/Pose"
+        # StructArray<Pose3d> topic
+        componentposes: "/AdvantageKit/RealOutputs/OpponentRobot/{}/MechanismPoses"
+        # Boolean topic
+        rslstate: "/AdvantageKit/SystemStats/RSLState"
+        # Integer topic
+        alliancestation: "/AdvantageKit/RealOutputs/OpponentRobot/{}/AllianceStation"
+        # StringArray topic of hex strings for each LED
+        ledhexstrings: "/AdvantageKit/RealOutputs/LedManager/HexStrings"
+        # Boolean topic (whether to show the opponent robot in the field view)
+        enabled: "/AdvantageKit/RealOutputs/OpponentRobot/{}/Enabled"

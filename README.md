@@ -11,9 +11,14 @@ After becoming part of our discord dev team, download it from this link: https:/
 
 ## Prepare
 
-## Package robot code
-zip up the jni folder from /build/jni and zip up the 2026-robot.jar from /build/libs/2026-robot.jar and place them where they are in the video
-<video src="https://github.com/user-attachments/assets/bf91111a-d703-4da5-9b15-164906701b84" controls width="600"></video>
+## Package manifest
+Manifest files in driver-sim can either be standalone yaml files or as part of a zip file together with packaged assets. To build with a packaged manifest, place a `manifest.yaml` file in the [driver_sim/packaged](driver_sim/packaged) directory. Additionally you can add packaged assets such as code, jni, etc. into the packaged folder as unzipped files.
+
+During the build the whole packaged folder gets zipped and embedded into the executable.
+
+For an example manifest.yaml see [docs/example-manifest.yaml](docs/example-manifest.yaml)
+
+<img width="155" height="154" alt="image" src="https://github.com/user-attachments/assets/b7b29446-7237-422e-a994-bc80915c8424" />
 
 ## Build
 
