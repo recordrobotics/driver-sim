@@ -60,21 +60,21 @@ Rebuilt2026FMSUI::~Rebuilt2026FMSUI()
 void Rebuilt2026FMSUI::onNTCreated(nt::NetworkTableInstance &ntInst)
 {
     redHubActiveTopic =
-        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.redhubactive"));
+        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.hub.red.active"));
     redHubActiveSub =
         redHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
-    blueHubActiveTopic =
-        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.bluehubactive"));
+    blueHubActiveTopic = ntInst.GetBooleanTopic(
+        Manifest::getCurrent().getNTTopic("fms.rebuilt2026.hub.blue.active"));
     blueHubActiveSub =
         blueHubActiveTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     redHubLedTopic =
-        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.redhubled"));
+        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.hub.red.led"));
     redHubLedSub = redHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 
     blueHubLedTopic =
-        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.bluehubled"));
+        ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.rebuilt2026.hub.blue.led"));
     blueHubLedSub = blueHubLedTopic.Subscribe(false, {.periodic = settings::current.ntPeriodic});
 }
 

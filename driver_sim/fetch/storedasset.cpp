@@ -126,34 +126,34 @@ void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
     }
 }
 
-void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
+void StoredAsset::extractZip(mz_zip_archive *zip, const fs::path &extractTo)
 {
-    logger->info("Extracting zip file {} to {}", zipPath.string(), extractTo.string());
-    mz_zip_archive zip_archive;
-    memset(&zip_archive, 0, sizeof(zip_archive));
-
-    if (mz_zip_reader_init_file(&zip_archive, zipPath.string().c_str(), 0) == 0)
-    {
-        setError("Failed to open zip file: " + zipPath.string());
-        return;
-    }
-
-    mz_uint num_files = mz_zip_reader_get_num_files(&zip_archive);
+    mz_uint num_files = mz_zip_reader_get_num_files(zip);
     logger->trace("Zip archive contains {} files", num_files);
+
+    fs::path baseDir = fs::weakly_canonical(extractTo);
+    fs::path zipRoot = zipRootDirectory.empty() ? "" : fs::weakly_canonical(zipRootDirectory);
 
     for (mz_uint i = 0; i < num_files; i++)
     {
         progressPercent = static_cast<int>((i * 100) / num_files);
         mz_zip_archive_file_stat file_stat;
-        if (mz_zip_reader_file_stat(&zip_archive, i, &file_stat) == 0)
+        if (mz_zip_reader_file_stat(zip, i, &file_stat) == 0)
         {
             logger->trace("Failed to get file stat for index {}: {}", i,
-                          mz_zip_get_error_string(zip_archive.m_last_error));
+                          mz_zip_get_error_string(zip->m_last_error));
             continue;
         }
 
-        fs::path baseDir = fs::weakly_canonical(extractTo);
-        fs::path targetPath = fs::weakly_canonical(extractTo / file_stat.m_filename);
+        fs::path filePath(file_stat.m_filename);
+        if (!zipRoot.empty() && !filePath.string().starts_with(zipRoot.string()))
+        {
+            continue;
+        }
+
+        filePath = filePath.lexically_relative(zipRoot);
+
+        fs::path targetPath = fs::weakly_canonical(extractTo / filePath);
         auto [mismatch_base, mismatch_target] =
             std::mismatch(baseDir.begin(), baseDir.end(), targetPath.begin());
 
@@ -169,9 +169,9 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
             continue;
         }
 
-        fs::path outputPath = extractTo / file_stat.m_filename;
+        fs::path outputPath = extractTo / filePath;
 
-        if (mz_zip_reader_is_file_a_directory(&zip_archive, i) != 0)
+        if (mz_zip_reader_is_file_a_directory(zip, i) != 0)
         {
             logger->trace("Creating directory: {}", outputPath.string());
             fs::create_directories(outputPath);
@@ -180,9 +180,8 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
 
         fs::create_directories(outputPath.parent_path());
 
-        if (mz_zip_reader_extract_to_file(&zip_archive, i, outputPath.string().c_str(), 0) == 0)
+        if (mz_zip_reader_extract_to_file(zip, i, outputPath.string().c_str(), 0) == 0)
         {
-            mz_zip_reader_end(&zip_archive);
             setError("Failed to extract file: " + std::string(file_stat.m_filename));
             return;
         }
@@ -192,29 +191,15 @@ void StoredAsset::extractZip(const fs::path &zipPath, const fs::path &extractTo)
 
     progressPercent = 100;
 
-    mz_zip_reader_end(&zip_archive);
     state = AssetState::Cleanup;
 
-    logger->info("Extraction complete for {}", zipPath.string());
+    logger->info("Extraction complete to {}", extractTo.string());
 }
 
-void StoredAsset::cleanupExtractedFiles()
-{
-    try
-    {
-        logger->info("Cleaning up temporary zip file: {}", localTempZipPath.string());
-        fs::remove(localTempZipPath);
-        state = AssetState::Complete;
-    }
-    catch (const std::exception &e)
-    {
-        setError("Failed to clean up temporary files: " + std::string(e.what()));
-    }
-}
-
-StoredAsset::StoredAsset(const std::string &relativeExtractPath, std::string hash,
+StoredAsset::StoredAsset(const std::string &relativeExtractPath,
+                         const std::string &zipRootDirectory, std::string hash,
                          const std::string &sdlPrefPath, const std::string &sourceType)
-    : expectedSha256(std::move(hash))
+    : zipRootDirectory(zipRootDirectory), expectedSha256(std::move(hash))
 {
     localExtractPath = fs::path(sdlPrefPath) / relativeExtractPath;
     localHashPath = fs::path(sdlPrefPath) / (relativeExtractPath + ".sha256");
@@ -272,29 +257,39 @@ void StoredAsset::verifyOrDownload()
             }
 
             fs::create_directories(localExtractPath.parent_path());
-            performDownload(stoken);
+            mz_zip_archive *zip = performDownload(stoken);
 
             if (state == AssetState::Extracting)
             {
                 if (stoken.stop_requested())
                 {
+                    cleanup();
                     return;
                 }
 
                 deleteOldFiles(localExtractPath);
-                extractZip(localTempZipPath, localExtractPath);
-                cleanupExtractedFiles();
+                extractZip(zip, localExtractPath);
+                cleanup();
 
-                // Write hash file
-                std::ofstream hashFile(localHashPath, std::ios::trunc);
-                if (hashFile)
+                if (state != AssetState::Error)
                 {
-                    hashFile << expectedSha256;
+                    state = AssetState::Complete;
+
+                    // Write hash file
+                    std::ofstream hashFile(localHashPath, std::ios::trunc);
+                    if (hashFile)
+                    {
+                        hashFile << expectedSha256;
+                    }
+                    else
+                    {
+                        setError("Failed to write hash file for asset.");
+                    }
                 }
-                else
-                {
-                    setError("Failed to write hash file for asset.");
-                }
+            }
+            else
+            {
+                cleanup();
             }
         });
 }

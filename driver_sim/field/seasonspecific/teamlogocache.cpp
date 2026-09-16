@@ -149,10 +149,10 @@ blackboard::gui::ImTexture TeamLogoCache::getTeamLogo(int teamNumber)
     {
         logoStates[teamNumber] = LogoState::Loading;
 
-        std::filesystem::path localPath = logoCacheDirectory / Manifest::getCurrent().getTbaYear() /
+        std::filesystem::path localPath = logoCacheDirectory / Manifest::getCurrent().game.tbaYear /
                                           (std::to_string(teamNumber) + ".png");
         std::string remoteUrl = "https://www.thebluealliance.com/avatar/" +
-                                Manifest::getCurrent().getTbaYear() + "/frc" +
+                                Manifest::getCurrent().game.tbaYear + "/frc" +
                                 std::to_string(teamNumber) + ".png";
 
         // Load the logo asynchronously

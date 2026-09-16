@@ -57,17 +57,16 @@ void drawAboutPanel(ImFont *font)
 
     Manifest &manifest = Manifest::getCurrent();
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));
-    std::string versionText = ("Version " DRIVERSIM_VERSION " (") + manifest.getTbaYear() +
-                              ") Build " + manifest.getBuildVersion() + " (" +
-                              manifest.getSourceType() + (") " DRIVERSIM_COMMIT " ") +
-                              manifest.getCommitHash();
+    std::string versionText = ("Version " DRIVERSIM_VERSION " (") + manifest.game.year +
+                              ") Build " + manifest.code.version + " (" + manifest.manifest.source +
+                              (") " DRIVERSIM_COMMIT " ") + manifest.code.commit;
     ImGui::TextUnformatted(versionText.data(), versionText.data() + versionText.size());
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
     ImGui::PopStyleColor();
 
-    ui::DrawLinkText(manifest.getRobotCodeRepoUrl().c_str());
+    ui::DrawLinkText(manifest.code.repoUrl.c_str());
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
-    ui::DrawLinkText(manifest.getDriverSimRepoUrl().c_str());
+    ui::DrawLinkText(manifest.manifest.driverSimRepoUrl.c_str());
     ImGui::Dummy(ImVec2(0, 1.0f * globalScale));
 
     ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#A2A2A2FF"));

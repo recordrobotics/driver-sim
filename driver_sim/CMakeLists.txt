@@ -25,9 +25,6 @@ endforeach()
 file(GLOB_RECURSE GAME_IMAGES CONFIGURE_DEPENDS ./assets/images/rebuilt2026/*)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/images/rebuilt2026")
 
-file(GLOB_RECURSE PACKAGED_ASSETS CONFIGURE_DEPENDS ./packaged/*)
-file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/generated/packaged")
-
 foreach(FONT_FILE IN LISTS FONTS)
     get_filename_component(FONT_FILENAME ${FONT_FILE} NAME)
     string(REGEX REPLACE "[^A-Za-z0-9_]" "_" FONT_FILENAME_REP ${FONT_FILENAME})
@@ -61,16 +58,35 @@ foreach(GAME_IMAGES_FILE IN LISTS GAME_IMAGES)
     )
 endforeach()
 
-foreach(PACKAGED_ASSET IN LISTS PACKAGED_ASSETS)
-    get_filename_component(ASSET_FILENAME ${PACKAGED_ASSET} NAME)
-    string(REGEX REPLACE "[^A-Za-z0-9_]" "_" ASSET_FILENAME_REP ${ASSET_FILENAME})
+# Package the entire packaged/ directory into a single ZIP archive
+file(GLOB_RECURSE PACKAGED_ASSETS CONFIGURE_DEPENDS ./packaged/*)
 
-    bgfx_compile_binary_to_header(
-        INPUT_FILE ${PACKAGED_ASSET}
-        OUTPUT_FILE ${CMAKE_BINARY_DIR}/include/generated/packaged/${ASSET_FILENAME}.h
-        ARRAY_NAME ${ASSET_FILENAME_REP}_bytes
-    )
-endforeach()
+set(PACKAGED_DIR "${CMAKE_CURRENT_LIST_DIR}/packaged")
+set(PACKAGED_ZIP "${CMAKE_BINARY_DIR}/packaged.zip")
+set(PACKAGED_ZIP_HEADER_DIR "${CMAKE_BINARY_DIR}/include/generated/packaged")
+
+file(MAKE_DIRECTORY "${PACKAGED_ZIP_HEADER_DIR}")
+
+add_custom_command(
+    OUTPUT "${PACKAGED_ZIP}"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "${PACKAGED_ZIP}"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${PACKAGED_DIR}"
+            ${CMAKE_COMMAND} -E tar "cf" "${PACKAGED_ZIP}" --format=zip .
+    DEPENDS
+        ${PACKAGED_ASSETS}
+    COMMENT "Creating packaged.zip"
+    VERBATIM
+)
+
+add_custom_target(packaged_zip ALL
+    DEPENDS "${PACKAGED_ZIP}"
+)
+
+bgfx_compile_binary_to_header(
+    INPUT_FILE "${PACKAGED_ZIP}"
+    OUTPUT_FILE "${PACKAGED_ZIP_HEADER_DIR}/packaged.zip.h"
+    ARRAY_NAME packaged_zip_bytes
+)
 
 file(GLOB_RECURSE VS_SHADERS CONFIGURE_DEPENDS vs_*.sc)
 file(GLOB_RECURSE FS_SHADERS CONFIGURE_DEPENDS fs_*.sc)
@@ -139,11 +155,11 @@ if(WINDOWS)
             ${SOURCES} ${HEADERS}
             ${FONTS} ${IMAGES} ${GAME_IMAGES}
             ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS}
-            ${PACKAGED_ASSETS}
+            ${PACKAGED_ZIP}
             ${CMAKE_CURRENT_LIST_DIR}/assets/app.rc
             ${CMAKE_CURRENT_LIST_DIR}/assets/segmentheap.manifest)
 elseif(MACOS)
-    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ZIP})
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUNDLE True
         RESOURCE True
@@ -153,7 +169,7 @@ elseif(MACOS)
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
 )
 elseif(LINUX)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ASSETS})
+    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FONTS} ${IMAGES} ${GAME_IMAGES} ${VS_SHADERS} ${FS_SHADERS} ${CS_SHADERS} ${PACKAGED_ZIP})
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC cxx_std_20)
@@ -173,6 +189,7 @@ target_link_libraries(${PROJECT_NAME}
     argparse
     fmt::fmt
     discordsdk::discordsdk
+    yaml-cpp::yaml-cpp
 )
 
 target_include_directories(${PROJECT_NAME}

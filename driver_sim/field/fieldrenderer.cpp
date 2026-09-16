@@ -1744,9 +1744,9 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
 
     fms = std::make_shared<FMS>();
 
-    if (Manifest::getCurrent().getShowFMSUI())
+    if (Manifest::getCurrent().game.showFmsUI)
     {
-        if (Manifest::getCurrent().getGameYear() == "2026")
+        if (Manifest::getCurrent().game.year == "2026")
         {
             fmsUI = std::make_unique<Rebuilt2026FMSUI>(fms);
         }
@@ -2721,11 +2721,11 @@ void FieldRenderer::render(const blackboard::app::Window &window,
 
         Manifest &manifest = Manifest::getCurrent();
 
-        discord->setField(manifest.getGameYear(), allianceStation, fms->getDriverScore(),
+        discord->setField(manifest.game.year, allianceStation, fms->getDriverScore(),
                           fms->getOpponentScore(),
                           robotModels.size() > 0 ? robotModels[0].name : "<Unknown>",
-                          driveModeToString(fms->getDriveMode()), manifest.getRobotCodeRepoUrl(),
-                          manifest.getRobotDownloadUrl(), fms->getMatchEndTime());
+                          driveModeToString(fms->getDriveMode()), manifest.code.repoUrl,
+                          manifest.manifest.shareUrl, fms->getMatchEndTime());
     }
 
     ensureTextures(m_width, m_height);

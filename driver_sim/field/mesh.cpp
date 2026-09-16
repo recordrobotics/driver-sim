@@ -123,7 +123,7 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                     primitive.materialIndex.value() < asset.materials.size())
                 {
                     mat = Material(asset.materials.at(primitive.materialIndex.value()),
-                                   "FE-" + Manifest::getCurrent().getGameYear() + "-01", nodeName);
+                                   "FE-" + Manifest::getCurrent().game.year + "-01", nodeName);
                 }
 
                 MeshGroupKey key{.material = mat, .tag = meshTag};

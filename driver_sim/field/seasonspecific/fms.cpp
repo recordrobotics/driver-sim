@@ -12,10 +12,10 @@ void FMS::onNTCreated(nt::NetworkTableInstance &ntInst)
     matchTimeTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.matchtime"));
     matchTimeSub = matchTimeTopic.Subscribe(-1.0, {.periodic = settings::current.ntPeriodic});
 
-    redScoreTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.redscore"));
+    redScoreTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.score.red"));
     redScoreSub = redScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
 
-    blueScoreTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.bluescore"));
+    blueScoreTopic = ntInst.GetDoubleTopic(Manifest::getCurrent().getNTTopic("fms.score.blue"));
     blueScoreSub = blueScoreTopic.Subscribe(0.0, {.periodic = settings::current.ntPeriodic});
 
     isAutonomousTopic = ntInst.GetBooleanTopic(Manifest::getCurrent().getNTTopic("fms.autonomous"));

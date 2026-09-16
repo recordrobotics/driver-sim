@@ -52,7 +52,7 @@ void ui::DrawProgress(const std::string_view &label, float value, bool isError)
     ImGui::SetCursorPosX((winSize.x - width) * 0.5f);
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg, string_hex_to_rgba_float("#2D2A2Aff"));
-    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, isError ? string_hex_to_rgba_float("#c83c3c")
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, isError ? string_hex_to_rgba_float("#c83c3cff")
                                                           : string_hex_to_rgba_float("#42A749ff"));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f * globalScale);
     ImGui::ProgressBar(value, ImVec2(width, 7 * globalScale), "");

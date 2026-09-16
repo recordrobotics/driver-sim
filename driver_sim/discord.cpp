@@ -156,7 +156,7 @@ void Discord::setField(const std::string &gameYear, int allianceStation, int dri
 
     discordpp::ActivityButton viewButton;
     viewButton.SetLabel("View on GitHub");
-    viewButton.SetUrl(Manifest::getCurrent().getDriverSimRepoUrl());
+    viewButton.SetUrl(Manifest::getCurrent().manifest.driverSimRepoUrl);
     activity.AddButton(viewButton);
 
     updateActivity(activity);

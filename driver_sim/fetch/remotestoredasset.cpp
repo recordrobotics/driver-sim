@@ -5,8 +5,9 @@
 #include <fstream>
 
 using namespace blackboard::logger;
+namespace fs = std::filesystem;
 
-void RemoteStoredAsset::performDownload(std::stop_token stoken)
+mz_zip_archive *RemoteStoredAsset::performDownload(std::stop_token stoken)
 {
     logger->info("Starting download of asset from URL: {}", remoteUrl);
     state = AssetState::Downloading;
@@ -15,7 +16,7 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
     if (!ofs)
     {
         setError("Could not open local file for writing: " + localTempZipPath.string());
-        return;
+        return nullptr;
     }
 
     cpr::Response resp = cpr::Download(
@@ -48,7 +49,7 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
     {
         logger->info("Download cancelled by engine: {}", remoteUrl);
         std::filesystem::remove(localTempZipPath); // Delete the partial file
-        return;
+        return nullptr;
     }
 
     if (resp.status_code == 200)
@@ -71,5 +72,32 @@ void RemoteStoredAsset::performDownload(std::stop_token stoken)
         {
             setError("HTTP Error " + std::to_string(resp.status_code) + " from: " + remoteUrl);
         }
+        return nullptr;
+    }
+
+    logger->info("Extracting zip file {} to {}", localTempZipPath.string(),
+                 localExtractPath.string());
+
+    memset(&zip, 0, sizeof(zip));
+
+    if (mz_zip_reader_init_file(&zip, localTempZipPath.string().c_str(), 0) == 0)
+    {
+        setError("Failed to open zip file: " + localTempZipPath.string());
+        return nullptr;
+    }
+    return &zip;
+}
+
+void RemoteStoredAsset::cleanup()
+{
+    try
+    {
+        logger->info("Cleaning up temporary zip file: {}", localTempZipPath.string());
+        mz_zip_reader_end(&zip);
+        fs::remove(localTempZipPath);
+    }
+    catch (const std::exception &e)
+    {
+        setError("Failed to clean up temporary files: " + std::string(e.what()));
     }
 }

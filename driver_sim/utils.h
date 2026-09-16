@@ -108,3 +108,19 @@ inline std::string string_join(R &&values, std::string_view delimiter)
 
     return result;
 }
+
+constexpr std::string_view string_trim(std::string_view sv)
+{
+    constexpr std::string_view whitespace = " \t\n\r\f\v";
+
+    const auto first = sv.find_first_not_of(whitespace);
+
+    if (first == std::string_view::npos)
+    {
+        return {};
+    }
+
+    const auto last = sv.find_last_not_of(whitespace);
+
+    return sv.substr(first, last - first + 1);
+}

@@ -3,6 +3,7 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <miniz.h>
 #include <mutex>
 #include <span>
 #include <stop_token>
@@ -26,6 +27,7 @@ class StoredAsset
 {
   protected:
     std::filesystem::path localExtractPath;
+    std::string zipRootDirectory;
     std::filesystem::path localHashPath;
     std::filesystem::path localTempZipPath;
     std::string expectedSha256;
@@ -40,19 +42,19 @@ class StoredAsset
 
     bool quickLoaded = false; // for assets already valid on disk
 
-    virtual void performDownload(std::stop_token stoken) = 0;
+    virtual mz_zip_archive *performDownload(std::stop_token stoken) = 0;
+    virtual void cleanup() = 0;
 
     void setError(const std::string &err);
 
     static std::string readSha256(const std::filesystem::path &path);
 
     void deleteOldFiles(const std::filesystem::path &rootFolder);
-    void extractZip(const std::filesystem::path &zipPath, const std::filesystem::path &extractTo);
-    void cleanupExtractedFiles();
+    void extractZip(mz_zip_archive *zip, const std::filesystem::path &extractTo);
 
   public:
-    StoredAsset(const std::string &relativeExtractPath, std::string hash,
-                const std::string &sdlPrefPath, const std::string &sourceType);
+    StoredAsset(const std::string &relativeExtractPath, const std::string &zipRootDirectory,
+                std::string hash, const std::string &sdlPrefPath, const std::string &sourceType);
 
     virtual ~StoredAsset();
 

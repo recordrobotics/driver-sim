@@ -39,8 +39,6 @@
 #include "fetch/remotestoredasset.h"
 #include "fetch/storedasset.h"
 
-#include <code.zip.h>
-
 #include "javalogmanager.h"
 #include "process/processrunner.h"
 #include "settings/settingsstore.h"
@@ -173,28 +171,12 @@ void initApp()
 
     Manifest &manifest = Manifest::getCurrent();
 
-    std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
-    javaAsset = std::make_unique<RemoteStoredAsset>("jdk", manifest.getJdkHash(), prefPath,
-                                                    manifest.getJdkDownloadUrl());
-    dashboardAsset = std::make_unique<RemoteStoredAsset>(
-        "elastic", manifest.getElasticHash(), prefPath, manifest.getElasticDownloadUrl());
-    fieldAsset = std::make_unique<RemoteStoredAsset>("field", manifest.getFieldHash(), prefPath,
-                                                     manifest.getFieldDownloadUrl());
-    robotAsset = std::make_unique<RemoteStoredAsset>("robot", manifest.getRobotAssetHash(),
-                                                     prefPath, manifest.getRobotAssetDownloadUrl());
-    jniAsset = std::make_unique<RemoteStoredAsset>("jni", manifest.getJniHash(), prefPath,
-                                                   manifest.getJniDownloadUrl());
-    if (manifest.getRobotCodeDownloadUrl().empty())
-    {
-        robotCodeAsset = std::make_unique<PackagedStoredAsset>(
-            "code", manifest.getRobotCodeHash(), prefPath,
-            std::span<const uint8_t>(code_zip_bytes, sizeof(code_zip_bytes)));
-    }
-    else
-    {
-        robotCodeAsset = std::make_unique<RemoteStoredAsset>(
-            "code", manifest.getRobotCodeHash(), prefPath, manifest.getRobotCodeDownloadUrl());
-    }
+    javaAsset = manifest.jdk.getStoredAsset();
+    dashboardAsset = manifest.elastic.getStoredAsset();
+    fieldAsset = manifest.field.getStoredAsset();
+    robotAsset = manifest.robot.getStoredAsset();
+    jniAsset = manifest.jni.getStoredAsset();
+    robotCodeAsset = manifest.code.getStoredAsset();
 
     // make sure we keep logs and settings
     robotCodeAsset->keepPaths = {"logs", "ctre_sim", "networktables.json"};
@@ -226,9 +208,11 @@ std::vector<std::string> getJavaCommandLine()
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
     std::vector<std::string> javaCommandLine = {
-        prefPath + "jdk/jdk-" + Manifest::getCurrent().getJdkVersion() + "/bin/java.exe",
-        "-Djava.library.path=" + prefPath + "jni/release", "-jar",
-        prefPath + "code/libs/" + Manifest::getCurrent().getRobotCodeJarName()};
+        prefPath + "jdk/jdk-" + Manifest::getCurrent().jdk.version + "/bin/java.exe",
+        "-Djava.library.path=" + prefPath + "jni/release",
+        "-jar",
+        prefPath + "code/" + Manifest::getCurrent().code.jarPath,
+    };
     javaCommandLine.insert(
         javaCommandLine.end() - 2, settings::current.jvmArguments.begin(),
         settings::current.jvmArguments.end()); // insert JVM arguments before the -jar argument
@@ -242,7 +226,10 @@ std::vector<std::string> getJavaCommandLine()
 void initFieldView()
 {
     if (hasInitializedFieldView)
+    {
         return;
+    }
+
     hasInitializedFieldView = true;
 
     if (!fieldRenderer)
@@ -252,13 +239,26 @@ void initFieldView()
 
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
+#ifdef _WIN32
+    constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard.exe";
+    constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
+#elif __APPLE__
+    constexpr std::string_view elasticDashboardExecutable =
+        "elastic/elastic_dashboard.app/Contents/MacOS/elastic_dashboard";
+    constexpr std::string_view elasticDashboardWorkingDirectory = "elastic/elastic_dashboard.app";
+#else
+    constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard";
+    constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
+#endif
+
     elasticProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{.commandLine =
                                                                                {prefPath +
-                                                                                "elastic/"
-                                                                                "elastic_dashboard."
-                                                                                "exe"},
+                                                                                std::string(
+                                                                                    elasticDashboardExecutable)},
                                                                            .working_directory =
-                                                                               prefPath + "elastic",
+                                                                               prefPath +
+                                                                               std::string(
+                                                                                   elasticDashboardWorkingDirectory),
                                                                            .environment = {},
                                                                            .kill_parent_on_child_exit =
                                                                                true,
@@ -427,6 +427,7 @@ void drawPageLoading()
           jniAsset->getState() == AssetState::Complete &&
           robotCodeAsset->getState() == AssetState::Complete)))
     {
+        Manifest::getCurrent().close();
         pageTransition.transition(
             settings::current.showMainMenu ? PAGE_SELECT : PAGE_3D_FIELD,
             // instant transition if all assets were quick loaded
@@ -445,8 +446,8 @@ void drawPageLoading()
 
     if (settings::current.launchRobotCode)
     {
-        std::string javaMajorVersion = Manifest::getCurrent().getJdkVersion().substr(
-            0, Manifest::getCurrent().getJdkVersion().find('.'));
+        std::string javaMajorVersion = Manifest::getCurrent().jdk.version.substr(
+            0, Manifest::getCurrent().jdk.version.find('.'));
         drawAssetProgress("Java " + javaMajorVersion, *javaAsset);
     }
     if (settings::current.launchElastic)

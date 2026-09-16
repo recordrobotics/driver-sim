@@ -1,111 +1,179 @@
 #pragma once
 
+#include "fetch/storedasset.h"
+#include <miniz.h>
+#include <optional>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
-class Manifest
+struct Manifest
 {
   public:
-    std::string &getManifestVersion() { return manifestVersion; }
-    std::string &getSourceType() { return sourceType; }
-    std::string &getBuildVersion() { return buildVersion; }
-    std::string &getCommitHash() { return commitHash; }
+    struct ManifestMetadata
+    {
+        std::string version;
+        std::string source;
+        std::string shareUrl;
+        std::string driverSimRepoUrl;
+    };
 
-    std::string &getDriverSimRepoUrl() { return driverSimRepoUrl; }
-    std::string &getRobotCodeRepoUrl() { return robotCodeRepoUrl; }
-    std::string &getRobotDownloadUrl() { return robotDownloadUrl; }
+    struct Game
+    {
+        std::string year;
+        std::string tbaYear;
+        bool showFmsUI;
+    };
 
-    std::string &getGameYear() { return gameYear; }
-    std::string &getTbaYear() { return tbaYear; }
+    struct Asset
+    {
+        std::string platform;
+        std::optional<std::string> url;
+        std::string hash;
 
-    std::string &getJdkVersion() { return jdkVersion; }
-    std::string &getJdkDownloadUrl() { return jdkDownloadUrl; }
-    std::string &getJdkHash() { return jdkHash; }
+        // platform can be comma separated list of platforms or "all"
+        [[nodiscard]] bool supportsPlatform(std::string_view platform) const;
 
-    std::string &getElasticDownloadUrl() { return elasticDownloadUrl; }
-    std::string &getElasticHash() { return elasticHash; }
+        [[nodiscard]] std::unique_ptr<StoredAsset>
+        getStoredAsset(const std::string &relativePath) const;
+    };
 
-    std::string &getFieldDownloadUrl() { return fieldDownloadUrl; }
-    std::string &getFieldHash() { return fieldHash; }
+    struct AssetList : public std::vector<Asset>
+    {
+      public:
+        [[nodiscard]] std::optional<Asset> getAssetForPlatform(std::string_view platform) const
+        {
+            for (const auto &asset : *this)
+            {
+                if (asset.supportsPlatform(platform))
+                {
+                    return asset;
+                }
+            }
+            return std::nullopt;
+        }
 
-    std::string &getRobotAssetDownloadUrl() { return robotAssetDownloadUrl; }
-    std::string &getRobotAssetHash() { return robotAssetHash; }
+        [[nodiscard]] std::unique_ptr<StoredAsset>
+        getStoredAssetForPlatform(const std::string &relativePath, std::string_view platform) const
+        {
+            auto asset = getAssetForPlatform(platform);
+            if (asset.has_value())
+            {
+                return asset->getStoredAsset(relativePath);
+            }
+            return {};
+        }
 
-    std::string &getJniDownloadUrl() { return jniDownloadUrl; }
-    std::string &getJniHash() { return jniHash; }
+        [[nodiscard]] std::unique_ptr<StoredAsset>
+        getStoredAssetForCurrentPlatform(const std::string &relativePath) const
+        {
+            std::string platform;
+#ifdef _WIN32
+            platform = "windows-x64";
+#elif __APPLE__
+#if defined(__aarch64__)
+            platform = "macos-aarch64";
+#else
+            platform = "macos-x64";
+#endif
+#elif __linux__
+            platform = "linux-x64";
+#endif
+            return getStoredAssetForPlatform(relativePath, platform);
+        }
+    };
 
-    std::string &getRobotCodeDownloadUrl() { return robotCodeDownloadUrl; }
-    std::string &getRobotCodeHash() { return robotCodeHash; }
-    std::string &getRobotCodeJarName() { return robotCodeJarName; }
+    struct Code
+    {
+        std::string version;
+        std::string commit;
+        std::string repoUrl;
 
-    bool &getShowFMSUI() { return showFMSUI; }
+        std::string jarPath;
 
-    std::unordered_map<std::string, std::string> &getNTTopics() { return ntTopics; }
+        AssetList assets;
+
+        [[nodiscard]] std::unique_ptr<StoredAsset> getStoredAsset() const
+        {
+            return assets.getStoredAssetForCurrentPlatform("code");
+        }
+    };
+
+    struct JNI
+    {
+        AssetList assets;
+
+        [[nodiscard]] std::unique_ptr<StoredAsset> getStoredAsset() const
+        {
+            return assets.getStoredAssetForCurrentPlatform("jni");
+        }
+    };
+
+    struct Robot
+    {
+        AssetList assets;
+
+        [[nodiscard]] std::unique_ptr<StoredAsset> getStoredAsset() const
+        {
+            return assets.getStoredAssetForCurrentPlatform("robot");
+        }
+    };
+
+    struct Field
+    {
+        AssetList assets;
+
+        [[nodiscard]] std::unique_ptr<StoredAsset> getStoredAsset() const
+        {
+            return assets.getStoredAssetForCurrentPlatform("field");
+        }
+    };
+
+    struct JDK
+    {
+        std::string version;
+        AssetList assets;
+
+        [[nodiscard]] std::unique_ptr<StoredAsset> getStoredAsset() const
+        {
+            return assets.getStoredAssetForCurrentPlatform("jdk");
+        }
+    };
+
+    struct Elastic
+    {
+        AssetList assets;
+
+        [[nodiscard]] std::unique_ptr<StoredAsset> getStoredAsset() const
+        {
+            return assets.getStoredAssetForCurrentPlatform("elastic");
+        }
+    };
+
+    ManifestMetadata manifest;
+    Game game;
+    Code code;
+    JNI jni;
+    Robot robot;
+    Field field;
+    JDK jdk;
+    Elastic elastic;
+
+    std::unordered_map<std::string, std::string> networktables;
+
+    std::unordered_set<std::string> packagedAssetDirs;
+    bool isZip;
+    std::shared_ptr<mz_zip_archive> zip;
+
     std::string getNTTopic(const std::string &key);
+
+    void close();
+
+    static Manifest fromYaml(const std::string &yamlString);
+    static Manifest fromZip(std::span<const uint8_t> data);
 
     static Manifest &getCurrent();
     static Manifest &getPackaged();
-
-  private:
-    Manifest(std::string manifestVersion, std::string sourceType, std::string buildVersion,
-             std::string commitHash, std::string driverSimRepoUrl, std::string robotCodeRepoUrl,
-             std::string robotDownloadUrl, std::string gameYear, std::string tbaYear,
-             std::string jdkVersion, std::string jdkDownloadUrl, std::string jdkHash,
-             std::string elasticDownloadUrl, std::string elasticHash, std::string fieldDownloadUrl,
-             std::string fieldHash, std::string robotAssetDownloadUrl, std::string robotAssetHash,
-             std::string jniDownloadUrl, std::string jniHash, std::string robotCodeDownloadUrl,
-             std::string robotCodeHash, std::string robotCodeJarName, bool showFMSUI,
-             std::unordered_map<std::string, std::string> ntTopics)
-        : manifestVersion(std::move(manifestVersion)), sourceType(std::move(sourceType)),
-          buildVersion(std::move(buildVersion)), commitHash(std::move(commitHash)),
-          driverSimRepoUrl(std::move(driverSimRepoUrl)),
-          robotCodeRepoUrl(std::move(robotCodeRepoUrl)),
-          robotDownloadUrl(std::move(robotDownloadUrl)), gameYear(std::move(gameYear)),
-          tbaYear(std::move(tbaYear)), jdkVersion(std::move(jdkVersion)),
-          jdkDownloadUrl(std::move(jdkDownloadUrl)), jdkHash(std::move(jdkHash)),
-          elasticDownloadUrl(std::move(elasticDownloadUrl)), elasticHash(std::move(elasticHash)),
-          fieldDownloadUrl(std::move(fieldDownloadUrl)), fieldHash(std::move(fieldHash)),
-          robotAssetDownloadUrl(std::move(robotAssetDownloadUrl)),
-          robotAssetHash(std::move(robotAssetHash)), jniDownloadUrl(std::move(jniDownloadUrl)),
-          jniHash(std::move(jniHash)), robotCodeDownloadUrl(std::move(robotCodeDownloadUrl)),
-          robotCodeHash(std::move(robotCodeHash)), robotCodeJarName(std::move(robotCodeJarName)),
-          showFMSUI(showFMSUI), ntTopics(std::move(ntTopics))
-    {
-    }
-
-    std::string manifestVersion;
-    std::string sourceType;
-    std::string buildVersion;
-    std::string commitHash;
-
-    std::string driverSimRepoUrl;
-    std::string robotCodeRepoUrl;
-    std::string robotDownloadUrl;
-
-    std::string gameYear;
-    std::string tbaYear;
-
-    std::string jdkVersion;
-    std::string jdkDownloadUrl;
-    std::string jdkHash;
-
-    std::string elasticDownloadUrl;
-    std::string elasticHash;
-
-    std::string fieldDownloadUrl;
-    std::string fieldHash;
-
-    std::string robotAssetDownloadUrl;
-    std::string robotAssetHash;
-
-    std::string jniDownloadUrl;
-    std::string jniHash;
-
-    std::string robotCodeDownloadUrl;
-    std::string robotCodeHash;
-    std::string robotCodeJarName;
-
-    bool showFMSUI;
-
-    std::unordered_map<std::string, std::string> ntTopics;
 };
