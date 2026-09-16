@@ -425,6 +425,15 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
         drawHeader("General");
         ImGui::Dummy(spacer);
 
+        drawSettingOption<std::string>(
+            "manifestPath", "Manifest path",
+            "The path to the manifest file (.yaml, .yml, or .zip). If empty, "
+            "the packaged manifest will be used. Note that changing this setting will not take "
+            "effect until the next time Driver Sim is started.",
+            {.value = &settings::current.manifestPath,
+             .defaultValue = settings::makeDefault().manifestPath});
+        ImGui::Dummy(spacer);
+
         drawSettingOption<bool>(
             "showMainMenu", "Show main menu",
             "Determines whether the main menu should show when Driver Sim is started. When false "

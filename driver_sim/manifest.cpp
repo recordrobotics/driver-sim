@@ -8,10 +8,17 @@
 #include <unordered_set>
 #include <yaml-cpp/yaml.h>
 
+#include <filesystem>
+
+#include "settings/settingsstore.h"
+#include <blackboard_app/logger.h>
+
 #include <packaged.zip.h>
 
 #include "fetch/packagedstoredasset.h"
 #include "fetch/remotestoredasset.h"
+
+using namespace blackboard::logger;
 
 namespace YAML
 {
@@ -385,16 +392,19 @@ static std::optional<Manifest> packagedManifest;
 
 Manifest Manifest::fromYaml(const std::string &yamlString)
 {
+    logger->info("Loading manifest from YAML string");
     return YAML::Load(yamlString).as<Manifest>();
 }
 
 Manifest Manifest::fromZip(std::span<const uint8_t> data)
 {
+    logger->info("Loading manifest from zip file");
     // Decompress the zip file
     std::shared_ptr<mz_zip_archive> zip = std::make_shared<mz_zip_archive>();
     mz_zip_zero_struct(zip.get());
     if (!mz_zip_reader_init_mem(zip.get(), data.data(), data.size(), 0))
     {
+        logger->error("Error loading manifest: Failed to initialize zip reader");
         throw std::runtime_error("Failed to initialize zip reader");
     }
 
@@ -402,6 +412,7 @@ Manifest Manifest::fromZip(std::span<const uint8_t> data)
     int manifestIndex = mz_zip_reader_locate_file(zip.get(), "manifest.yaml", nullptr, 0);
     if (manifestIndex < 0)
     {
+        logger->error("Error loading manifest: Manifest file not found in zip");
         mz_zip_reader_end(zip.get());
         throw std::runtime_error("Manifest file not found in zip");
     }
@@ -411,6 +422,7 @@ Manifest Manifest::fromZip(std::span<const uint8_t> data)
     void *manifestData = mz_zip_reader_extract_to_heap(zip.get(), manifestIndex, &manifestSize, 0);
     if (manifestData == nullptr)
     {
+        logger->error("Error loading manifest: Failed to extract manifest from zip");
         mz_zip_reader_end(zip.get());
         throw std::runtime_error("Failed to extract manifest from zip");
     }
@@ -427,6 +439,7 @@ Manifest Manifest::fromZip(std::span<const uint8_t> data)
         mz_zip_archive_file_stat fileStat;
         if (!mz_zip_reader_file_stat(zip.get(), i, &fileStat))
         {
+            logger->error("Error loading manifest: Failed to get file stat from zip");
             mz_zip_reader_end(zip.get());
             throw std::runtime_error("Failed to get file stat from zip");
         }
@@ -435,7 +448,9 @@ Manifest Manifest::fromZip(std::span<const uint8_t> data)
         if (mz_zip_reader_is_file_a_directory(zip.get(), i) != 0 &&
             filename.find('/') == filename.size() - 1)
         {
-            packagedAssetDirs.insert(filename.substr(0, filename.size() - 1));
+            std::string assetName = filename.substr(0, filename.size() - 1);
+            logger->info("Found packaged asset '{}' in manifest", assetName);
+            packagedAssetDirs.insert(assetName);
         }
     }
 
@@ -443,6 +458,9 @@ Manifest Manifest::fromZip(std::span<const uint8_t> data)
     manifest.packagedAssetDirs = packagedAssetDirs;
     manifest.zip = zip;
     manifest.isZip = true;
+
+    logger->info("Loaded manifest with {} packaged assets", packagedAssetDirs.size());
+
     return manifest;
 }
 
@@ -450,6 +468,7 @@ Manifest &Manifest::getPackaged()
 {
     if (!packagedManifest.has_value())
     {
+        logger->info("Loading packaged manifest");
         packagedManifest = Manifest::fromZip(
             std::span<const uint8_t>(packaged_zip_bytes, sizeof(packaged_zip_bytes)));
     }
@@ -459,8 +478,57 @@ Manifest &Manifest::getPackaged()
 
 Manifest &Manifest::getCurrent()
 {
-    static Manifest currentManifest = Manifest::getPackaged();
-    return currentManifest;
+    static std::optional<Manifest> currentManifest;
+
+    if (!currentManifest.has_value())
+    {
+        std::filesystem::path manifestPath = settings::current.manifestPath;
+        if (!manifestPath.empty())
+        {
+            logger->info("Loading manifest from path: {}", manifestPath.string());
+            if (!std::filesystem::exists(manifestPath))
+            {
+                logger->error("Manifest file does not exist at path: {}", manifestPath.string());
+                currentManifest = Manifest::getPackaged();
+                return currentManifest.value();
+            }
+
+            std::ifstream manifestFile(manifestPath, std::ios::binary);
+            if (!manifestFile.is_open())
+            {
+                logger->error("Failed to open manifest file at path: {}", manifestPath.string());
+                currentManifest = Manifest::getPackaged();
+                return currentManifest.value();
+            }
+
+            if (manifestPath.extension() == ".zip")
+            {
+                logger->info("Loading manifest from ZIP file: {}", manifestPath.string());
+                std::vector<uint8_t> manifestData((std::istreambuf_iterator<char>(manifestFile)),
+                                                  std::istreambuf_iterator<char>());
+                currentManifest = Manifest::fromZip(manifestData);
+            }
+            else if (manifestPath.extension() == ".yaml" || manifestPath.extension() == ".yml")
+            {
+                logger->info("Loading manifest from YAML file: {}", manifestPath.string());
+                std::string manifestString((std::istreambuf_iterator<char>(manifestFile)),
+                                           std::istreambuf_iterator<char>());
+                currentManifest = Manifest::fromYaml(manifestString);
+            }
+            else
+            {
+                logger->error("Unsupported manifest file format: {}",
+                              manifestPath.extension().string());
+                currentManifest = Manifest::getPackaged();
+            }
+        }
+        else
+        {
+            currentManifest = Manifest::getPackaged();
+        }
+    }
+
+    return currentManifest.value();
 }
 
 std::string Manifest::getNTTopic(const std::string &key)

@@ -153,6 +153,8 @@ namespace settings
         store = {
             // General
 
+            .manifestPath = "",
+
             .showMainMenu = true,
             .showExitWarning = true,
             .launchRobotCode = true,
@@ -340,6 +342,8 @@ namespace settings
 
             // General
 
+            current.manifestPath = json.value("manifestPath", current.manifestPath);
+
             current.showMainMenu = json.value("showMainMenu", current.showMainMenu);
             current.showExitWarning = json.value("showExitWarning", current.showExitWarning);
             current.launchRobotCode = json.value("launchRobotCode", current.launchRobotCode);
@@ -408,6 +412,8 @@ namespace settings
         nlohmann::json json;
 
         // General
+
+        json["manifestPath"] = current.manifestPath;
 
         json["showMainMenu"] = current.showMainMenu;
         json["showExitWarning"] = current.showExitWarning;

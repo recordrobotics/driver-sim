@@ -95,6 +95,8 @@ namespace settings
     {
         // General
 
+        std::string manifestPath;
+
         bool showMainMenu;
         bool showExitWarning;
         bool launchRobotCode;
