@@ -20,6 +20,10 @@ For an example manifest.yaml see [docs/example-manifest.yaml](docs/example-manif
 
 <img width="155" height="154" alt="image" src="https://github.com/user-attachments/assets/b7b29446-7237-422e-a994-bc80915c8424" />
 
+### Modifying packaged manifest/assets
+
+Due to CMake limitations, it doesn't like autodetecting changes to the packaged directory. When you change something the best way to force a repackage is to delete [build/packaged.zip](build/packaged.zip) and build.
+
 ## Build
 
 ### Requirements
