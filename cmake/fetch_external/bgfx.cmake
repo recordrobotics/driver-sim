@@ -30,6 +30,10 @@ add_compile_definitions(
     BGFX_CONFIG_GL_NORMALIZE_NDC_CONVENTIONS=1
     )
 
+if(NOT WIN32)
+    add_compile_definitions(BGFX_PLATFORM_SUPPORTS_DXBC=0)
+endif()
+
 FetchContent_GetProperties(bgfx)
 if(NOT bgfx_POPULATED)
     FetchContent_Populate(bgfx)
