@@ -54,14 +54,15 @@ namespace blackboard::renderer
             break;
         }
         const auto [drawable_width, drawable_height] = window.get_size_in_pixels();
-        bgfx_init.resolution.width = drawable_width;
-        bgfx_init.resolution.height = drawable_height;
-        bgfx_init.resolution.numBackBuffers = 1;
-        bgfx_init.resolution.reset = get_bgfx_reset_flags();
+        bgfx_init.swapChain.width = drawable_width;
+        bgfx_init.swapChain.height = drawable_height;
+        bgfx_init.swapChain.numBackBuffers = 1;
+        bgfx_init.swapChain.flags = BGFX_SWAP_CHAIN_HIDPI;
+        bgfx_init.reset = get_bgfx_reset_flags();
 #ifdef SDL_VIDEO_DRIVER_X11
-        bgfx_init.platformData.ndt = SDL_GetPointerProperty(
+        bgfx_init.swapChain.ndt = SDL_GetPointerProperty(
             SDL_GetWindowProperties(window.window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-        bgfx_init.platformData.nwh = window_handle;
+        bgfx_init.swapChain.nwh = window_handle;
 #endif
         bgfx::init(bgfx_init);
 

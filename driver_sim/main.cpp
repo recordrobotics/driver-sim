@@ -612,6 +612,18 @@ void drawFPS()
     ImGui::End();
 }
 
+void reset_swapchain(blackboard::app::Window *main_window)
+{
+    int drawable_width{0};
+    int drawable_height{0};
+    SDL_GetWindowSizeInPixels(main_window->window, &drawable_width, &drawable_height);
+    bgfx::SwapChain swapChain;
+    swapChain.width = drawable_width;
+    swapChain.height = drawable_height;
+    swapChain.flags = BGFX_SWAP_CHAIN_HIDPI;
+    bgfx::reset(blackboard::renderer::get_bgfx_reset_flags(), &swapChain);
+}
+
 void app_after_events()
 {
     blackboard::app::Window *main_window = app_ptr->get_main_window();
@@ -620,10 +632,7 @@ void app_after_events()
         main_window->fullscreen = settings::current.fullscreen;
         SDL_SetWindowFullscreen(main_window->window, main_window->fullscreen);
 
-        int drawable_width{0};
-        int drawable_height{0};
-        SDL_GetWindowSizeInPixels(main_window->window, &drawable_width, &drawable_height);
-        bgfx::reset(drawable_width, drawable_height, blackboard::renderer::get_bgfx_reset_flags());
+        reset_swapchain(main_window);
     }
 
     if (main_window->vsync != settings::current.enableVSync)
@@ -641,10 +650,7 @@ void app_after_events()
                 blackboard::renderer::get_bgfx_reset_flags() & ~BGFX_RESET_VSYNC);
         }
 
-        int drawable_width{0};
-        int drawable_height{0};
-        SDL_GetWindowSizeInPixels(main_window->window, &drawable_width, &drawable_height);
-        bgfx::reset(drawable_width, drawable_height, blackboard::renderer::get_bgfx_reset_flags());
+        reset_swapchain(main_window);
     }
 }
 

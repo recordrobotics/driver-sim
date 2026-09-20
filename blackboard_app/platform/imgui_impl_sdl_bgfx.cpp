@@ -161,8 +161,12 @@ namespace blackboard::renderer
         auto windowId =
             static_cast<SDL_WindowID>(reinterpret_cast<uintptr_t>(viewport->PlatformHandle));
 
-        data->frameBufferHandle = bgfx::createFrameBuffer(native_window_handle(viewport, windowId),
-                                                          scaledWidth, scaledHeight);
+        bgfx::SwapChain swapChain;
+        swapChain.nwh = native_window_handle(viewport, windowId);
+        swapChain.width = scaledWidth;
+        swapChain.height = scaledHeight;
+        data->frameBufferHandle = bgfx::createFrameBuffer(swapChain);
+
         // Set frame buffer
         bgfx::setViewFrameBuffer(data->viewId, data->frameBufferHandle);
         bgfx::setViewClear(data->viewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, DEFAULT_CLEAR_COLOR);
@@ -205,7 +209,12 @@ namespace blackboard::renderer
         ImGuiIO &io = ImGui::GetIO();
         io.DisplaySize =
             ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height));
-        bgfx::reset(drawable_width, drawable_height, bgfx_reset_flags);
+
+        bgfx::SwapChain swapChain;
+        swapChain.width = drawable_width;
+        swapChain.height = drawable_height;
+        swapChain.flags = BGFX_SWAP_CHAIN_HIDPI;
+        bgfx::reset(bgfx_reset_flags, &swapChain);
     }
 
     void ImGui_Impl_sdl_bgfx_UpdateTextures(ImVector<ImTextureData *> *Textures)
