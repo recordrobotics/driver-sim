@@ -578,15 +578,16 @@ void settings::draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2
 
         drawSettingOption<std::vector<std::string>>(
             "jvmArguments", "JVM arguments",
-            "The arguments to pass to the JVM when running the simulation. Use this "
-            "to set system flags or properties.",
+            "The arguments to pass to the JVM when running the simulation, separated by newlines. "
+            "Use this to set system flags or properties.",
             {.value = &settings::current.jvmArguments,
              .defaultValue = settings::makeDefault().jvmArguments});
         ImGui::Dummy(spacer);
 
         drawSettingOption<std::vector<std::string>>(
             "codeArguments", "Code arguments",
-            "The arguments to pass to the robot code main method when running the simulation.",
+            "The arguments to pass to the robot code main method when running the simulation, "
+            "separated by newlines.",
             {.value = &settings::current.codeArguments,
              .defaultValue = settings::makeDefault().codeArguments});
         ImGui::Dummy(spacer);
