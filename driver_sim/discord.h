@@ -1,6 +1,5 @@
 #pragma once
 
-#include "fetch/remotestoredasset.h"
 #include "fetch/storedasset.h"
 #include <discordsdk/discord.h>
 
@@ -33,5 +32,5 @@ class Discord
     bool loaded = false;
     bool available = false;
     std::shared_ptr<discordpp::Client> client;
-    std::unique_ptr<RemoteStoredAsset, std::default_delete<RemoteStoredAsset>> discordSDKAsset;
+    std::unique_ptr<StoredAsset> discordSDKAsset;
 };

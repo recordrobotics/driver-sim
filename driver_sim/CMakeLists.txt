@@ -58,22 +58,54 @@ foreach(GAME_IMAGES_FILE IN LISTS GAME_IMAGES)
     )
 endforeach()
 
-# Package the entire packaged/ directory into a single ZIP archive
+# Package the entire packaged/ directory and the platform Discord runtime into a single ZIP archive
 file(GLOB_RECURSE PACKAGED_ASSETS CONFIGURE_DEPENDS ./packaged/*)
 
 set(PACKAGED_DIR "${CMAKE_CURRENT_LIST_DIR}/packaged")
 set(PACKAGED_ZIP "${CMAKE_BINARY_DIR}/packaged.zip")
 set(PACKAGED_ZIP_HEADER_DIR "${CMAKE_BINARY_DIR}/include/generated/packaged")
+set(PACKAGED_STAGING_DIR "${CMAKE_CURRENT_BINARY_DIR}/packaged-staging")
+
+if(WINDOWS)
+    set(DISCORD_SDK_RUNTIME_NAME "discord_partner_sdk.dll")
+    if(CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+        set(DISCORD_SDK_RUNTIME_SOURCE
+            "${discordsdk_SOURCE_DIR}/_external/discord_social_sdk/bin/$<CONFIG>/arm64/${DISCORD_SDK_RUNTIME_NAME}")
+    else()
+        set(DISCORD_SDK_RUNTIME_SOURCE
+            "${discordsdk_SOURCE_DIR}/_external/discord_social_sdk/bin/$<CONFIG>/${DISCORD_SDK_RUNTIME_NAME}")
+    endif()
+elseif(APPLE)
+    set(DISCORD_SDK_RUNTIME_NAME "libdiscord_partner_sdk.dylib")
+    set(DISCORD_SDK_CONFIG_DIR "${CMAKE_BUILD_TYPE}")
+    string(TOLOWER "${DISCORD_SDK_CONFIG_DIR}" DISCORD_SDK_CONFIG_DIR)
+    set(DISCORD_SDK_RUNTIME_SOURCE
+        "${discordsdk_SOURCE_DIR}/_external/discord_social_sdk/lib/${DISCORD_SDK_CONFIG_DIR}/${DISCORD_SDK_RUNTIME_NAME}")
+elseif(LINUX)
+    set(DISCORD_SDK_RUNTIME_NAME "libdiscord_partner_sdk.so")
+    set(DISCORD_SDK_CONFIG_DIR "${CMAKE_BUILD_TYPE}")
+    string(TOLOWER "${DISCORD_SDK_CONFIG_DIR}" DISCORD_SDK_CONFIG_DIR)
+    set(DISCORD_SDK_RUNTIME_SOURCE
+        "${discordsdk_SOURCE_DIR}/_external/discord_social_sdk/lib/${DISCORD_SDK_CONFIG_DIR}/${DISCORD_SDK_RUNTIME_NAME}")
+endif()
 
 file(MAKE_DIRECTORY "${PACKAGED_ZIP_HEADER_DIR}")
 
 add_custom_command(
     OUTPUT "${PACKAGED_ZIP}"
     COMMAND ${CMAKE_COMMAND} -E rm -f "${PACKAGED_ZIP}"
-    COMMAND ${CMAKE_COMMAND} -E chdir "${PACKAGED_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${PACKAGED_STAGING_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGED_STAGING_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PACKAGED_DIR}" "${PACKAGED_STAGING_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGED_STAGING_DIR}/discord_sdk"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${DISCORD_SDK_RUNTIME_SOURCE}"
+            "${PACKAGED_STAGING_DIR}/discord_sdk/${DISCORD_SDK_RUNTIME_NAME}"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${PACKAGED_STAGING_DIR}"
             ${CMAKE_COMMAND} -E tar "cf" "${PACKAGED_ZIP}" --format=zip .
     DEPENDS
         ${PACKAGED_ASSETS}
+        "${DISCORD_SDK_RUNTIME_SOURCE}"
     COMMENT "Creating packaged.zip"
     VERBATIM
 )
