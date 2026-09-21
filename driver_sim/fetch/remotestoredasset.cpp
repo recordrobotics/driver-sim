@@ -19,12 +19,14 @@ mz_zip_archive *RemoteStoredAsset::performDownload(std::stop_token stoken)
         return nullptr;
     }
 
+    int lastLoggedPercent = -1;
     cpr::Response resp = cpr::Download(
         ofs, cpr::Url{remoteUrl},
         cpr::ProgressCallback(
-            [this, &stoken](cpr::cpr_off_t downloadTotal, cpr::cpr_off_t downloadNow,
-                            cpr::cpr_off_t /*uploadTotal*/, cpr::cpr_off_t /*uploadNow*/,
-                            intptr_t /*userdata*/) -> bool
+            [this, &stoken,
+             &lastLoggedPercent](cpr::cpr_off_t downloadTotal, cpr::cpr_off_t downloadNow,
+                                 cpr::cpr_off_t /*uploadTotal*/, cpr::cpr_off_t /*uploadNow*/,
+                                 intptr_t /*userdata*/) -> bool
             {
                 if (stoken.stop_requested())
                 {
@@ -35,9 +37,15 @@ mz_zip_archive *RemoteStoredAsset::performDownload(std::stop_token stoken)
 
                 if (downloadTotal > 0)
                 {
-                    progressPercent = static_cast<int>((downloadNow * 100) / downloadTotal);
-                    logger->trace("Download progress: {}% ({} / {})", progressPercent.load(),
-                                  downloadNow, downloadTotal);
+                    const int currentPercent =
+                        static_cast<int>((downloadNow * 100) / downloadTotal);
+                    progressPercent = currentPercent;
+                    if (currentPercent != lastLoggedPercent)
+                    {
+                        lastLoggedPercent = currentPercent;
+                        logger->trace("Download progress: {}% ({} / {})", currentPercent,
+                                      downloadNow, downloadTotal);
+                    }
                 }
 
                 return true; // Continue downloading
