@@ -1,4 +1,5 @@
 #include "discord.h"
+#include "fetch/packagedstoredasset.h"
 #include "manifest.h"
 #include "settings/settingsstore.h"
 #include <SDL3/SDL.h>
@@ -12,10 +13,9 @@ Discord::Discord()
 {
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
-    discordSDKAsset = std::make_unique<RemoteStoredAsset>(
+    discordSDKAsset = std::make_unique<PackagedStoredAsset>(
         "discord_sdk", "2a7c8b043ca04a14a10c64b4f1116fe2a93bb6f6f4f0b4784c0ca1fc06ca832e", prefPath,
-        "https://hamster1.ddns.net/"
-        "discord_sdk-2a7c8b043ca04a14a10c64b4f1116fe2a93bb6f6f4f0b4784c0ca1fc06ca832e.zip");
+        Manifest::getPackaged().zip);
 
     discordpp::SetLibrarySearchPath(prefPath + "discord_sdk");
 

@@ -551,7 +551,10 @@ void Manifest::close()
 {
     if (isZip)
     {
-        mz_zip_reader_end(zip.get());
+        if (zip.use_count() == 1)
+        {
+            mz_zip_reader_end(zip.get());
+        }
         zip.reset();
         isZip = false;
     }

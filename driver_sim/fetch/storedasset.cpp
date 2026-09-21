@@ -171,7 +171,8 @@ void StoredAsset::extractZip(mz_zip_archive *zip, const fs::path &extractTo)
 
         fs::path outputPath = extractTo / filePath;
 
-        if (mz_zip_reader_is_file_a_directory(zip, i) != 0)
+        if (mz_zip_reader_is_file_a_directory(zip, i) != 0 || filePath.string().ends_with("/") ||
+            filePath.string().ends_with("\\"))
         {
             logger->trace("Creating directory: {}", outputPath.string());
             fs::create_directories(outputPath);
@@ -238,7 +239,8 @@ void StoredAsset::verifyOrDownload()
             state = AssetState::Verifying;
             progressPercent = 0;
 
-            if (fs::exists(localHashPath))
+            if (fs::exists(localHashPath) && fs::exists(localExtractPath) &&
+                !fs::is_empty(localExtractPath))
             {
                 std::string actualHash = readSha256(localHashPath);
                 if (actualHash == expectedSha256)
