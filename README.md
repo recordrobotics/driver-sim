@@ -6,8 +6,8 @@ This project uses a modified version of [dashandslash/blackboard_app](https://gi
 
 ## Setup
 
-### Discord Social SDK
-After becoming part of our discord dev team, download it from this link: https://discord.com/developers/applications/select/social-sdk/downloads. Unzip it and then put the discord_social_sdk folder inside of _external/discordsdk-src/_external.
+### Discord Social SDK encryption key
+Ask a programming lead for the encryption key for our Discord Social SDK, and place it as an environment variable named `DRIVER_SIM_DISCORD_SDK_KEY`. This is required to build the project.
 
 ## Prepare
 
@@ -60,3 +60,17 @@ With single-config generators (for example Ninja), this is typically:
 ```text
 build/driver_sim/driver_sim.exe
 ```
+
+## Discord Social SDK
+
+### Uploading New Version
+After becoming part of our discord dev team, download it from this link: https://discord.com/developers/applications/select/social-sdk/downloads. Ensure that you have the encryption key for the SDK set correctly (see [Discord Social SDK encryption key setup](#discord-social-sdk-encryption-key)). Run this command to encrypt the SDK:
+
+```bash
+openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in ./DiscordSocialSdk-<VERSION NUMBER>.zip -out ./discord_social_sdk.zip.enc -pass env:DRIVER_SIM_DISCORD_SDK_KEY
+```
+
+Once the SDK is encrypted, you can simply place in the repo root, commit, and push.
+
+### Automated decrypting and extraction
+CMake will automatically decrypt, unzip, and place the contents inside of _external/discordsdk-src/_external.

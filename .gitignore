@@ -12,3 +12,6 @@ build*/
 driver_sim/packaged
 
 imgui.ini
+
+# don't leak it unencrypted
+discord_social_sdk.zip
