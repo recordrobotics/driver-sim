@@ -25,6 +25,7 @@ elseif(LINUX)
 endif()
 
 include(cmake/fetch_external_dependencies.cmake)
+include(cmake/decrypt_discord_sdk.cmake)
 	
 add_subdirectory(blackboard_app)
 add_subdirectory(driver_sim)
