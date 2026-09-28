@@ -4,8 +4,6 @@
 #include <bx/error.h>
 #include <bx/pixelformat.h>
 
-#include "../manifest.h"
-
 using namespace blackboard::logger;
 
 bgfx::VertexLayout MeshVertex::layout;
@@ -122,8 +120,7 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                 if (primitive.materialIndex.has_value() &&
                     primitive.materialIndex.value() < asset.materials.size())
                 {
-                    mat = Material(asset.materials.at(primitive.materialIndex.value()),
-                                   "FE-" + Manifest::getCurrent().game.year + "-01", nodeName);
+                    mat = Material(asset.materials.at(primitive.materialIndex.value()), nodeName);
                 }
 
                 MeshGroupKey key{.material = mat, .tag = meshTag};

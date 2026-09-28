@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <concepts>
 #include <cstddef>
@@ -123,4 +124,12 @@ constexpr std::string_view string_trim(std::string_view sv)
     const auto last = sv.find_last_not_of(whitespace);
 
     return sv.substr(first, last - first + 1);
+}
+
+constexpr bool containsIgnoreCase(std::string_view str, std::string_view sub)
+{
+    auto result = std::ranges::search(str, sub, [](unsigned char a, unsigned char b)
+                                      { return std::tolower(a) == std::tolower(b); });
+
+    return !result.empty();
 }

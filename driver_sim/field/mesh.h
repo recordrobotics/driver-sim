@@ -59,8 +59,7 @@ struct Material
     {
     }
 
-    Material(const fastgltf::Material &mat, const std::string &carpetNodeName,
-             const std::string &nodeName = "")
+    Material(const fastgltf::Material &mat, const std::string &nodeName = "")
         : baseColor{mat.pbrData.baseColorFactor[0], mat.pbrData.baseColorFactor[1],
                     mat.pbrData.baseColorFactor[2], mat.pbrData.baseColorFactor[3]},
           emissionColor{mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2],
@@ -70,7 +69,7 @@ struct Material
           writesObjectMotionVectors(false)
     {
         // cad export pbrData is wrong, base it off the node name instead
-        if (nodeName.find(carpetNodeName) != std::string::npos)
+        if (containsIgnoreCase(nodeName, "carpet"))
         {
             // playing field carpet floor is rough
             metallic = 0.0f;
