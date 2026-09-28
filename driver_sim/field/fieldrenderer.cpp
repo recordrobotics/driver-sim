@@ -1023,10 +1023,13 @@ void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float de
 RobotData::RobotData(RobotModel *model)
     : model(model), components(model->components.size()), bumperBaseColor(model->bumperModelColor)
 {
-    auto ledCount = static_cast<uint16_t>(floorf(model->ledCount));
+    ledCount = static_cast<uint16_t>(floorf(model->ledCount));
     ledColorData = std::make_unique<uint8_t[]>(ledCount * 4);
-    TEXTURE(ledColorTexture, ledCount, 1, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA8,
-            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    if (ledCount > 0)
+    {
+        TEXTURE(ledColorTexture, ledCount, 1, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::RGBA8,
+                BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    }
 }
 
 void RobotData::update(
@@ -1108,7 +1111,7 @@ void RobotData::update(
         }
 
         // Update LED colors
-        if (ledColorsSub.Exists())
+        if (ledCount > 0 && ledColorsSub.Exists())
         {
             std::vector<std::string> ledColors = ledColorsSub.GetAtomic().value;
             for (uint16_t i = 0; i < ledColorTexture.width; ++i)
@@ -1136,7 +1139,7 @@ void RobotData::update(
                 }
             }
         }
-        else
+        else if (ledCount > 0)
         {
             for (uint16_t i = 0; i < ledColorTexture.width; ++i)
             {
@@ -3356,7 +3359,10 @@ FieldRenderer::~FieldRenderer()
     {
         for (auto &robot : instances)
         {
-            robot.ledColorTexture.destroy();
+            if (robot.ledCount > 0)
+            {
+                robot.ledColorTexture.destroy();
+            }
         }
     }
 

@@ -224,6 +224,7 @@ struct RobotData
     float rslEmissionStrength = 0.0f;
 
     // RGB8 texture
+    uint16_t ledCount;
     Texture ledColorTexture;
     std::unique_ptr<uint8_t[]> ledColorData;
 
