@@ -74,4 +74,8 @@ namespace ui
                            ImVec2 size = ImVec2(0, 0));
     bool InputStringSet(const char *label, std::unordered_set<std::string> &values,
                         ImVec2 size = ImVec2(0, 0));
+
+    void DrawLoadingIndicator(ImDrawList *drawList, ImVec2 center, float radius, float thickness,
+                              ImU32 trackColor, ImU32 fillColor, float speed = 12.0f,
+                              float arcLength = 0.3f);
 } // namespace ui

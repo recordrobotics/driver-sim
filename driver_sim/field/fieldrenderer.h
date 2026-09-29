@@ -561,6 +561,7 @@ class FieldRenderer
     void drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
     void drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
     void drawSettingsWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
+    void drawModelLoadingOverlay();
 
     bool exitingFlag = false;
     bool startedLoadingFieldModel = false;

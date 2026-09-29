@@ -17,6 +17,8 @@ using blackboard::gui::string_hex_to_rgba_float;
 using blackboard::gui::string_hex_to_rgba_u32;
 using blackboard::gui::u32_multiply_alpha;
 
+static float smoothTime = 0.0f;
+
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-type-vararg)
 
 void ui::DrawCenteredText(const char *text, float yOffset)
@@ -984,6 +986,23 @@ bool ui::InputStringSet(const char *label, std::unordered_set<std::string> &valu
     }
 
     return changed;
+}
+
+void ui::DrawLoadingIndicator(ImDrawList *drawList, ImVec2 center, float radius, float thickness,
+                              ImU32 trackColor, ImU32 fillColor, float speed, float arcLength)
+{
+    ImGuiContext &g = *GImGui;
+    smoothTime += std::min(g.IO.DeltaTime, 0.016f);
+
+    const float time = smoothTime * speed;
+
+    const float startAngle = time;
+    const float endAngle = time + arcLength * IM_PI * 2.0f;
+
+    drawList->AddCircle(center, radius, trackColor, 64, thickness);
+
+    drawList->PathArcTo(center, radius, startAngle, endAngle, 32);
+    drawList->PathStroke(fillColor, thickness);
 }
 
 // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-type-vararg)

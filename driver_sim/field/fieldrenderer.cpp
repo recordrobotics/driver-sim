@@ -2462,10 +2462,44 @@ void FieldRenderer::drawSettingsWindow(ImGuiID viewportId, ImVec2 viewportPos, I
     settings::draw(viewportId, viewportPos, viewportSize, viewportSize);
 }
 
+void FieldRenderer::drawModelLoadingOverlay()
+{
+    auto &style{ImGui::GetStyle()};
+    float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImDrawList *drawList = ImGui::GetBackgroundDrawList(viewport);
+
+    drawList->AddRectFilled(ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f - 60.0f * globalScale,
+                                   viewport->Pos.y + viewport->Size.y * 0.5f - 40.0f * globalScale),
+                            ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f + 60.0f * globalScale,
+                                   viewport->Pos.y + viewport->Size.y * 0.5f + 60.0f * globalScale),
+                            string_hex_to_rgba_u32("#000000b5"), 20.0f * globalScale);
+
+    ui::DrawLoadingIndicator(drawList,
+                             ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f,
+                                    viewport->Pos.y + viewport->Size.y * 0.5f),
+                             20.0f * globalScale, 8.0f * globalScale,
+                             string_hex_to_rgba_u32("#314d6bff"),
+                             string_hex_to_rgba_u32("#2587f0ff"));
+
+    ImVec2 textSize = ImGui::CalcTextSize("Loading 3D Models");
+    drawList->AddText(
+        ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f - textSize.x * 0.5f,
+               viewport->Pos.y + viewport->Size.y * 0.5f + 47.0f * globalScale - textSize.y),
+        string_hex_to_rgba_u32("#ffffffff"), "Loading 3D Models");
+}
+
 void FieldRenderer::render(const blackboard::app::Window &window,
                            const std::shared_ptr<Discord> &discord)
 {
     currentDataUpdateIndex = (currentDataUpdateIndex + 1) % 1000000;
+
+    if (!createdFieldMeshBuffers || !createdRobotMeshBuffers)
+    {
+        drawModelLoadingOverlay();
+    }
+
     if (settings::current.enableDebugMenu)
     {
         drawDebugMenu();
