@@ -35,6 +35,8 @@
 
 #include "assets.h"
 
+#include <mainmenu.png.h>
+
 #include "fetch/packagedstoredasset.h"
 #include "fetch/remotestoredasset.h"
 #include "fetch/storedasset.h"
@@ -52,6 +54,7 @@
 using blackboard::gui::ImTexture;
 using blackboard::gui::load_image;
 using blackboard::gui::string_hex_to_rgba_float;
+using blackboard::gui::string_hex_to_rgba_u32;
 using namespace ui;
 using namespace blackboard;
 
@@ -62,6 +65,7 @@ using namespace blackboard;
 blackboard::app::App *app_ptr;
 
 ImTexture logo = {};
+ImTexture mainMenuTexture = {};
 
 enum Page
 {
@@ -164,10 +168,12 @@ void initApp()
     LOAD_FONT(Roboto_Bold_ttf, false);
 
     load_image(static_cast<const void *>(logo_png_bytes), sizeof(logo_png_bytes), logo);
+    load_image(static_cast<const void *>(mainmenu_png_bytes), sizeof(mainmenu_png_bytes),
+               mainMenuTexture);
 
-    fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->get_main_window());
+    fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->get_main_window(), mainMenuTexture);
 
-    settings::init(logo);
+    settings::init(logo, mainMenuTexture);
 
     Manifest &manifest = Manifest::getCurrent();
 
@@ -234,7 +240,8 @@ void initFieldView()
 
     if (!fieldRenderer)
     {
-        fieldRenderer = std::make_shared<FieldRenderer>(*app_ptr->get_main_window());
+        fieldRenderer =
+            std::make_shared<FieldRenderer>(*app_ptr->get_main_window(), mainMenuTexture);
     }
 
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
@@ -343,7 +350,7 @@ void drawHeader()
 
     const ImVec2 logoSize(70.0f * globalScale, 70.0f * globalScale);
     const float contentHeight = pageTransition.getCurrentPage() == PAGE_LOADING
-                                    ? 450.0f * globalScale
+                                    ? 468.0f * globalScale
                                     : 270.0f * globalScale;
     const float logoTopY = std::max(0.0f, (winSize.y - logoSize.y - contentHeight) * 0.5f);
 
@@ -367,6 +374,13 @@ void drawHeader()
     DrawCenteredText("Driver Sim");
     ImGui::PopStyleColor();
     ImGui::PopFont();
+
+    ImGui::Dummy(ImVec2(0, 6 * globalScale));
+
+    if (DrawTextButton("Open settings", mutedTextButtonOptions))
+    {
+        settings::showSettings() = true;
+    }
 }
 
 void drawFooter()
@@ -507,7 +521,7 @@ void drawPageSelect()
 
     ImGui::Dummy(ImVec2(0, 17 * globalScale));
 
-    if (UnderlineTextButton("Don't show again"))
+    if (DrawTextButton("Don't show again"))
     {
         settings::current.showMainMenu = false;
         settings::saveSettings();
@@ -588,28 +602,45 @@ void drawUI()
     ImGui::PopStyleVar(3);
 
     ImGui::End();
+
+    if (settings::showSettings() && pageTransition.getCurrentPage() != PAGE_3D_FIELD)
+    {
+        auto &style{ImGui::GetStyle()};
+        float globalScale = style.FontScaleMain * style.FontScaleDpi;
+
+        float width = std::min(700.0f * globalScale, viewport->WorkSize.x);
+        settings::draw(viewport->ID,
+                       viewport->WorkPos + ImVec2((viewport->WorkSize.x - width) / 2.0f, 0),
+                       ImVec2(width, viewport->WorkSize.y),
+                       ImVec2(viewport->WorkSize.x - (viewport->WorkSize.x - width) / 2.0f,
+                              viewport->WorkSize.y),
+                       false);
+    }
 }
 
 void drawFPS()
 {
     ImGuiIO &io = ImGui::GetIO();
     const ImGuiViewport *viewport{ImGui::GetMainViewport()};
-    ImGui::SetNextWindowPos(
-        ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10, viewport->WorkPos.y + 10),
-        ImGuiCond_Always, ImVec2(1.0f, 0.0f));
 
-    const static ImGuiWindowFlags window_flags{
-        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
-        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize};
+    ImDrawList *drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
 
-    ImGui::Begin("FPS", nullptr, window_flags);
-    ImGui::PushStyleColor(ImGuiCol_Text, string_hex_to_rgba_float("#ffffffc4"));
-    ImGui::Text("%.1f FPS", io.Framerate);
-    ImGui::Text(rendererApiToString(app_ptr->get_renderer_api()).c_str());
-    ImGui::PopStyleColor();
-    ImGui::End();
+    std::string fpstext = fmt::format("{:.1f} FPS", io.Framerate);
+    std::string apitext = rendererApiToString(app_ptr->get_renderer_api());
+
+    ImVec2 fpssize = ImGui::CalcTextSize(fpstext.data(), fpstext.data() + fpstext.size());
+    ImVec2 apitextSize = ImGui::CalcTextSize(apitext.data(), apitext.data() + apitext.size());
+
+    float maxSizeX = std::max(fpssize.x, apitextSize.x);
+
+    drawList->AddText(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10 - maxSizeX,
+                             viewport->WorkPos.y + 10),
+                      string_hex_to_rgba_u32("#ffffffc4"), fpstext.data(),
+                      fpstext.data() + fpstext.size());
+    drawList->AddText(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10 - maxSizeX,
+                             viewport->WorkPos.y + 10 + fpssize.y),
+                      string_hex_to_rgba_u32("#ffffffc4"), apitext.data(),
+                      apitext.data() + apitext.size());
 }
 
 void reset_swapchain(blackboard::app::Window *main_window)
@@ -679,6 +710,7 @@ void app_cleanup()
 {
     javaLogEnforceFuture = std::async(std::launch::async, java_log_manager::enforceFolderLimits);
     logo.destroy();
+    mainMenuTexture.destroy();
     cleanupFieldView();
     settings::cleanup();
     settings::saveSettings();

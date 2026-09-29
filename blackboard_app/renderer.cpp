@@ -66,10 +66,6 @@ namespace blackboard::renderer
 #endif
         bgfx::init(bgfx_init);
 
-#ifdef _DEBUG
-        set_bgfx_debug_flags(BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS);
-#endif
-
         switch (bgfx::getRendererType())
         {
         case bgfx::RendererType::Direct3D11:

@@ -5,7 +5,10 @@
 
 namespace settings
 {
-    void init(blackboard::gui::ImTexture &logo);
+    void init(blackboard::gui::ImTexture &logo, blackboard::gui::ImTexture &mainMenuIcon);
     void cleanup();
-    void draw(ImFont *font, ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
+    void draw(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize, ImVec2 scrollbarAreaSize,
+              bool noBringToFrontOnFocus = true);
+
+    bool &showSettings();
 }; // namespace settings

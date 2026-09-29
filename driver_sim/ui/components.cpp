@@ -186,7 +186,7 @@ void ui::SplitToggleButtonGroup(const std::list<ToggleButton> &buttons)
     ImGui::PopStyleVar();
 }
 
-bool ui::UnderlineTextButton(const char *text)
+bool ui::DrawTextButton(const char *text, const TextButtonOptions &options)
 {
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
@@ -208,20 +208,30 @@ bool ui::UnderlineTextButton(const char *text)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
 
-    ImU32 textColor = active    ? string_hex_to_rgba_u32("#5cbd62ff")
-                      : hovered ? string_hex_to_rgba_u32("#47a54dff")
-                                : string_hex_to_rgba_u32("#38903Eff");
+    ImU32 textColor = options.color;
+
+    if (active)
+    {
+        textColor = options.activeColor;
+    }
+    else if (hovered)
+    {
+        textColor = options.hoverColor;
+    }
 
     ImVec2 min = ImGui::GetItemRectMin();
     ImVec2 max = ImGui::GetItemRectMax();
 
     ImGui::GetWindowDrawList()->AddText(min, textColor, text);
 
-    float thickness = 1.5f * globalScale;
-    float offset = 2.0f * globalScale;
+    if (options.underline)
+    {
+        float thickness = 1.5f * globalScale;
+        float offset = 2.0f * globalScale;
 
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y + offset),
-                                        ImVec2(max.x, max.y + offset), textColor, thickness);
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y + offset),
+                                            ImVec2(max.x, max.y + offset), textColor, thickness);
+    }
 
     ImGui::PopFont();
 
@@ -442,7 +452,7 @@ void ui::DrawVerticallyCenteredText(const char *text, float heightAvailable)
     ImGui::TextUnformatted(text);
 }
 
-bool ui::DrawLinkText(const char *label, ui::TextAlign align, ui::LinkTextOptions options,
+bool ui::DrawLinkText(const char *label, ui::TextAlign align, const ui::TextButtonOptions &options,
                       const char *id, const char *url)
 {
     if (id == nullptr)

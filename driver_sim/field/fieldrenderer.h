@@ -315,7 +315,8 @@ enum class DebugView
 class FieldRenderer
 {
   public:
-    explicit FieldRenderer(const blackboard::app::Window &window);
+    explicit FieldRenderer(const blackboard::app::Window &window,
+                           blackboard::gui::ImTexture &mainMenuIcon);
     ~FieldRenderer();
 
     FieldRenderer(const FieldRenderer &) = delete;
@@ -795,6 +796,5 @@ class FieldRenderer
     std::chrono::steady_clock::time_point firstTopUISummonTime;
     std::chrono::steady_clock::time_point lastTopUISummonTime;
 
-    bool showSettings = false;
     bool showViewMode = false;
 };

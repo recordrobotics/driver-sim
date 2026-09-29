@@ -19,7 +19,6 @@
 
 #include <shadow.png.h>
 
-#include <mainmenu.png.h>
 #include <restartjava.png.h>
 #include <settings.png.h>
 #include <viewmode.png.h>
@@ -1666,7 +1665,8 @@ void FieldRenderer::startLoadRobotModel()
     robotModelLoadingFuture = std::async(std::launch::async, [this]() { loadRobotModel(); });
 }
 
-FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
+FieldRenderer::FieldRenderer(const blackboard::app::Window &window,
+                             blackboard::gui::ImTexture &mainMenuIcon)
 {
     skyColor = SRGBToLinear({0.54f, 0.54f, 0.6f, 1.0f});
     lightColor = {
@@ -1682,14 +1682,14 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window)
     load_image(static_cast<const void *>(shadow_png_bytes), sizeof(shadow_png_bytes), shadowTexture,
                BGFX_SAMPLER_UVW_CLAMP);
 
-    load_image(static_cast<const void *>(mainmenu_png_bytes), sizeof(mainmenu_png_bytes),
-               mainMenuTexture);
     load_image(static_cast<const void *>(settings_png_bytes), sizeof(settings_png_bytes),
                settingsTexture);
     load_image(static_cast<const void *>(viewmode_png_bytes), sizeof(viewmode_png_bytes),
                viewModeTexture);
     load_image(static_cast<const void *>(restartjava_png_bytes), sizeof(restartjava_png_bytes),
                restartJavaTexture);
+
+    mainMenuTexture = mainMenuIcon;
 
     s_texPresent = bgfx::createUniform("s_texPresent", bgfx::UniformType::Sampler);
 
@@ -2242,9 +2242,10 @@ void FieldRenderer::drawTopUI(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 vie
     draw->PushClipRectFullScreen();
 
     if (IconButton(font, "##settings", "Settings", settingsTexture.id, buttonSize, borderSize,
-                   rounding, fontSize, textOffset, animationProgressLateExp, showSettings))
+                   rounding, fontSize, textOffset, animationProgressLateExp,
+                   settings::showSettings()))
     {
-        showSettings = !showSettings;
+        settings::showSettings() = !settings::showSettings();
     }
 
     draw->PopClipRect();
@@ -2458,7 +2459,7 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
 
 void FieldRenderer::drawSettingsWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize)
 {
-    settings::draw(font, viewportId, viewportPos, viewportSize);
+    settings::draw(viewportId, viewportPos, viewportSize, viewportSize);
 }
 
 void FieldRenderer::render(const blackboard::app::Window &window,
@@ -2475,8 +2476,9 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     auto viewport = ImGui::GetMainViewport();
     float sidebarWidth = 610.0f * globalScale;
 
-    uint16_t m_width = showSettings ? static_cast<uint16_t>(std::round(window.width - sidebarWidth))
-                                    : window.width;
+    uint16_t m_width = settings::showSettings()
+                           ? static_cast<uint16_t>(std::round(window.width - sidebarWidth))
+                           : window.width;
     uint16_t m_height = window.height;
     ImVec2 fieldViewportSize = ImVec2(m_width, m_height);
 
@@ -2492,7 +2494,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         drawViewModeWindow(viewport->ID, viewport->Pos, fieldViewportSize);
     }
 
-    if (showSettings)
+    if (settings::showSettings())
     {
         drawSettingsWindow(
             viewport->ID,
@@ -3566,7 +3568,6 @@ FieldRenderer::~FieldRenderer()
         bgfx::destroy(s_workingEdges);
 
     shadowTexture.destroy();
-    mainMenuTexture.destroy();
     settingsTexture.destroy();
     viewModeTexture.destroy();
     restartJavaTexture.destroy();
