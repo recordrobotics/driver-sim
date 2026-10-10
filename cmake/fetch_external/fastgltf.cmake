@@ -9,7 +9,7 @@ set(FASTGLTF_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     fastgltf
     GIT_REPOSITORY https://github.com/spnda/fastgltf.git
-    GIT_TAG main
+    GIT_TAG v0.9.1
     GIT_SHALLOW 1
     SOURCE_DIR ${FETCHCONTENT_BASE_DIR}/fastgltf
 )

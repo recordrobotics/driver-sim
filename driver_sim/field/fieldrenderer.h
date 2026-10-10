@@ -562,6 +562,8 @@ class FieldRenderer
     void drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
     void drawSettingsWindow(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize);
     void drawModelLoadingOverlay();
+    void updateCinematicCamera(float view[16], float deltaTime, const bx::Vec3 &robotPosition,
+                               const bx::Quaternion &robotRotation);
 
     bool exitingFlag = false;
     bool startedLoadingFieldModel = false;
@@ -742,6 +744,9 @@ class FieldRenderer
 
     std::chrono::steady_clock::time_point lastDiscordUpdateTime =
         std::chrono::steady_clock::now() - DISCORD_UPDATE_INTERVAL;
+
+    std::chrono::steady_clock::time_point lastInteractionOrUpdateTime =
+        std::chrono::steady_clock::now();
 
     std::vector<AprilTagInstanceData> aprilTags;
 

@@ -2490,6 +2490,12 @@ void FieldRenderer::drawModelLoadingOverlay()
         string_hex_to_rgba_u32("#ffffffff"), "Loading 3D Models");
 }
 
+void FieldRenderer::updateCinematicCamera(float view[16], float deltaTime,
+                                          const bx::Vec3 &robotPosition,
+                                          const bx::Quaternion &robotRotation)
+{
+}
+
 void FieldRenderer::render(const blackboard::app::Window &window,
                            const std::shared_ptr<Discord> &discord)
 {
@@ -2699,42 +2705,50 @@ void FieldRenderer::render(const blackboard::app::Window &window,
             if (robotModels.size() > modelIndex)
             {
                 auto &robotInstances = robots[&robotModels[modelIndex]];
-                if (robotInstances.size() > instanceIndex &&
-                    robotInstances[instanceIndex].allianceStationSub.Exists())
+                if (robotInstances.size() > instanceIndex)
                 {
-                    allianceStation =
-                        robotInstances[instanceIndex].allianceStationSub.GetAtomic().value;
-                    if (settings::current.viewMode == CameraView::DriverStation)
+                    if (robotInstances[instanceIndex].allianceStationSub.Exists())
                     {
-                        // 6 elements ordered [B1, B2, B3, R1, R2, R3]
-                        int stationIndex =
-                            allianceStation >= 1 && allianceStation <= 3   ? allianceStation + 2
-                            : allianceStation >= 4 && allianceStation <= 6 ? allianceStation - 4
-                                                                           : 0 /* fallback to 0 */;
-                        const bx::Vec3 at =
-                            bx::add(robotInstances[instanceIndex].dynamicData.lastPosition,
-                                    bx::Vec3{0.0f, 0.0f, 0.5f});
-                        const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
-
-                        const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
-                        lastDriverStationCameraTarget = at;
-
-                        float cameraDistance = bx::distance(eye, at);
-                        float targetDistance =
-                            bx::distance(driverStationCameraTarget, at) / cameraDistance;
-                        if (targetDistance > 0.2f)
+                        allianceStation =
+                            robotInstances[instanceIndex].allianceStationSub.GetAtomic().value;
+                        if (settings::current.viewMode == CameraView::DriverStation)
                         {
-                            driverStationCameraTarget = bx::lerp(
-                                driverStationCameraTarget, at,
-                                6.0f * (targetDistance - 0.2f) *
-                                    std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
+                            // 6 elements ordered [B1, B2, B3, R1, R2, R3]
+                            int stationIndex = allianceStation >= 1 && allianceStation <= 3
+                                                   ? allianceStation + 2
+                                               : allianceStation >= 4 && allianceStation <= 6
+                                                   ? allianceStation - 4
+                                                   : 0 /* fallback to 0 */;
+                            const bx::Vec3 at =
+                                bx::add(robotInstances[instanceIndex].dynamicData.lastPosition,
+                                        bx::Vec3{0.0f, 0.0f, 0.5f});
+                            const bx::Vec3 eye = driverStationCameraPositions[stationIndex];
+
+                            const bx::Vec3 velocity = bx::sub(at, lastDriverStationCameraTarget);
+                            lastDriverStationCameraTarget = at;
+
+                            float cameraDistance = bx::distance(eye, at);
+                            float targetDistance =
+                                bx::distance(driverStationCameraTarget, at) / cameraDistance;
+                            if (targetDistance > 0.2f)
+                            {
+                                driverStationCameraTarget = bx::lerp(
+                                    driverStationCameraTarget, at,
+                                    6.0f * (targetDistance - 0.2f) *
+                                        std::max(deltaTime, std::min(0.2f, bx::length(velocity))));
+                            }
+
+                            bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f},
+                                          bx::Handedness::Right);
+
+                            return;
                         }
-
-                        bx::mtxLookAt(view, eye, driverStationCameraTarget, {0.0f, 0.0f, 1.0f},
-                                      bx::Handedness::Right);
-
-                        return;
                     }
+
+                    updateCinematicCamera(view, deltaTime,
+                                          robotInstances[instanceIndex].dynamicData.lastPosition,
+                                          robotInstances[instanceIndex].dynamicData.lastRotation);
+                    return;
                 }
             }
         }
