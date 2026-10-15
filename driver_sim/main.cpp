@@ -62,6 +62,24 @@ using namespace blackboard;
     blackboard::gui::load_font(#font, static_cast<const void *>(font##_bytes),                     \
                                sizeof(font##_bytes), 12.0f, dpi, set_as_default);
 
+#ifdef _WIN32
+constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard.exe";
+constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
+
+constexpr std::string_view halsimDelimiter = ";";
+#elif __APPLE__
+constexpr std::string_view elasticDashboardExecutable =
+    "elastic/elastic_dashboard.app/Contents/MacOS/elastic_dashboard";
+constexpr std::string_view elasticDashboardWorkingDirectory = "elastic/elastic_dashboard.app";
+
+constexpr std::string_view halsimDelimiter = ":";
+#else
+constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard";
+constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
+
+constexpr std::string_view halsimDelimiter = ":";
+#endif
+
 blackboard::app::App *app_ptr;
 
 ImTexture logo = {};
@@ -213,8 +231,16 @@ std::vector<std::string> getJavaCommandLine()
 {
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
+#ifdef _WIN32
+    constexpr std::string_view javaExecutable = "/bin/java.exe";
+#elif __APPLE__
+    constexpr std::string_view javaExecutable = "/Contents/Home/bin/java";
+#else
+    constexpr std::string_view javaExecutable = "/bin/java";
+#endif
+
     std::vector<std::string> javaCommandLine = {
-        prefPath + "jdk/jdk-" + Manifest::getCurrent().jdk.version + "/bin/java.exe",
+        prefPath + "jdk/jdk-" + Manifest::getCurrent().jdk.version + std::string(javaExecutable),
         "-Djava.library.path=" + prefPath + "jni/release",
         "-jar",
         prefPath + "code/" + Manifest::getCurrent().code.jarPath,
@@ -246,18 +272,6 @@ void initFieldView()
 
     std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
 
-#ifdef _WIN32
-    constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard.exe";
-    constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
-#elif __APPLE__
-    constexpr std::string_view elasticDashboardExecutable =
-        "elastic/elastic_dashboard.app/Contents/MacOS/elastic_dashboard";
-    constexpr std::string_view elasticDashboardWorkingDirectory = "elastic/elastic_dashboard.app";
-#else
-    constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard";
-    constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
-#endif
-
     elasticProcess = std::make_unique<ProcessRunner>(ProcessRunner::Config{.commandLine =
                                                                                {prefPath +
                                                                                 std::string(
@@ -281,8 +295,8 @@ void initFieldView()
                              std::accumulate(
                                  settings::current.enabledExtensions.begin(),
                                  settings::current.enabledExtensions.end(), std::string(),
-                                 [prefPath](const std::string &acc, const std::string &ext)
-                                 { return acc + prefPath + "jni/release/" + ext + ".dll;"; })}},
+                                 [](const std::string &acc, const std::string &ext)
+                                 { return acc + ext + std::string(halsimDelimiter); })}},
             .kill_parent_on_child_exit = false,
             .auto_restart = true,
             .use_existing_process = false},
@@ -441,7 +455,6 @@ void drawPageLoading()
           jniAsset->getState() == AssetState::Complete &&
           robotCodeAsset->getState() == AssetState::Complete)))
     {
-        Manifest::getCurrent().close();
         pageTransition.transition(
             settings::current.showMainMenu ? PAGE_SELECT : PAGE_3D_FIELD,
             // instant transition if all assets were quick loaded

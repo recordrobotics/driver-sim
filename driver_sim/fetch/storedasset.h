@@ -1,9 +1,9 @@
 #pragma once
 
+#include <archive.h>
 #include <atomic>
 #include <filesystem>
 #include <fstream>
-#include <miniz.h>
 #include <mutex>
 #include <span>
 #include <stop_token>
@@ -23,13 +23,19 @@ enum class AssetState : uint8_t
     Error
 };
 
+struct ArchiveData
+{
+    archive *archive;
+    uint32_t archiveSize;
+};
+
 class StoredAsset
 {
   protected:
     std::filesystem::path localExtractPath;
-    std::string zipRootDirectory;
+    std::string archiveRootDirectory;
     std::filesystem::path localHashPath;
-    std::filesystem::path localTempZipPath;
+    std::filesystem::path localTempArchivePath;
     std::string expectedSha256;
 
     std::atomic<AssetState> state{AssetState::Idle};
@@ -42,7 +48,7 @@ class StoredAsset
 
     bool quickLoaded = false; // for assets already valid on disk
 
-    virtual mz_zip_archive *performDownload(std::stop_token stoken) = 0;
+    virtual ArchiveData performDownload(std::stop_token stoken) = 0;
     virtual void cleanup() = 0;
 
     void setError(const std::string &err);
@@ -50,10 +56,10 @@ class StoredAsset
     static std::string readSha256(const std::filesystem::path &path);
 
     void deleteOldFiles(const std::filesystem::path &rootFolder);
-    void extractZip(mz_zip_archive *zip, const std::filesystem::path &extractTo);
+    void extractArchive(const ArchiveData &archive, const std::filesystem::path &extractTo);
 
   public:
-    StoredAsset(const std::string &relativeExtractPath, const std::string &zipRootDirectory,
+    StoredAsset(const std::string &relativeExtractPath, std::string archiveRootDirectory,
                 std::string hash, const std::string &sdlPrefPath, const std::string &sourceType);
 
     virtual ~StoredAsset();

@@ -1,13 +1,16 @@
 #pragma once
 
 #include "fetch/storedasset.h"
-#include <miniz.h>
+#include <archive.h>
+#include <cstdint>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 struct Manifest
 {
@@ -164,15 +167,13 @@ struct Manifest
     std::unordered_map<std::string, std::string> networktables;
 
     std::unordered_set<std::string> packagedAssetDirs;
-    bool isZip;
-    std::shared_ptr<mz_zip_archive> zip;
+    bool isArchive;
+    std::vector<uint8_t> archiveData;
 
     std::string getNTTopic(const std::string &key);
 
-    void close();
-
     static Manifest fromYaml(const std::string &yamlString);
-    static Manifest fromZip(std::span<const uint8_t> data);
+    static Manifest fromArchive(std::span<const uint8_t> data);
 
     static Manifest &getCurrent();
     static Manifest &getPackaged();

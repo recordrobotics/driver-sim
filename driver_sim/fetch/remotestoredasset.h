@@ -7,16 +7,17 @@
 class RemoteStoredAsset : public StoredAsset
 {
     std::string remoteUrl;
-    mz_zip_archive zip;
+    ArchiveData archiveData;
 
   public:
     RemoteStoredAsset(const std::string &relativeExtractPath, const std::string &hash,
                       const std::string &sdlPrefPath, std::string_view url)
-        : StoredAsset(relativeExtractPath, "", hash, sdlPrefPath, "remote"), remoteUrl(url)
+        : StoredAsset(relativeExtractPath, "", hash, sdlPrefPath, "remote"), remoteUrl(url),
+          archiveData{.archive = nullptr, .archiveSize = 0}
     {
     }
 
   protected:
-    mz_zip_archive *performDownload(std::stop_token stoken) override;
+    ArchiveData performDownload(std::stop_token stoken) override;
     void cleanup() override;
 };

@@ -5,7 +5,6 @@ set(FETCHCONTENT_QUIET off)
 
 set(FETCHCONTENT_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/_external)
 
-include(cmake/fetch_external/miniz.cmake)
 include(cmake/fetch_external/simdjson.cmake)
 include(cmake/fetch_external/fmt.cmake)
 include(cmake/fetch_external/SDL.cmake)
@@ -22,3 +21,4 @@ include(cmake/fetch_external/wpilib.cmake)
 include(cmake/fetch_external/argparse.cmake)
 include(cmake/fetch_external/discordsdk.cmake)
 include(cmake/fetch_external/yaml-cpp.cmake)
+include(cmake/fetch_external/libarchive.cmake)

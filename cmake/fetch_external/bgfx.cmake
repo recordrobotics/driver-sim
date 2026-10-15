@@ -21,8 +21,6 @@ set( BGFX_BUILD_EXAMPLES  OFF CACHE INTERNAL "" )
 set( BGFX_CUSTOM_TARGETS  OFF CACHE INTERNAL "" )
 set (BGFX_CONFIG_RENDERER_WEBGPU OFF CACHE INTERNAL "" FORCE)
 set( BGFX_INSTALL  OFF CACHE INTERNAL "" )
-set (MINIZ_LIBRARIES "miniz" CACHE INTERNAL "" FORCE)
-set (MINIZ_INCLUDE_DIR "${FETCHCONTENT_BASE_DIR}/" CACHE INTERNAL "" FORCE)
 
 add_compile_definitions(
     BGFX_PLATFORM_SUPPORTS_WGSL=0
@@ -37,23 +35,6 @@ endif()
 FetchContent_GetProperties(bgfx)
 if(NOT bgfx_POPULATED)
     FetchContent_Populate(bgfx)
-endif()
-
-# Patch bimg_decode miniz.c redefinition
-set(_bimg_decode_file "${bgfx_SOURCE_DIR}/bimg/src/image_decode.cpp")
-
-if(EXISTS "${_bimg_decode_file}")
-    file(READ "${_bimg_decode_file}" _bimg_decode_contents)
-
-    # Comment out the miniz.c include line
-    string(REPLACE
-"#include <miniz/miniz.c>"
-"// #include <miniz/miniz.c>"
-        _bimg_decode_contents
-        "${_bimg_decode_contents}"
-    )
-
-    file(WRITE "${_bimg_decode_file}" "${_bimg_decode_contents}")
 endif()
 
 add_subdirectory("${bgfx_SOURCE_DIR}" "${bgfx_BINARY_DIR}")

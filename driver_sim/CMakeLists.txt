@@ -181,7 +181,7 @@ target_link_libraries(${PROJECT_NAME}
     fastgltf::fastgltf
     picosha2
     cpr::cpr
-    miniz
+    archive_static
     tiny-process-library
     ntcore
     wpiutil

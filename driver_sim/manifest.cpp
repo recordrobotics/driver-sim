@@ -4,7 +4,8 @@
 #include "utils.h"
 
 #include <SDL3/SDL.h>
-#include <miniz.h>
+#include <archive.h>
+#include <archive_entry.h>
 #include <unordered_set>
 #include <yaml-cpp/yaml.h>
 
@@ -19,6 +20,8 @@
 #include "fetch/remotestoredasset.h"
 
 using namespace blackboard::logger;
+
+namespace fs = std::filesystem;
 
 namespace YAML
 {
@@ -396,68 +399,148 @@ Manifest Manifest::fromYaml(const std::string &yamlString)
     return YAML::Load(yamlString).as<Manifest>();
 }
 
-Manifest Manifest::fromZip(std::span<const uint8_t> data)
+static fs::path normalizeArchivePath(const char *entryName)
 {
-    logger->info("Loading manifest from zip file");
-    // Decompress the zip file
-    std::shared_ptr<mz_zip_archive> zip = std::make_shared<mz_zip_archive>();
-    mz_zip_zero_struct(zip.get());
-    if (!mz_zip_reader_init_mem(zip.get(), data.data(), data.size(), 0))
+    if (!entryName || *entryName == '\0')
+        return {};
+
+    std::string name(entryName);
+    std::replace(name.begin(), name.end(), '\\', '/');
+
+    fs::path path = fs::path(name).lexically_normal();
+
+    // Archive paths must be relative.
+    if (path.is_absolute() || path.has_root_name())
+        return {};
+
+    // Reject traversal components.
+    for (const auto &component : path)
     {
-        logger->error("Error loading manifest: Failed to initialize zip reader");
-        throw std::runtime_error("Failed to initialize zip reader");
+        if (component == "..")
+            return {};
     }
 
-    // Find the manifest file
-    int manifestIndex = mz_zip_reader_locate_file(zip.get(), "manifest.yaml", nullptr, 0);
-    if (manifestIndex < 0)
+    return path;
+}
+
+Manifest Manifest::fromArchive(std::span<const uint8_t> data)
+{
+    logger->info("Loading manifest from archive file");
+
+    // Decompress the archive file
+    struct archive *reader = archive_read_new();
+
+    archive_read_support_filter_all(reader);
+    archive_read_support_format_all(reader);
+
+    if (archive_read_open_memory(reader, data.data(), data.size()) != ARCHIVE_OK)
     {
-        logger->error("Error loading manifest: Manifest file not found in zip");
-        mz_zip_reader_end(zip.get());
-        throw std::runtime_error("Manifest file not found in zip");
+        const char *errorMsg = archive_error_string(reader);
+        logger->error("Error loading manifest: Failed to initialize archive reader {}",
+                      errorMsg != nullptr ? errorMsg : "unknown error");
+
+        archive_read_free(reader);
+        throw std::runtime_error("Failed to initialize archive reader " +
+                                 std::string(errorMsg != nullptr ? errorMsg : "unknown error"));
     }
 
-    // Read the manifest file
-    size_t manifestSize = 0;
-    void *manifestData = mz_zip_reader_extract_to_heap(zip.get(), manifestIndex, &manifestSize, 0);
-    if (manifestData == nullptr)
-    {
-        logger->error("Error loading manifest: Failed to extract manifest from zip");
-        mz_zip_reader_end(zip.get());
-        throw std::runtime_error("Failed to extract manifest from zip");
-    }
-
-    // Parse the manifest
-    std::string manifestString(static_cast<char *>(manifestData), manifestSize);
-    free(manifestData);
-
-    // Get list of directory names in the root of the zip file - these are packaged assets
+    std::string manifestString;
     std::unordered_set<std::string> packagedAssetDirs;
-    mz_uint numFiles = mz_zip_reader_get_num_files(zip.get());
-    for (mz_uint i = 0; i < numFiles; ++i)
+
+    archive_entry *entry = nullptr;
+    int result = ARCHIVE_OK;
+    bool manifestFound = false;
+
+    while ((result = archive_read_next_header(reader, &entry)) == ARCHIVE_OK)
     {
-        mz_zip_archive_file_stat fileStat;
-        if (!mz_zip_reader_file_stat(zip.get(), i, &fileStat))
+        const fs::path entryPath = normalizeArchivePath(archive_entry_pathname(entry));
+
+        if (entryPath.empty() || entryPath == ".")
         {
-            logger->error("Error loading manifest: Failed to get file stat from zip");
-            mz_zip_reader_end(zip.get());
-            throw std::runtime_error("Failed to get file stat from zip");
+            archive_read_data_skip(reader);
+            continue;
         }
 
-        std::string filename(fileStat.m_filename);
-        if (mz_zip_reader_is_file_a_directory(zip.get(), i) != 0 &&
-            filename.find('/') == filename.size() - 1)
+        const std::string filename = entryPath.generic_string();
+
+        // Find and read manifest.yaml
+        if (filename == "manifest.yaml" && archive_entry_filetype(entry) == AE_IFREG)
         {
-            std::string assetName = filename.substr(0, filename.size() - 1);
-            logger->info("Found packaged asset '{}' in manifest", assetName);
-            packagedAssetDirs.insert(assetName);
+            std::string contents;
+            char buffer[8192];
+            la_ssize_t bytesRead = 0;
+
+            while ((bytesRead = archive_read_data(reader, buffer, sizeof(buffer))) > 0)
+            {
+                contents.append(buffer, static_cast<std::size_t>(bytesRead));
+            }
+
+            if (bytesRead < 0)
+            {
+                const char *errorMsg = archive_error_string(reader);
+                const std::string error = errorMsg ? errorMsg : "unknown error";
+
+                logger->error("Error loading manifest: Failed to extract manifest: {}", error);
+
+                archive_read_free(reader);
+                throw std::runtime_error("Failed to extract manifest: " + error);
+            }
+
+            manifestString = std::move(contents);
+            manifestFound = true;
+            continue;
         }
+
+        const std::string normalizedName = entryPath.lexically_normal().generic_string();
+
+        if (!normalizedName.empty() && normalizedName != ".")
+        {
+            const auto firstSlash = normalizedName.find('/');
+
+            if (firstSlash != std::string::npos && firstSlash > 0)
+            {
+                const std::string assetName = normalizedName.substr(0, firstSlash);
+
+                // Only collect direct children of the archive root
+                if (assetName != "." && assetName != "..")
+                {
+                    if (packagedAssetDirs.insert(assetName).second)
+                    {
+                        logger->info("Found packaged asset '{}' in manifest", assetName);
+                    }
+                }
+            }
+        }
+
+        // Advance past the current entry's contents
+        archive_read_data_skip(reader);
     }
+
+    if (result != ARCHIVE_EOF)
+    {
+        const char *errorMsg = archive_error_string(reader);
+        const std::string error = errorMsg ? errorMsg : "unknown error";
+
+        logger->error("Error loading manifest: Failed to read archive: {}", error);
+
+        archive_read_free(reader);
+        throw std::runtime_error("Failed to read archive: " + error);
+    }
+
+    if (!manifestFound)
+    {
+        logger->error("Error loading manifest: Manifest file not found in archive");
+
+        archive_read_free(reader);
+        throw std::runtime_error("Manifest file not found in archive");
+    }
+
+    archive_read_free(reader);
 
     Manifest manifest = YAML::Load(manifestString).as<Manifest>();
     manifest.packagedAssetDirs = packagedAssetDirs;
-    manifest.zip = zip;
-    manifest.isZip = true;
+    manifest.archiveData = std::vector<uint8_t>(data.begin(), data.end());
+    manifest.isArchive = true;
 
     logger->info("Loaded manifest with {} packaged assets", packagedAssetDirs.size());
 
@@ -469,7 +552,7 @@ Manifest &Manifest::getPackaged()
     if (!packagedManifest.has_value())
     {
         logger->info("Loading packaged manifest");
-        packagedManifest = Manifest::fromZip(
+        packagedManifest = Manifest::fromArchive(
             std::span<const uint8_t>(packaged_zip_bytes, sizeof(packaged_zip_bytes)));
     }
 
@@ -506,7 +589,7 @@ Manifest &Manifest::getCurrent()
                 logger->info("Loading manifest from ZIP file: {}", manifestPath.string());
                 std::vector<uint8_t> manifestData((std::istreambuf_iterator<char>(manifestFile)),
                                                   std::istreambuf_iterator<char>());
-                currentManifest = Manifest::fromZip(manifestData);
+                currentManifest = Manifest::fromArchive(manifestData);
             }
             else if (manifestPath.extension() == ".yaml" || manifestPath.extension() == ".yml")
             {
@@ -547,16 +630,6 @@ std::string Manifest::getNTTopic(const std::string &key)
     }
 }
 
-void Manifest::close()
-{
-    if (isZip)
-    {
-        mz_zip_reader_end(zip.get());
-        zip.reset();
-        isZip = false;
-    }
-}
-
 std::unique_ptr<StoredAsset> Manifest::Asset::getStoredAsset(const std::string &relativePath) const
 {
     static std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
@@ -564,16 +637,16 @@ std::unique_ptr<StoredAsset> Manifest::Asset::getStoredAsset(const std::string &
     {
         // search for packaged asset
         if (Manifest::getCurrent().packagedAssetDirs.contains(relativePath) &&
-            Manifest::getCurrent().isZip)
+            Manifest::getCurrent().isArchive)
         {
             return std::make_unique<PackagedStoredAsset>(relativePath, hash, prefPath,
-                                                         Manifest::getCurrent().zip);
+                                                         Manifest::getCurrent().archiveData);
         }
         else if (Manifest::getPackaged().packagedAssetDirs.contains(relativePath) &&
-                 Manifest::getPackaged().isZip)
+                 Manifest::getPackaged().isArchive)
         {
             return std::make_unique<PackagedStoredAsset>(relativePath, hash, prefPath,
-                                                         Manifest::getPackaged().zip);
+                                                         Manifest::getPackaged().archiveData);
         }
         else
         {

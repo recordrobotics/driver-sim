@@ -1,23 +1,28 @@
 #pragma once
 
 #include "storedasset.h"
-#include <miniz.h>
+
+#include <cstdint>
+#include <span>
+#include <utility>
 
 class PackagedStoredAsset : public StoredAsset
 {
-    std::shared_ptr<mz_zip_archive> zip;
+    ArchiveData archiveData;
+    std::span<const uint8_t> archiveBytes;
 
   public:
     PackagedStoredAsset(const std::string &relativeExtractPath, const std::string &hash,
-                        const std::string &sdlPrefPath, std::shared_ptr<mz_zip_archive> zip)
+                        const std::string &sdlPrefPath,
+                        const std::span<const uint8_t> &archiveBytes)
         : StoredAsset(relativeExtractPath,
-                      relativeExtractPath /* manifest zip stores with same name */, hash,
+                      relativeExtractPath /* manifest archive stores with same name */, hash,
                       sdlPrefPath, "packaged"),
-          zip(zip)
+          archiveData({.archive = nullptr, .archiveSize = 0}), archiveBytes(archiveBytes)
     {
     }
 
   protected:
-    mz_zip_archive *performDownload(std::stop_token stoken) override;
+    ArchiveData performDownload(std::stop_token stoken) override;
     void cleanup() override;
 };

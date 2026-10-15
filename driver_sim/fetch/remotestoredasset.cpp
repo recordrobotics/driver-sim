@@ -7,16 +7,16 @@
 using namespace blackboard::logger;
 namespace fs = std::filesystem;
 
-mz_zip_archive *RemoteStoredAsset::performDownload(std::stop_token stoken)
+ArchiveData RemoteStoredAsset::performDownload(std::stop_token stoken)
 {
     logger->info("Starting download of asset from URL: {}", remoteUrl);
     state = AssetState::Downloading;
 
-    std::ofstream ofs(localTempZipPath, std::ios::binary | std::ios::trunc);
+    std::ofstream ofs(localTempArchivePath, std::ios::binary | std::ios::trunc);
     if (!ofs)
     {
-        setError("Could not open local file for writing: " + localTempZipPath.string());
-        return nullptr;
+        setError("Could not open local file for writing: " + localTempArchivePath.string());
+        return {.archive = nullptr, .archiveSize = 0};
     }
 
     int lastLoggedPercent = -1;
@@ -56,21 +56,55 @@ mz_zip_archive *RemoteStoredAsset::performDownload(std::stop_token stoken)
     if (stoken.stop_requested())
     {
         logger->info("Download cancelled by engine: {}", remoteUrl);
-        std::filesystem::remove(localTempZipPath); // Delete the partial file
-        return nullptr;
+        std::filesystem::remove(localTempArchivePath); // Delete the partial file
+        return {.archive = nullptr, .archiveSize = 0};
     }
 
     if (resp.status_code == 200)
     {
         progressPercent = 100;
         state = AssetState::Extracting;
+
+        auto disposition = resp.header.find("content-disposition");
+        if (disposition != resp.header.end())
+        {
+            std::string filename = disposition->second;
+            auto pos = filename.find("filename=");
+            if (pos != std::string::npos)
+            {
+                filename = filename.substr(pos + 9);
+                if (!filename.empty() && filename.front() == '"' && filename.back() == '"')
+                {
+                    filename = filename.substr(1, filename.size() - 2);
+                }
+                logger->trace("Downloaded file name: {}", filename);
+                std::string extension = fs::path(filename).extension().string();
+                if (filename.ends_with(".tar.gz"))
+                {
+                    extension = ".tar.gz";
+                }
+                fs::path tempPath = localTempArchivePath;
+                localTempArchivePath.replace_extension(extension);
+                logger->trace("Renaming temporary archive file to: {}",
+                              localTempArchivePath.string());
+                std::error_code ec;
+                fs::rename(tempPath, localTempArchivePath, ec);
+                if (ec)
+                {
+                    logger->error("Failed to rename temporary archive file: {}", ec.message());
+                    setError("Failed to rename temporary archive file: " + ec.message());
+                    return {.archive = nullptr, .archiveSize = 0};
+                }
+            }
+        }
+
         logger->info("Download complete for URL: {}", remoteUrl);
     }
     else
     {
         logger->error("Failed to download asset from {}: HTTP {} - {}", remoteUrl, resp.status_code,
                       resp.error.message);
-        std::filesystem::remove(localTempZipPath); // Delete potential files
+        std::filesystem::remove(localTempArchivePath); // Delete potential files
 
         if (resp.error.code != cpr::ErrorCode::OK)
         {
@@ -80,29 +114,59 @@ mz_zip_archive *RemoteStoredAsset::performDownload(std::stop_token stoken)
         {
             setError("HTTP Error " + std::to_string(resp.status_code) + " from: " + remoteUrl);
         }
-        return nullptr;
+        return {.archive = nullptr, .archiveSize = 0};
     }
 
-    logger->info("Extracting zip file {} to {}", localTempZipPath.string(),
+    logger->info("Extracting archive file {} to {}", localTempArchivePath.string(),
                  localExtractPath.string());
 
-    memset(&zip, 0, sizeof(zip));
+    struct archive *reader = archive_read_new();
 
-    if (mz_zip_reader_init_file(&zip, localTempZipPath.string().c_str(), 0) == 0)
+    archive_read_support_filter_all(reader);
+    archive_read_support_format_all(reader);
+
+    if (archive_read_open_filename(reader, localTempArchivePath.string().c_str(), 10240) !=
+        ARCHIVE_OK)
     {
-        setError("Failed to open zip file: " + localTempZipPath.string());
-        return nullptr;
+        const char *errorMsg = archive_error_string(reader);
+        setError("Failed to open archive: " +
+                 std::string(errorMsg != nullptr ? errorMsg : "unknown error"));
+
+        archive_read_free(reader);
+        return {.archive = nullptr, .archiveSize = 0};
     }
-    return &zip;
+
+    archiveData.archive = reader;
+
+    std::error_code ec;
+    const auto totalBytes = fs::file_size(localTempArchivePath, ec);
+
+    if (ec || totalBytes == 0)
+    {
+        logger->warn("Unable to determine archive size {}: {}", ec.message(),
+                     localTempArchivePath.string());
+        archiveData.archiveSize = 0;
+    }
+    else
+    {
+        archiveData.archiveSize = static_cast<uint32_t>(totalBytes);
+    }
+
+    return archiveData;
 }
 
 void RemoteStoredAsset::cleanup()
 {
     try
     {
-        logger->info("Cleaning up temporary zip file: {}", localTempZipPath.string());
-        mz_zip_reader_end(&zip);
-        fs::remove(localTempZipPath);
+        logger->info("Cleaning up temporary archive file: {}", localTempArchivePath.string());
+        if (archiveData.archive != nullptr)
+        {
+            archive_read_close(archiveData.archive);
+            archive_read_free(archiveData.archive);
+            archiveData.archive = nullptr;
+        }
+        fs::remove(localTempArchivePath);
     }
     catch (const std::exception &e)
     {

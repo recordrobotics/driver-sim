@@ -44,6 +44,9 @@ jni:
         - platform: "windows-x64"
           url: "https://hamster1.ddns.net/jni-0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5.zip"
           hash: "0589a33fdf74cd58ef625dc2767956b260177de488ef89d8b17d60e250ee88c5"
+        - platform: "macos-x64"
+          url: "https://hamster1.ddns.net/jni-6cfa59b86a8f269f0db6651c7db8b39cbba7ae9ccdea74c3c376da60b932fc54.zip"
+          hash: "6cfa59b86a8f269f0db6651c7db8b39cbba7ae9ccdea74c3c376da60b932fc54"
 
 robot:
     assets:
@@ -73,22 +76,22 @@ jdk:
         - platform: "windows-x64"
           # Url to download JDK from
           url: "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/windows/x64/jdk/hotspot/normal/eclipse?project=jdk"
-          # Hash of the JDK zip file
+          # Hash of the JDK archive file
           hash: "8c7cfff78a55c56ebaf470ed6a89c6466b47d8274bdabdda997d7507c20325c5"
         - platform: "macos-x64"
           # Url to download JDK from
           url: "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/mac/x64/jdk/hotspot/normal/eclipse?project=jdk"
-          # Hash of the JDK zip file
+          # Hash of the JDK archive file
           hash: "ca5700c5d13124467ae52e1609881d7ce45d974870b18c3382ea8b7ae69d0f00"
         - platform: "macos-aarch64"
           # Url to download JDK from
           url: "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/mac/aarch64/jdk/hotspot/normal/eclipse?project=jdk"
-          # Hash of the JDK zip file
+          # Hash of the JDK archive file
           hash: "f9845abc8403f1d489402201064e7b9f2c57605d8717b85a95a15d94f882eeb7"
         - platform: "linux-x64"
           # Url to download JDK from
           url: "https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/linux/x64/jdk/hotspot/normal/eclipse?project=jdk"
-          # Hash of the JDK zip file
+          # Hash of the JDK archive file
           hash: "166774efcf0f722f2ee18eba0039de2d685b350ee14d7b69e6f83437dafd2af1"
 
 elastic:

@@ -1,9 +1,10 @@
 #include "storedasset.h"
 
 #include <algorithm>
+#include <archive.h>
+#include <archive_entry.h>
 #include <blackboard_app/logger.h>
 #include <fstream>
-#include <miniz.h>
 #include <ranges>
 #include <utility>
 #include <vector>
@@ -11,6 +12,13 @@
 using namespace blackboard::logger;
 
 namespace fs = std::filesystem;
+
+struct PendingLink
+{
+    fs::path outputPath;
+    fs::path targetPath;
+    bool symbolic;
+};
 
 void StoredAsset::setError(const std::string &err)
 {
@@ -126,84 +134,383 @@ void StoredAsset::deleteOldFiles(const fs::path &rootFolder)
     }
 }
 
-void StoredAsset::extractZip(mz_zip_archive *zip, const fs::path &extractTo)
+void StoredAsset::extractArchive(const ArchiveData &archiveData, const fs::path &extractTo)
 {
-    mz_uint num_files = mz_zip_reader_get_num_files(zip);
-    logger->trace("Zip archive contains {} files", num_files);
+    archive *archive = archiveData.archive;
+    uint32_t archiveSize = archiveData.archiveSize;
 
-    fs::path baseDir = fs::weakly_canonical(extractTo);
-    fs::path zipRoot = zipRootDirectory.empty() ? "" : fs::weakly_canonical(zipRootDirectory);
-
-    for (mz_uint i = 0; i < num_files; i++)
+    if (archive == nullptr)
     {
-        progressPercent = static_cast<int>((i * 100) / num_files);
-        mz_zip_archive_file_stat file_stat;
-        if (mz_zip_reader_file_stat(zip, i, &file_stat) == 0)
+        setError("Invalid archive reader.");
+        return;
+    }
+
+    logger->trace("Archive contains {} bytes", archiveSize);
+
+    std::error_code ec;
+    fs::create_directories(extractTo, ec);
+
+    if (ec)
+    {
+        setError("Failed to create extraction directory: " + ec.message());
+        return;
+    }
+
+    const fs::path baseDir = fs::canonical(extractTo, ec);
+    if (ec)
+    {
+        setError("Failed to resolve extraction directory: " + ec.message());
+        return;
+    }
+
+    const fs::path archiveRoot = archiveRootDirectory.empty()
+                                     ? fs::path{}
+                                     : fs::path(archiveRootDirectory).lexically_normal();
+
+    logger->trace("Starting archive extraction to {}", extractTo.string());
+
+    archive_entry *entry = nullptr;
+    int result = ARCHIVE_OK;
+    std::vector<PendingLink> pendingLinks;
+
+    while ((result = archive_read_next_header(archive, &entry)) == ARCHIVE_OK)
+    {
+        const char *entryName = archive_entry_pathname(entry);
+        if (entryName == nullptr || *entryName == '\0')
         {
-            logger->trace("Failed to get file stat for index {}: {}", i,
-                          mz_zip_get_error_string(zip->m_last_error));
+            logger->trace("Skipping archive entry with empty filename");
+            archive_read_data_skip(archive);
             continue;
         }
 
-        fs::path filePath(file_stat.m_filename);
-        if (!zipRoot.empty() && !filePath.string().starts_with(zipRoot.string()))
+        const std::string filename(entryName);
+        fs::path filePath(filename);
+
+        // Reject absolute paths
+        if (filePath.is_absolute() || filePath.has_root_name())
         {
+            logger->error("Invalid absolute archive path: {}", filename);
+            archive_read_data_skip(archive);
             continue;
         }
 
-        filePath = filePath.lexically_relative(zipRoot);
+        filePath = filePath.lexically_normal();
 
-        fs::path targetPath = fs::weakly_canonical(extractTo / filePath);
-        auto [mismatch_base, mismatch_target] =
-            std::mismatch(baseDir.begin(), baseDir.end(), targetPath.begin());
-
-        if (mismatch_base != baseDir.end())
+        // Match entries under archiveRootDirectory
+        if (!archiveRoot.empty())
         {
-            logger->error("Invalid path detected in file {}", file_stat.m_filename);
+            const fs::path &normalizedRoot = archiveRoot;
+
+            auto rootIt = normalizedRoot.begin();
+            auto fileIt = filePath.begin();
+
+            bool matchesRoot = true;
+
+            for (; rootIt != normalizedRoot.end(); ++rootIt, ++fileIt)
+            {
+                if (fileIt == filePath.end() || *rootIt != *fileIt)
+                {
+                    matchesRoot = false;
+                    break;
+                }
+            }
+
+            if (!matchesRoot)
+            {
+                archive_read_data_skip(archive);
+                continue;
+            }
+
+            filePath = filePath.lexically_relative(normalizedRoot);
+        }
+
+        if (filePath.empty() || filePath == ".")
+        {
+            archive_read_data_skip(archive);
             continue;
         }
 
-        if (!isFilenameSafe(targetPath.filename().string()))
+        // Reject traversal components
+        bool traversal = false;
+        for (const auto &component : filePath)
         {
-            logger->error("Illegal filename '{}' detected.", targetPath.filename().string());
+            if (component == "..")
+            {
+                traversal = true;
+                break;
+            }
+        }
+
+        if (traversal)
+        {
+            logger->error("Invalid path detected in file {}", filename);
+            archive_read_data_skip(archive);
             continue;
         }
 
-        fs::path outputPath = extractTo / filePath;
+        const fs::path outputPath = (baseDir / filePath).lexically_normal();
 
-        if (mz_zip_reader_is_file_a_directory(zip, i) != 0)
+        // Ensure destination stays inside baseDir
+        auto [baseIt, targetIt] = std::ranges::mismatch(baseDir, outputPath);
+
+        if (baseIt != baseDir.end())
+        {
+            logger->error("Invalid path detected in file {}", filename);
+            archive_read_data_skip(archive);
+            continue;
+        }
+
+        if (!isFilenameSafe(outputPath.filename().string()))
+        {
+            logger->error("Illegal filename '{}' detected.", outputPath.filename().string());
+            archive_read_data_skip(archive);
+            continue;
+        }
+
+        const auto type = archive_entry_filetype(entry);
+
+        if (type == AE_IFDIR)
         {
             logger->trace("Creating directory: {}", outputPath.string());
-            fs::create_directories(outputPath);
+
+            fs::create_directories(outputPath, ec);
+            if (ec)
+            {
+                setError("Failed to create directory: " + outputPath.string() + ": " +
+                         ec.message());
+                return;
+            }
+
+            archive_read_data_skip(archive);
             continue;
         }
 
-        fs::create_directories(outputPath.parent_path());
-
-        if (mz_zip_reader_extract_to_file(zip, i, outputPath.string().c_str(), 0) == 0)
+        if (type == AE_IFLNK)
         {
-            setError("Failed to extract file: " + std::string(file_stat.m_filename));
+            const char *target = archive_entry_symlink(entry);
+
+            if (target == nullptr || *target == '\0')
+            {
+                logger->error("Skipping symbolic link with empty target: {}", filename);
+                archive_read_data_skip(archive);
+                continue;
+            }
+
+            fs::path targetPath(target);
+
+            if (targetPath.is_absolute() || targetPath.has_root_name())
+            {
+                logger->error("Rejecting absolute symbolic-link target: {}", filename);
+                archive_read_data_skip(archive);
+                continue;
+            }
+
+            const fs::path resolvedTarget =
+                (outputPath.parent_path() / targetPath).lexically_normal();
+
+            auto [rootIt, targetIt] = std::ranges::mismatch(baseDir, resolvedTarget);
+
+            if (rootIt != baseDir.end())
+            {
+                logger->error("Rejecting symbolic link outside root: {}", filename);
+                archive_read_data_skip(archive);
+                continue;
+            }
+
+            pendingLinks.push_back({outputPath, targetPath, true});
+
+            archive_read_data_skip(archive);
+            continue;
+        }
+
+        if (type == AE_IFREG)
+        {
+            const char *hardlink = archive_entry_hardlink(entry);
+
+            if (hardlink != nullptr && *hardlink != '\0')
+            {
+                fs::path targetPath(hardlink);
+
+                if (targetPath.is_absolute() || targetPath.has_root_name())
+                {
+                    logger->error("Rejecting absolute hard-link target: {}", filename);
+                    archive_read_data_skip(archive);
+                    continue;
+                }
+
+                targetPath = targetPath.lexically_normal();
+
+                bool invalidTarget = false;
+                for (const auto &component : targetPath)
+                {
+                    if (component == "..")
+                    {
+                        invalidTarget = true;
+                        break;
+                    }
+                }
+
+                if (invalidTarget)
+                {
+                    logger->error("Rejecting unsafe hard-link target: {}", filename);
+                    archive_read_data_skip(archive);
+                    continue;
+                }
+
+                pendingLinks.push_back(
+                    {outputPath, (baseDir / targetPath).lexically_normal(), false});
+
+                archive_read_data_skip(archive);
+                continue;
+            }
+
+            fs::create_directories(outputPath.parent_path(), ec);
+            if (ec)
+            {
+                setError("Failed to create parent directory: " + outputPath.parent_path().string() +
+                         ": " + ec.message());
+                return;
+            }
+
+            // Extract file
+            std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
+            if (!output)
+            {
+                setError("Failed to open output file: " + outputPath.string());
+                return;
+            }
+
+            std::array<char, 64 * 1024> buffer;
+            la_ssize_t bytesRead = 0;
+
+            while ((bytesRead = archive_read_data(archive, buffer.data(), buffer.size())) > 0)
+            {
+                output.write(buffer.data(), static_cast<std::streamsize>(bytesRead));
+
+                if (!output)
+                {
+                    setError("Failed to write extracted file: " + outputPath.string());
+                    return;
+                }
+
+                if (ec || archiveSize == 0)
+                {
+                    continue;
+                }
+
+                const la_int64_t bytesRead = archive_filter_bytes(archive, 0);
+
+                if (bytesRead < 0)
+                {
+                    continue;
+                }
+
+                const auto consumed =
+                    std::min<std::uint64_t>(static_cast<std::uint64_t>(bytesRead), archiveSize);
+
+                const int percent = static_cast<int>(consumed * 100ULL / archiveSize);
+
+                progressPercent = std::max(0, std::min(percent, 99));
+            }
+
+            if (bytesRead < 0)
+            {
+                setError("Failed to extract file: " + filename + ": " +
+                         archive_error_string(archive));
+                return;
+            }
+
+            output.close();
+
+            if (!output)
+            {
+                setError("Failed to close extracted file: " + outputPath.string());
+                return;
+            }
+
+            const auto permissions = static_cast<fs::perms>(archive_entry_perm(entry) & 0777);
+
+            fs::permissions(outputPath, permissions, fs::perm_options::replace, ec);
+
+            if (ec)
+            {
+                setError("Failed to set file permissions: " + outputPath.string() + ": " +
+                         ec.message());
+                return;
+            }
+
+            logger->trace("Extracted file: {}", outputPath.string());
+        }
+        else
+        {
+            logger->trace("Skipping unsupported archive entry: {}", filename);
+            archive_read_data_skip(archive);
+            continue;
+        }
+    }
+
+    if (result != ARCHIVE_EOF)
+    {
+        const char *errorMsg = archive_error_string(archive);
+        setError("Failed while reading archive: " +
+                 std::string(errorMsg != nullptr ? errorMsg : "unknown libarchive error"));
+        return;
+    }
+
+    for (const auto &link : pendingLinks)
+    {
+        fs::create_directories(link.outputPath.parent_path(), ec);
+        if (ec)
+        {
+            setError("Failed to create link parent directory: " + ec.message());
             return;
         }
 
-        logger->trace("Extracted file: {}", outputPath.string());
+        if (link.symbolic)
+        {
+            fs::create_symlink(link.targetPath, link.outputPath, ec);
+        }
+        else
+        {
+            const auto status = fs::symlink_status(link.targetPath, ec);
+
+            if (ec || status.type() != fs::file_type::regular)
+            {
+                logger->error("Skipping hard link with invalid target: {}",
+                              link.targetPath.string());
+                ec.clear();
+                continue;
+            }
+
+            fs::create_hard_link(link.targetPath, link.outputPath, ec);
+        }
+
+        if (ec)
+        {
+            logger->error("Failed to create {} link '{}': {}", link.symbolic ? "symbolic" : "hard",
+                          link.outputPath.string(), ec.message());
+            ec.clear();
+            continue;
+        }
+
+        logger->trace("Created {} link: {}", link.symbolic ? "symbolic" : "hard",
+                      link.outputPath.string());
     }
 
     progressPercent = 100;
-
     state = AssetState::Cleanup;
 
     logger->info("Extraction complete to {}", extractTo.string());
 }
 
-StoredAsset::StoredAsset(const std::string &relativeExtractPath,
-                         const std::string &zipRootDirectory, std::string hash,
-                         const std::string &sdlPrefPath, const std::string &sourceType)
-    : zipRootDirectory(zipRootDirectory), expectedSha256(std::move(hash))
+StoredAsset::StoredAsset(const std::string &relativeExtractPath, std::string archiveRootDirectory,
+                         std::string hash, const std::string &sdlPrefPath,
+                         const std::string &sourceType)
+    : archiveRootDirectory(std::move(archiveRootDirectory)), expectedSha256(std::move(hash))
 {
     localExtractPath = fs::path(sdlPrefPath) / relativeExtractPath;
     localHashPath = fs::path(sdlPrefPath) / (relativeExtractPath + ".sha256");
-    localTempZipPath = fs::path(sdlPrefPath) / (relativeExtractPath + ".tmp.zip");
+    localTempArchivePath = fs::path(sdlPrefPath) / (relativeExtractPath + ".tmp");
 
     getCreatedAssets().push_back(relativeExtractPath + ":" + expectedSha256 + " (" + sourceType +
                                  ")");
@@ -257,7 +564,7 @@ void StoredAsset::verifyOrDownload()
             }
 
             fs::create_directories(localExtractPath.parent_path());
-            mz_zip_archive *zip = performDownload(stoken);
+            ArchiveData archive = performDownload(stoken);
 
             if (state == AssetState::Extracting)
             {
@@ -268,7 +575,7 @@ void StoredAsset::verifyOrDownload()
                 }
 
                 deleteOldFiles(localExtractPath);
-                extractZip(zip, localExtractPath);
+                extractArchive(archive, localExtractPath);
                 cleanup();
 
                 if (state != AssetState::Error)
