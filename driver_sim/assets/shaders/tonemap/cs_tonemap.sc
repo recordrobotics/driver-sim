@@ -3,8 +3,9 @@
 #include <bgfx_compute.sh>
 #include "../common/color.sh"
 
-IMAGE2D_RW(s_image, r11f_g11f_b10f, 0);
-SAMPLER2D(s_lut, 1);
+IMAGE2D_RO(s_input, r11f_g11f_b10f, 0);
+IMAGE2D_WO(s_output, r11f_g11f_b10f, 1);
+SAMPLER2D(s_lut, 2);
 
 // x = 1 / lut_width
 // y = 1 / lut_height
@@ -39,10 +40,10 @@ void main()
     if (any(greaterThanEqual(pixel, ivec2(u_viewRect.zw))))
         return;
 
-    vec3 linearColor = imageLoad(s_image, pixel).rgb;
+    vec3 linearColor = imageLoad(s_input, pixel).rgb;
 
     vec3 logc = saturate(LinearToLogC(linearColor));
     vec3 lutLinear = applyLUT2D(logc, u_lutParams.xyz);
 
-    imageStore(s_image, pixel, vec4(lutLinear, 1.0));
+    imageStore(s_output, pixel, vec4(lutLinear, 1.0));
 }

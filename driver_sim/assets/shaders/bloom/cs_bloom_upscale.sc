@@ -4,8 +4,9 @@
 
 
 SAMPLER2D(s_bloomInput, 0);
-IMAGE2D_RW(u_output_image, r11f_g11f_b10f, 1);
-SAMPLER2D(s_bloomDirt, 2);
+IMAGE2D_RO(u_input_image, r11f_g11f_b10f, 1);
+IMAGE2D_WO(u_output_image, r11f_g11f_b10f, 2);
+SAMPLER2D(s_bloomDirt, 3);
 
 uniform vec4  u_texel_size;
 uniform vec4 u_bloom_intensity;
@@ -75,7 +76,7 @@ void main()
 
     vec4 bloom = s * (1.0 / 16.0);
 
-	vec4 out_pixel = imageLoad(u_output_image, pixel_coords);
+	vec4 out_pixel = imageLoad(u_input_image, pixel_coords);
 	     out_pixel += bloom * u_bloom_intensity.x;
 
     if (u_mip_level == 1)

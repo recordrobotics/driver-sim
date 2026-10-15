@@ -342,7 +342,7 @@ class FieldRenderer
     static constexpr uint16_t VIEW_BLIT = 5;
 
     void initPBROIT(uint16_t width, uint16_t height);
-    void initTonemap();
+    void initTonemap(uint16_t width, uint16_t height);
     void initTAA(uint16_t width, uint16_t height);
     void initGBuffer(uint16_t width, uint16_t height);
     void initMotionBlur(uint16_t width, uint16_t height);
@@ -671,6 +671,7 @@ class FieldRenderer
     Texture gGTAOHilbertLut;
     Texture gGTAOFinalAOTerm;
 
+    Texture gBloomFirstPass;
     Texture bloomDirtMask;
 
     Texture carpetBaseColor;
@@ -678,6 +679,7 @@ class FieldRenderer
     Texture apriltagTexture;
     Texture ledMaskTexture;
 
+    Texture gTonemapOutput;
     Texture tonemappingLut;
 
     FrameBuffer gBufFbo;

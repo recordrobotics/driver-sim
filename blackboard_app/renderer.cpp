@@ -54,6 +54,10 @@ namespace blackboard::renderer
             break;
         }
         const auto [drawable_width, drawable_height] = window.get_size_in_pixels();
+        window.pixelWidth = drawable_width;
+        window.pixelHeight = drawable_height;
+        window.viewportWidth = width;
+        window.viewportHeight = height;
         bgfx_init.swapChain.width = drawable_width;
         bgfx_init.swapChain.height = drawable_height;
         bgfx_init.swapChain.numBackBuffers = 1;

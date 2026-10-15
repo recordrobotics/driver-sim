@@ -30,8 +30,10 @@ namespace blackboard::app
         [[nodiscard]] std::pair<uint16_t, uint16_t> get_position() const;
 
         std::string title{"title"};
-        uint16_t width{DEFAULT_WIDTH};
-        uint16_t height{DEFAULT_HEIGHT};
+        uint16_t pixelWidth{DEFAULT_WIDTH};
+        uint16_t pixelHeight{DEFAULT_HEIGHT};
+        uint16_t viewportWidth{DEFAULT_WIDTH};
+        uint16_t viewportHeight{DEFAULT_HEIGHT};
         uint16_t imgui_view_id{IMGUI_VIEW_ID}; // might be possible to remove this id
         bool fullscreen{false};
         bool vsync{true};

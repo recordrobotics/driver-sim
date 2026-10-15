@@ -36,7 +36,12 @@
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
-            "environment": [],
+            "environment": [
+                {
+                    "name": "DYLD_LIBRARY_PATH",
+                    "value": "/usr/local/Cellar/molten-vk/1.4.2/lib:/usr/local/lib"
+                }
+            ],
             "externalConsole": false
         },
         {

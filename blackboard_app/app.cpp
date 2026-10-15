@@ -52,13 +52,13 @@ namespace blackboard::app
             const int clamped_height = std::clamp(
                 target_height, 1, static_cast<int>(std::numeric_limits<uint16_t>::max()));
 
-            main_window->width = static_cast<uint16_t>(clamped_width);
-            main_window->height = static_cast<uint16_t>(clamped_height);
+            main_window->viewportWidth = static_cast<uint16_t>(clamped_width);
+            main_window->viewportHeight = static_cast<uint16_t>(clamped_height);
         }
         else
         {
-            main_window->width = width;
-            main_window->height = height;
+            main_window->viewportWidth = width;
+            main_window->viewportHeight = height;
         }
 
         main_window->fullscreen = fullscreen;
@@ -66,8 +66,8 @@ namespace blackboard::app
         main_window->init_platform_window();
 
         gui::init();
-        if (!renderer::init(*main_window, m_renderer_api, main_window->width, main_window->height,
-                            main_window->vsync))
+        if (!renderer::init(*main_window, m_renderer_api, main_window->viewportWidth,
+                            main_window->viewportHeight, main_window->vsync))
         {
             logger::logger->error("Renderer not initialized");
             main_window.reset();
@@ -117,8 +117,6 @@ namespace blackboard::app
             // no hints for auto
             break;
         }
-
-        logger::logger->info("Ending App constructor");
     }
 
     void App::run()
@@ -158,9 +156,17 @@ namespace blackboard::app
                     {
                         const auto width = event.window.data1;
                         const auto height = event.window.data2;
-                        main_window->width = width;
-                        main_window->height = height;
+                        main_window->viewportWidth = width;
+                        main_window->viewportHeight = height;
+
                         renderer::ImGui_Impl_sdl_bgfx_Resize(main_window->window);
+
+                        int drawable_width{0};
+                        int drawable_height{0};
+                        SDL_GetWindowSizeInPixels(main_window->window, &drawable_width,
+                                                  &drawable_height);
+                        main_window->pixelWidth = static_cast<uint16_t>(drawable_width);
+                        main_window->pixelHeight = static_cast<uint16_t>(drawable_height);
                     }
                 }
 

@@ -503,9 +503,12 @@ void FieldRenderer::initPBROIT(uint16_t width, uint16_t height)
                      0);
 }
 
-void FieldRenderer::initTonemap()
+void FieldRenderer::initTonemap(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
+
+    TEXTURE(gTonemapOutput, width, height, 1.0f, 1.0f, true, 1, bgfx::TextureFormat::RG11B10F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
 
     s_lut = bgfx::createUniform("s_lut", bgfx::UniformType::Sampler);
     if (!bgfx::isValid(s_lut))
@@ -723,6 +726,12 @@ void FieldRenderer::initMotionBlur(uint16_t width, uint16_t height)
 void FieldRenderer::initBloom(uint16_t width, uint16_t height)
 {
     const auto type = bgfx::getRendererType();
+
+    TEXTURE(gBloomFirstPass, width, height, 1.0f, 1.0f, true, 1, bgfx::TextureFormat::RG11B10F,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+
+    gBloomFirstPass.mipCount =
+        calculateBloomMipmapLevels(gBloomFirstPass.width, gBloomFirstPass.height);
 
     s_bloomInput = bgfx::createUniform("s_bloomInput", bgfx::UniformType::Sampler);
     if (!bgfx::isValid(s_bloomInput))
@@ -1737,13 +1746,13 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window,
         throw std::runtime_error("Failed to create debug normals program.");
     }
 
-    initTAA(window.width, window.height); // init first to define uniforms
-    initGBuffer(window.width, window.height);
-    initPBROIT(window.width, window.height);
-    initTonemap();
-    initMotionBlur(window.width, window.height);
-    initBloom(window.width, window.height);
-    initGTAO(window.width, window.height);
+    initTAA(window.pixelWidth, window.pixelHeight); // init first to define uniforms
+    initGBuffer(window.pixelWidth, window.pixelHeight);
+    initPBROIT(window.pixelWidth, window.pixelHeight);
+    initTonemap(window.pixelWidth, window.pixelHeight);
+    initMotionBlur(window.pixelWidth, window.pixelHeight);
+    initBloom(window.pixelWidth, window.pixelHeight);
+    initGTAO(window.pixelWidth, window.pixelHeight);
 
     fms = std::make_shared<FMS>();
 
@@ -1895,6 +1904,8 @@ void FieldRenderer::ensureTextures(uint16_t width, uint16_t height)
     gbufDepth.beginFrame();
 
     gOutputColor.beginFrame();
+    gBloomFirstPass.beginFrame();
+    gTonemapOutput.beginFrame();
 
     gTAABuffer0.beginFrame();
     gTAABuffer1.beginFrame();
@@ -1930,6 +1941,12 @@ void FieldRenderer::ensureTextures(uint16_t width, uint16_t height)
 
     gOutputColor.ensure(width, height);
     gOutputColor.mipCount = calculateBloomMipmapLevels(gOutputColor.width, gOutputColor.height);
+
+    gBloomFirstPass.ensure(width, height);
+    gBloomFirstPass.mipCount =
+        calculateBloomMipmapLevels(gBloomFirstPass.width, gBloomFirstPass.height);
+
+    gTonemapOutput.ensure(width, height);
 
     gTAABuffer0.ensure(width, height);
     gTAABuffer1.ensure(width, height);
@@ -1967,9 +1984,9 @@ void FieldRenderer::setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isT
     if (mesh.material.type == MaterialType::Transparent)
     {
         encoder->setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                          BGFX_STATE_DEPTH_TEST_GREATER |
+                          BGFX_STATE_DEPTH_TEST_GREATER
                           // Additive blending
-                          BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE, BGFX_STATE_BLEND_ONE));
+                          | BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE, BGFX_STATE_BLEND_ONE));
         if (!isTransparentPrepass)
         {
             // Use moments prepass for OIT
@@ -2514,13 +2531,24 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     auto &style{ImGui::GetStyle()};
     float globalScale = style.FontScaleMain * style.FontScaleDpi;
     auto viewport = ImGui::GetMainViewport();
-    float sidebarWidth = 610.0f * globalScale;
+    float sidebarWidth = std::min(610.0f * globalScale, viewport->Size.x * 0.5f);
 
-    uint16_t m_width = settings::showSettings()
-                           ? static_cast<uint16_t>(std::round(window.width - sidebarWidth))
-                           : window.width;
-    uint16_t m_height = window.height;
-    ImVec2 fieldViewportSize = ImVec2(m_width, m_height);
+    float widthScale =
+        static_cast<float>(window.pixelWidth) / static_cast<float>(window.viewportWidth);
+
+    uint16_t m_width =
+        settings::showSettings()
+            ? static_cast<uint16_t>(std::round(window.pixelWidth - sidebarWidth * widthScale))
+            : window.pixelWidth;
+    uint16_t m_height = window.pixelHeight;
+
+    uint16_t m_viewportWidth =
+        settings::showSettings()
+            ? static_cast<uint16_t>(std::round(window.viewportWidth - sidebarWidth))
+            : window.viewportWidth;
+    uint16_t m_viewportHeight = window.viewportHeight;
+
+    ImVec2 fieldViewportSize = ImVec2(m_viewportWidth, m_viewportHeight);
 
     if (fmsUI)
     {
@@ -2745,10 +2773,10 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                         }
                     }
 
-                    updateCinematicCamera(view, deltaTime,
-                                          robotInstances[instanceIndex].dynamicData.lastPosition,
-                                          robotInstances[instanceIndex].dynamicData.lastRotation);
-                    return;
+                    // updateCinematicCamera(view, deltaTime,
+                    //                       robotInstances[instanceIndex].dynamicData.lastPosition,
+                    //                       robotInstances[instanceIndex].dynamicData.lastRotation);
+                    // return;
                 }
             }
         }
@@ -3163,7 +3191,10 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                           static_cast<float>(tonemappingLut.height - 1),
                           powf(2.0f, tonemappingExposure)};
     encoder->setUniform(u_lutParams, lutParams);
-    encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::ReadWrite);
+    encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::Read);
+    encoder->setImage(1,
+                      settings::current.enableBloom ? gBloomFirstPass.handle : gOutputColor.handle,
+                      0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, exposureProgram, xGroups, yGroups);
 
     // Bloom
@@ -3175,10 +3206,10 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         float mipSizeX = (float)m_width / 2;
         float mipSizeY = (float)m_height / 2;
 
-        for (uint8_t i = 0; i < gOutputColor.mipCount - 1; ++i)
+        for (uint8_t i = 0; i < gBloomFirstPass.mipCount - 1; ++i)
         {
             encoder->setUniform(u_bloomThreshold, bloomThresholdField);
-            encoder->setTexture(0, s_bloomInput, gOutputColor.handle, 0, 1, i, 1);
+            encoder->setTexture(0, s_bloomInput, gBloomFirstPass.handle, 0, 1, i, 1);
 
             xGroups = (int)floorf((mipSizeX - 1) / 8 + 1);
             yGroups = (int)floorf((mipSizeY - 1) / 8 + 1);
@@ -3187,7 +3218,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                                        0.0f};
             encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
 
-            encoder->setImage(1, gOutputColor.handle, i + 1, bgfx::Access::Write);
+            encoder->setImage(1, gBloomFirstPass.handle, i + 1, bgfx::Access::Write);
 
             encoder->dispatch(VIEW_POSTPROCESS, bloomDownscaleProgram, xGroups, yGroups);
 
@@ -3197,11 +3228,11 @@ void FieldRenderer::render(const blackboard::app::Window &window,
 
         float bloomIntensityField[4] = {bloomIntensity, bloomDirtIntensity, 0.0f, 0.0f};
 
-        for (uint8_t i = gOutputColor.mipCount - 1; i >= 1; --i)
+        for (uint8_t i = gBloomFirstPass.mipCount - 1; i >= 1; --i)
         {
             encoder->setUniform(u_bloomIntensity, bloomIntensityField);
-            encoder->setTexture(0, s_bloomInput, gOutputColor.handle, 0, 1, i, 1);
-            encoder->setTexture(2, s_bloomDirt, bloomDirtMask.handle);
+            encoder->setTexture(0, s_bloomInput, gBloomFirstPass.handle, 0, 1, i, 1);
+            encoder->setTexture(3, s_bloomDirt, bloomDirtMask.handle);
 
             mipSizeX = std::max(1.0f, floorf(float(m_width) / (1 << (i - 1))));
             mipSizeY = std::max(1.0f, floorf(float(m_height) / (1 << (i - 1))));
@@ -3213,7 +3244,8 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                                        0.0f};
             encoder->setUniform(u_bloomTexelSize, bloomTexelSize);
 
-            encoder->setImage(1, gOutputColor.handle, i - 1, bgfx::Access::ReadWrite);
+            encoder->setImage(1, gBloomFirstPass.handle, i - 1, bgfx::Access::Read);
+            encoder->setImage(2, gOutputColor.handle, i - 1, bgfx::Access::Write);
 
             encoder->dispatch(VIEW_POSTPROCESS, bloomUpscaleProgram, xGroups, yGroups);
         }
@@ -3223,8 +3255,9 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
     encoder->setUniform(u_lutParams, lutParams);
-    encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::ReadWrite);
-    encoder->setTexture(1, s_lut, tonemappingLut.handle);
+    encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::Read);
+    encoder->setImage(1, gTonemapOutput.handle, 0, bgfx::Access::Write);
+    encoder->setTexture(2, s_lut, tonemappingLut.handle);
     encoder->dispatch(VIEW_POSTPROCESS, tonemapProgram, xGroups, yGroups);
 
     // Blit and present
@@ -3344,7 +3377,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         encoder->setTexture(0, s_texPresent, gGTAOWorkingEdges.handle);
         break;
     default:
-        encoder->setTexture(0, s_texPresent, gOutputColor.handle);
+        encoder->setTexture(0, s_texPresent, gTonemapOutput.handle);
         break;
     }
 
@@ -3540,6 +3573,8 @@ FieldRenderer::~FieldRenderer()
     gBufFbo.destroy();
 
     gOutputColor.destroy();
+    gBloomFirstPass.destroy();
+    gTonemapOutput.destroy();
 
     gTAABuffer0.destroy();
     gTAABuffer1.destroy();

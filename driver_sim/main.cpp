@@ -795,6 +795,9 @@ int main(int argc, char *argv[])
                              blackboard::app::Window::DEFAULT_WIDTH,
                              blackboard::app::Window::DEFAULT_HEIGHT, settings::current.fullscreen,
                              settings::current.enableVSync);
+
+    logger::logger->info("Using renderer API: {}", rendererApiToString(app.get_renderer_api()));
+
     app_ptr = &app;
     app.run();
 

@@ -24,6 +24,11 @@ elseif(LINUX)
 	project (${PROJECT_NAME} C CXX)
 endif()
 
+add_compile_definitions(
+    $<$<CONFIG:Debug>:DEBUG>
+    $<$<CONFIG:Debug>:_DEBUG>
+)
+
 include(cmake/fetch_external_dependencies.cmake)
 	
 add_subdirectory(blackboard_app)
