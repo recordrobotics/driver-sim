@@ -333,16 +333,8 @@ void cleanupFieldView()
     hasInitializedFieldView = false;
 
     fieldRenderer.reset();
-
-    if (settings::current.launchElastic)
-    {
-        elasticProcess.reset();
-    }
-
-    if (settings::current.launchRobotCode)
-    {
-        javaProcess.reset();
-    }
+    elasticProcess.reset();
+    javaProcess.reset();
 }
 
 void drawBackground()
