@@ -1015,7 +1015,8 @@ void DynamicObjectData::update(float *modelMatrix, float *parentMatrix, float de
     }
     else
     {
-        float interpolationFactor = deltaTime / static_cast<float>(settings::current.ntPeriodic);
+        float interpolationFactor =
+            std::clamp(deltaTime / static_cast<float>(settings::current.ntPeriodic), 0.0f, 1.0f);
         lastPosition = bx::lerp(lastPosition, position, interpolationFactor);
         lastRotation = bx::lerp(lastRotation, rotation, interpolationFactor);
     }
