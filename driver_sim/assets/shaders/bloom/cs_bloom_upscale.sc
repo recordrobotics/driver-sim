@@ -77,7 +77,7 @@ void main()
     vec4 bloom = s * (1.0 / 16.0);
 
 	vec4 out_pixel = imageLoad(u_input_image, pixel_coords);
-	     out_pixel += bloom * u_bloom_intensity.x;
+    out_pixel += bloom * u_bloom_intensity.x;
 
     if (u_mip_level == 1)
     {

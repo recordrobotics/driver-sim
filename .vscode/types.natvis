@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+    <!-- bgfx::TextureHandle -->
+    <Type Name="bgfx::TextureHandle">
+        <DisplayString>
+            TextureHandle {idx}
+        </DisplayString>
+        <Expand>
+            <Item Name="idx">idx</Item>
+        </Expand>
+    </Type>
+
+    <!-- bgfx::FrameBufferHandle -->
+    <Type Name="bgfx::FrameBufferHandle">
+        <DisplayString>
+            FrameBufferHandle {idx}
+        </DisplayString>
+        <Expand>
+            <Item Name="idx">idx</Item>
+        </Expand>
+    </Type>
+
+    <!-- Texture -->
+    <Type Name="Texture">
+        <DisplayString>
+            Texture {name} ({width}x{height}), mips={(unsigned int)mipCount}
+        </DisplayString>
+        <Expand>
+            <Item Name="name">name</Item>
+            <Item Name="handle">handle</Item>
+            <Item Name="width">width</Item>
+            <Item Name="height">height</Item>
+            <Item Name="widthFraction">widthFraction</Item>
+            <Item Name="heightFraction">heightFraction</Item>
+            <Item Name="hasMips">hasMips</Item>
+            <Item Name="mipCount">(unsigned int)mipCount</Item>
+            <Item Name="numLayers">numLayers</Item>
+            <Item Name="format">format</Item>
+            <Item Name="flags">flags</Item>
+            <Item Name="hasResized">hasResized</Item>
+        </Expand>
+    </Type>
+
+    <!-- FrameBuffer -->
+    <Type Name="FrameBuffer">
+        <DisplayString>
+            FrameBuffer "{name}" ({attachments.size()} attachments)
+        </DisplayString>
+        <Expand>
+            <Item Name="name">name</Item>
+            <Item Name="handle">handle</Item>
+            <Item Name="attachments">attachments</Item>
+            <Item Name="attachmentHandles">attachmentHandles</Item>
+        </Expand>
+    </Type>
+
+</AutoVisualizer>

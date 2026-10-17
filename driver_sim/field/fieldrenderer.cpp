@@ -3231,7 +3231,10 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         for (uint8_t i = gBloomFirstPass.mipCount - 1; i >= 1; --i)
         {
             encoder->setUniform(u_bloomIntensity, bloomIntensityField);
-            encoder->setTexture(0, s_bloomInput, gBloomFirstPass.handle, 0, 1, i, 1);
+            encoder->setTexture(0, s_bloomInput,
+                                i == gBloomFirstPass.mipCount - 1 ? gBloomFirstPass.handle
+                                                                  : gOutputColor.handle,
+                                0, 1, i, 1);
             encoder->setTexture(3, s_bloomDirt, bloomDirtMask.handle);
 
             mipSizeX = std::max(1.0f, floorf(float(m_width) / (1 << (i - 1))));
@@ -3408,6 +3411,16 @@ FieldRenderer::~FieldRenderer()
     fmsUI.reset();
     fms.reset();
     nt::NetworkTableInstance::Destroy(ntInst);
+
+    if (fieldModelLoadingFuture.valid())
+    {
+        fieldModelLoadingFuture.wait();
+    }
+
+    if (robotModelLoadingFuture.valid())
+    {
+        robotModelLoadingFuture.wait();
+    }
 
     for (auto &mesh : fieldMeshes)
     {

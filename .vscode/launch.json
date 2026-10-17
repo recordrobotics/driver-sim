@@ -42,6 +42,8 @@
                     "value": "/usr/local/Cellar/molten-vk/1.4.2/lib:/usr/local/lib"
                 }
             ],
+            "visualizerFile": "${workspaceFolder}/.vscode/types.natvis",
+            "showDisplayString": true,
             "externalConsole": false
         },
         {
