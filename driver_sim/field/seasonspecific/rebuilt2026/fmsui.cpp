@@ -402,7 +402,8 @@ void Rebuilt2026FMSUI::drawFMSUI(ImVec2 winSize)
     }
 }
 
-void Rebuilt2026FMSUI::tagFieldObjects(std::unordered_map<std::string, std::string> &tags)
+void Rebuilt2026FMSUI::preProcessField(std::unordered_map<std::string, std::string> &tags,
+                                       std::unordered_map<std::string, MeshLOD> &lodOverrides)
 {
     Rebuilt2026::addHubLedTags(tags);
 }

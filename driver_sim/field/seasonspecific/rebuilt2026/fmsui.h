@@ -31,7 +31,8 @@ class Rebuilt2026FMSUI : public IFMSUI
     void onNTCreated(nt::NetworkTableInstance &ntInst) override;
 
     void render(ImVec2 winSize) override;
-    void tagFieldObjects(std::unordered_map<std::string, std::string> &tags) override;
+    void preProcessField(std::unordered_map<std::string, std::string> &tags,
+                         std::unordered_map<std::string, MeshLOD> &lodOverrides) override;
     void postProcessField(std::vector<Mesh> &fieldMeshes) override;
 
   private:

@@ -727,17 +727,22 @@ void settings::draw(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize,
                  .defaultValue = settings::makeDefault().updateWhileMinimized});
             ImGui::Dummy(spacer);
 
-            drawSettingOption<RobotModelSimplificationMode>(
-                "useFullDetailRobotModel", "Use full detail robot model",
-                "The full detail robot model is the original unmodified 3D model provided by the "
-                "robot "
-                "asset. Driver Sim automatically performs simplification and optimization steps on "
-                "the "
-                "model to increase performance. This setting lets you optionally choose where to "
-                "bring "
-                "back the full detail robot model.",
-                {.value = &settings::current.useFullDetailRobotModel,
-                 .defaultValue = settings::makeDefault().useFullDetailRobotModel});
+            drawSettingOption<LODQuality>(
+                "modelQuality", "Model quality",
+                "Determines at what distance high-detail models are stopped being rendered.",
+                {.value = &settings::current.modelQuality,
+                 .defaultValue = settings::makeDefault().modelQuality});
+            ImGui::Dummy(spacer);
+
+            drawSettingOption<float>(
+                "mainRobotModelLODScale", "Main robot model LOD scale",
+                "The factor to scale the LOD distance for the main robot model. A value of 1.0 "
+                "means the main robot model behaves identical to the rest of the 3D models, a "
+                "value less than 1.0 means the main robot model will be rendered at a higher "
+                "quality, as if the camera was closer. A value more than 1.0 means the main robot "
+                "model will be rendered at a lower quality, as if the camera was further away.",
+                {.value = &settings::current.mainRobotModelLODScale,
+                 .defaultValue = settings::makeDefault().mainRobotModelLODScale});
             ImGui::Dummy(spacer);
 
             drawSettingOption<bool>(

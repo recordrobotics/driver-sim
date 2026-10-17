@@ -34,10 +34,11 @@ struct MeshGroupKey
 {
     Material material;
     std::string tag;
+    MeshLOD lod;
 
     bool operator==(const MeshGroupKey &other) const
     {
-        return material == other.material && tag == other.tag;
+        return material == other.material && tag == other.tag && lod == other.lod;
     }
 };
 
@@ -49,13 +50,15 @@ struct MeshGroupKeyHash
 
         hash_combine(hash, key.material);
         hash_combine(hash, key.tag);
+        hash_combine(hash, static_cast<std::underlying_type<MeshLOD>::type>(key.lod));
 
         return hash;
     }
 };
 
 void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset,
-                         const std::unordered_map<std::string, std::string> &tags)
+                         const std::unordered_map<std::string, std::string> &tags,
+                         const std::unordered_map<std::string, MeshLOD> &lodOverrides)
 {
     const std::size_t sceneIndex = asset.defaultScene.value_or(0);
 
@@ -93,6 +96,10 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
             auto tagIt = tags.find(nodeName);
             const std::string meshTag = (tagIt != tags.end()) ? tagIt->second : "";
 
+            auto lodIt = lodOverrides.find(nodeName);
+            std::optional<MeshLOD> lodOverride =
+                (lodIt != lodOverrides.end()) ? std::make_optional(lodIt->second) : std::nullopt;
+
             for (const auto &primitive : gltfMesh.primitives)
             {
                 const auto *positionIt = primitive.findAttribute("POSITION");
@@ -116,6 +123,80 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                     continue;
                 }
 
+                MeshLOD lod = lodOverride.value_or(MeshLOD::LOD_ALL);
+
+                if (!lodOverride.has_value() && positionAccessor.min.has_value() &&
+                    positionAccessor.max.has_value())
+                {
+                    const auto &min = positionAccessor.min.value();
+                    const auto &max = positionAccessor.max.value();
+
+                    fastgltf::math::fvec3 minVec;
+                    fastgltf::math::fvec3 maxVec;
+
+                    for (size_t i = 0; i < 3; ++i)
+                    {
+                        if (min.type() == fastgltf::AccessorBoundsArray::BoundsType::float64)
+                        {
+                            minVec[i] = static_cast<float>(min.get<double>(i));
+                            maxVec[i] = static_cast<float>(max.get<double>(i));
+                        }
+                        else
+                        {
+                            minVec[i] = static_cast<float>(min.get<int64_t>(i));
+                            maxVec[i] = static_cast<float>(max.get<int64_t>(i));
+                        }
+                    }
+
+                    fastgltf::math::fvec3 size = maxVec - minVec;
+
+                    // Prevent super high aspect ratio from having small volume
+                    float minSize = std::min(size.x(), std::min(size.y(), size.z()));
+                    float maxSize = std::max(size.x(), std::max(size.y(), size.z()));
+                    float aspectRatio = std::clamp(minSize / maxSize, 0.0f, 1.0f);
+                    aspectRatio *=
+                        aspectRatio; // square the aspect ratio to make it more aggressive
+                    size = fastgltf::math::fvec3(
+                        size.x() * aspectRatio + maxSize * (1.0f - aspectRatio),
+                        size.y() * aspectRatio + maxSize * (1.0f - aspectRatio),
+                        size.z() * aspectRatio + maxSize * (1.0f - aspectRatio));
+
+                    float volume = size.x() * size.y() * size.z();
+
+                    // Add vertex count to LOD
+                    uint32_t vertexCount = static_cast<uint32_t>(positionAccessor.count);
+                    volume /= static_cast<float>(vertexCount / 10000.0f);
+
+                    if (volume < 0.001f)
+                    {
+                        lod = MeshLOD::LOD_MAX_0;
+                    }
+                    else if (volume < 0.002f)
+                    {
+                        lod = MeshLOD::LOD_MAX_1;
+                    }
+                    else if (volume < 0.005f)
+                    {
+                        lod = MeshLOD::LOD_MAX_2;
+                    }
+                    else if (volume < 0.008f)
+                    {
+                        lod = MeshLOD::LOD_MAX_3;
+                    }
+                    else if (volume < 0.01f)
+                    {
+                        lod = MeshLOD::LOD_MAX_4;
+                    }
+                    else if (volume < 0.015f)
+                    {
+                        lod = MeshLOD::LOD_MAX_5;
+                    }
+                    else if (volume < 0.02f)
+                    {
+                        lod = MeshLOD::LOD_MAX_6;
+                    }
+                }
+
                 Material mat;
                 if (primitive.materialIndex.has_value() &&
                     primitive.materialIndex.value() < asset.materials.size())
@@ -123,7 +204,7 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                     mat = Material(asset.materials.at(primitive.materialIndex.value()), nodeName);
                 }
 
-                MeshGroupKey key{.material = mat, .tag = meshTag};
+                MeshGroupKey key{.material = mat, .tag = meshTag, .lod = lod};
 
                 auto itr = meshMap.find(key);
                 Mesh *meshPtr = nullptr;
@@ -134,6 +215,7 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
 
                     auto &mesh = meshesOut.emplace_back(mat);
                     mesh.tag = meshTag;
+                    mesh.lod = lod;
 
                     meshPtr = &mesh;
                 }
@@ -162,6 +244,15 @@ void Mesh::fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &as
                         vertex.u = 0.0f;
                         vertex.v = 0.0f;
                         mesh.vertices.push_back(vertex);
+
+                        IslandMap::Island &island =
+                            mesh.islands.getOrCreateIsland(bx::Vec3(vertex.x, vertex.y, vertex.z));
+                        island.boundsMin.x = std::min(island.boundsMin.x, vertex.x);
+                        island.boundsMin.y = std::min(island.boundsMin.y, vertex.y);
+                        island.boundsMin.z = std::min(island.boundsMin.z, vertex.z);
+                        island.boundsMax.x = std::max(island.boundsMax.x, vertex.x);
+                        island.boundsMax.y = std::max(island.boundsMax.y, vertex.y);
+                        island.boundsMax.z = std::max(island.boundsMax.z, vertex.z);
                     });
 
                 const auto *normalIt = primitive.findAttribute("NORMAL");
@@ -234,6 +325,7 @@ void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::
     outFile.write(reinterpret_cast<const char *>(&MESH_SERIALIZATION_VERSION),
                   sizeof(MESH_SERIALIZATION_VERSION));
 
+    // write meshes
     auto meshCount = static_cast<uint32_t>(meshes.size());
     outFile.write(reinterpret_cast<const char *>(&meshCount), sizeof(meshCount));
 
@@ -262,11 +354,30 @@ void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::
         outFile.write(reinterpret_cast<const char *>(&textureLength), sizeof(textureLength));
         outFile.write(reinterpret_cast<const char *>(mesh.material.texture.data()), textureLength);
 
+        // write lod
+        outFile.write(reinterpret_cast<const char *>(&mesh.lod), sizeof(mesh.lod));
+
+        // write islands
+        auto islandCount = static_cast<uint32_t>(mesh.islands.islands.size());
+        outFile.write(reinterpret_cast<const char *>(&islandCount), sizeof(islandCount));
+        for (const auto &[coordinate, island] : mesh.islands.islands)
+        {
+            outFile.write(reinterpret_cast<const char *>(&coordinate.x), sizeof(coordinate.x));
+            outFile.write(reinterpret_cast<const char *>(&coordinate.y), sizeof(coordinate.y));
+            outFile.write(reinterpret_cast<const char *>(&coordinate.z), sizeof(coordinate.z));
+            outFile.write(reinterpret_cast<const char *>(&island.boundsMin),
+                          sizeof(island.boundsMin));
+            outFile.write(reinterpret_cast<const char *>(&island.boundsMax),
+                          sizeof(island.boundsMax));
+        }
+
+        // write vertices
         auto vertexCount = static_cast<uint32_t>(mesh.vertices.size());
         outFile.write(reinterpret_cast<const char *>(&vertexCount), sizeof(vertexCount));
         outFile.write(reinterpret_cast<const char *>(mesh.vertices.data()),
                       static_cast<std::streamsize>(vertexCount * sizeof(MeshVertex)));
 
+        // write indices
         auto indexCount = static_cast<uint32_t>(mesh.indices.size());
         outFile.write(reinterpret_cast<const char *>(&indexCount), sizeof(indexCount));
         outFile.write(reinterpret_cast<const char *>(mesh.indices.data()),
@@ -283,6 +394,7 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
         throw std::runtime_error("Failed to open file for reading.");
     }
 
+    // read magic
     uint8_t magic[MESH_SERIALIZATION_MAGIC.size()];
     inFile.read(reinterpret_cast<char *>(magic), sizeof(magic));
     if (memcmp(magic, MESH_SERIALIZATION_MAGIC.data(), MESH_SERIALIZATION_MAGIC.size()) != 0)
@@ -291,6 +403,7 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
         throw std::runtime_error("Invalid mesh magic.");
     }
 
+    // read version
     uint8_t serializationVersion{};
     inFile.read(reinterpret_cast<char *>(&serializationVersion), sizeof(serializationVersion));
     if (serializationVersion != MESH_SERIALIZATION_VERSION)
@@ -299,6 +412,7 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
         throw std::runtime_error("Invalid mesh serialization version.");
     }
 
+    // read meshes
     uint32_t meshCount{};
     inFile.read(reinterpret_cast<char *>(&meshCount), sizeof(meshCount));
 
@@ -336,12 +450,32 @@ void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::p
         }
         mesh.material = material;
 
+        // read lod
+        inFile.read(reinterpret_cast<char *>(&mesh.lod), sizeof(mesh.lod));
+
+        // read islands
+        uint32_t islandCount{};
+        inFile.read(reinterpret_cast<char *>(&islandCount), sizeof(islandCount));
+        for (uint32_t j = 0; j < islandCount; ++j)
+        {
+            IslandMap::Coordinate coordinate;
+            IslandMap::Island island;
+            inFile.read(reinterpret_cast<char *>(&coordinate.x), sizeof(coordinate.x));
+            inFile.read(reinterpret_cast<char *>(&coordinate.y), sizeof(coordinate.y));
+            inFile.read(reinterpret_cast<char *>(&coordinate.z), sizeof(coordinate.z));
+            inFile.read(reinterpret_cast<char *>(&island.boundsMin), sizeof(island.boundsMin));
+            inFile.read(reinterpret_cast<char *>(&island.boundsMax), sizeof(island.boundsMax));
+            mesh.islands.islands[coordinate] = island;
+        }
+
+        // read vertices
         uint32_t vertexCount{};
         inFile.read(reinterpret_cast<char *>(&vertexCount), sizeof(vertexCount));
         mesh.vertices.resize(vertexCount);
         inFile.read(reinterpret_cast<char *>(mesh.vertices.data()),
                     static_cast<std::streamsize>(vertexCount * sizeof(MeshVertex)));
 
+        // read indices
         uint32_t indexCount{};
         inFile.read(reinterpret_cast<char *>(&indexCount), sizeof(indexCount));
         mesh.indices.resize(indexCount);
@@ -406,6 +540,11 @@ void Mesh::addCube(Mesh &mesh, float centerX, float centerY, float centerZ, floa
 
     mesh.vertices.reserve(mesh.vertices.size() + 24);
     mesh.indices.reserve(mesh.indices.size() + 36);
+
+    mesh.lod = MeshLOD::LOD_ALL;
+    IslandMap::Island &island = mesh.islands.getOrCreateIsland(bx::Vec3(centerX, centerY, centerZ));
+    island.boundsMin = bx::Vec3(centerX - extentX, centerY - extentY, centerZ - extentZ);
+    island.boundsMax = bx::Vec3(centerX + extentX, centerY + extentY, centerZ + extentZ);
 
     for (int faceIndex = 0; faceIndex < 6; ++faceIndex)
     {

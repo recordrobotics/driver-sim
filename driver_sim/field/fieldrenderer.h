@@ -228,6 +228,8 @@ struct RobotData
     Texture ledColorTexture;
     std::unique_ptr<uint8_t[]> ledColorData;
 
+    bool isMainRobot = false;
+
     RobotData(const RobotData &) = delete;
     RobotData &operator=(const RobotData &) = delete;
     RobotData(RobotData &&) noexcept = default;
@@ -360,13 +362,24 @@ class FieldRenderer
 
     void ensureTextures(uint16_t width, uint16_t height);
 
+    MeshLOD getLODForMesh(const Mesh &mesh, const bx::Vec3 &cameraPosition, float modelMatrix[16],
+                          float invModelMatrix[16], bool isMainRobotModel) const;
+
     void setupMesh(bgfx::Encoder *encoder, const Mesh &mesh, bool isTransparentPrepass = true);
 
     template <std::ranges::input_range R>
-    void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[2][16])
+    void drawMeshes(bgfx::Encoder *encoder, R &&meshes, float modelMatrix[2][16],
+                    float invModelMatrix[16], const bx::Vec3 &cameraPosition, bool isMainRobotModel)
     {
         for (const auto &mesh : meshes)
         {
+            MeshLOD lod = getLODForMesh(mesh, cameraPosition, modelMatrix[0], invModelMatrix,
+                                        isMainRobotModel);
+            if (!is_nonzero(mesh.lod & lod))
+            {
+                continue;
+            }
+
             setupMesh(encoder, mesh);
             encoder->setTransform(modelMatrix, 2);
             if (mesh.material.type == MaterialType::Transparent)
@@ -387,7 +400,8 @@ class FieldRenderer
     template <std::ranges::forward_range R>
     void drawRobotMeshes(
         bgfx::Encoder *encoder, RobotModel *robotModel, R &&meshes,
-        const std::vector<std::pair<const InstanceData &, const RobotData &>> &instances)
+        const std::vector<std::pair<const InstanceData &, const RobotData &>> &instances,
+        const bx::Vec3 &cameraPosition)
     {
         auto instanceableMeshes =
             meshes | std::views::filter([robotModel](const Mesh &mesh)
@@ -402,7 +416,13 @@ class FieldRenderer
         std::ranges::transform(instances, std::back_inserter(instanceData),
                                [](const auto &pair) { return pair.first; });
 
-        drawMeshesInstanced(encoder, instanceableMeshes, instanceData);
+        std::vector<bool> isMainRobotModel;
+        isMainRobotModel.reserve(instances.size());
+        std::ranges::transform(instances, std::back_inserter(isMainRobotModel),
+                               [robotModel](const auto &pair) { return pair.second.isMainRobot; });
+
+        drawMeshesInstanced(encoder, instanceableMeshes, instanceData, cameraPosition,
+                            isMainRobotModel);
 
         if (std::ranges::distance(nonInstanceableMeshes) == 0)
         {
@@ -425,8 +445,18 @@ class FieldRenderer
             instance.first.transform.toMatrix(matrices[0]);
             instance.first.previousTransform.toMatrix(matrices[1]);
 
+            float invMatrix[16];
+            bx::mtxInverse(invMatrix, matrices[0]);
+
             for (auto &mesh : nonInstanceableMeshes)
             {
+                MeshLOD lod = getLODForMesh(mesh, cameraPosition, matrices[0], invMatrix,
+                                            instance.second.isMainRobot);
+                if (!is_nonzero(mesh.lod & lod))
+                {
+                    continue;
+                }
+
                 setupMesh(encoder, mesh);
                 encoder->setTransform(matrices, 2);
 
@@ -466,7 +496,9 @@ class FieldRenderer
 
     template <std::ranges::input_range R>
     void drawMeshesInstanced(bgfx::Encoder *encoder, R &&meshes,
-                             const std::vector<InstanceData> &instanceData)
+                             const std::vector<InstanceData> &instanceData,
+                             const bx::Vec3 &cameraPosition,
+                             const std::vector<bool> &isMainRobotModel = std::vector<bool>())
     {
         // figure out how big of a buffer is available
         uint32_t instanceCount =
@@ -475,18 +507,41 @@ class FieldRenderer
         bgfx::InstanceDataBuffer idb;
         bgfx::allocInstanceDataBuffer(&idb, instanceCount, sizeof(InstanceData));
 
-        std::memcpy(idb.data, instanceData.data(), instanceCount * sizeof(InstanceData));
+        std::vector<InstanceData> filteredInstanceData;
+        filteredInstanceData.reserve(instanceCount);
+
+        float modelMatrix[16];
+        float invModelMatrix[16];
 
         for (const auto &mesh : meshes)
         {
+            filteredInstanceData.clear();
+            for (size_t i = 0; i < instanceCount; ++i)
+            {
+                instanceData[i].transform.toMatrix(modelMatrix);
+                bx::mtxInverse(invModelMatrix, modelMatrix);
+                MeshLOD lod =
+                    getLODForMesh(mesh, cameraPosition, modelMatrix, invModelMatrix,
+                                  i < isMainRobotModel.size() ? isMainRobotModel[i] : false);
+                if (is_nonzero(mesh.lod & lod))
+                {
+                    filteredInstanceData.push_back(instanceData[i]);
+                }
+            }
+
+            std::memcpy(idb.data, filteredInstanceData.data(),
+                        filteredInstanceData.size() * sizeof(InstanceData));
+
             setupMesh(encoder, mesh);
 
-            encoder->setInstanceDataBuffer(&idb);
+            encoder->setInstanceDataBuffer(&idb, 0,
+                                           static_cast<uint32_t>(filteredInstanceData.size()));
             if (mesh.material.type == MaterialType::Transparent)
             {
                 encoder->submit(VIEW_OIT_MOMENTS, programOitMomentsInstanced);
                 setupMesh(encoder, mesh, false);
-                encoder->setInstanceDataBuffer(&idb);
+                encoder->setInstanceDataBuffer(&idb, 0,
+                                               static_cast<uint32_t>(filteredInstanceData.size()));
                 encoder->submit(VIEW_OIT, programOitInstanced);
             }
             else
@@ -498,7 +553,8 @@ class FieldRenderer
 
     template <std::ranges::input_range R>
     void drawRobot(bgfx::Encoder *encoder, RobotModel *robotModel, R &&instances,
-                   const std::function<bool(const DynamicObjectData &)> &componentFilter)
+                   const std::function<bool(const DynamicObjectData &)> &componentFilter,
+                   const bx::Vec3 &cameraPosition)
     {
         if (instances.empty())
         {
@@ -512,7 +568,7 @@ class FieldRenderer
             robotInstances.emplace_back(robot.dynamicData.instanceData, robot);
         }
 
-        drawRobotMeshes(encoder, robotModel, robotModel->meshes, robotInstances);
+        drawRobotMeshes(encoder, robotModel, robotModel->meshes, robotInstances, cameraPosition);
 
         std::map<size_t, std::vector<std::pair<const InstanceData &, const RobotData &>>>
             componentInstancesMap;
@@ -547,7 +603,8 @@ class FieldRenderer
             }
 
             const auto &component = robotModel->components[index];
-            drawRobotMeshes(encoder, robotModel, component.meshes, componentInstances);
+            drawRobotMeshes(encoder, robotModel, component.meshes, componentInstances,
+                            cameraPosition);
         }
     }
 
@@ -737,6 +794,7 @@ class FieldRenderer
     float gtaoBentNormalIntensity = 0.7f; // 0.7 looks a bit better than 1.0 with metallic materials
 
     float fieldModelMatrix[2][16];
+    float invFieldModelMatrix[16];
 
     WPILibCoordinateSystem coordinateSystem = WPILibCoordinateSystem::CenterRed;
     float fieldWidthMeters = 1.0f;
@@ -803,6 +861,8 @@ class FieldRenderer
     bool isTopUISummoned = false;
     std::chrono::steady_clock::time_point firstTopUISummonTime;
     std::chrono::steady_clock::time_point lastTopUISummonTime;
+
+    int cameraLODOverride = -1;
 
     bool showViewMode = false;
 };

@@ -1298,9 +1298,14 @@ static void performRotationStack(float out[16], const std::vector<ModelRotationC
  * this is useful for dynamically removing meshes based on tags.
  * additionally, meshes with same tag but different materials will also stay separated, since they
  * can't be merged anyway.
+ *
+ * lodOverrides is a map of mesh-name:MeshLOD, which allows overriding the LOD of specific
+ * meshes. this is useful for meshes that are small but important (such as RSL or led strips),
+ * and should be drawn at higher LODs than their size would normally make them.
  */
 static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory, std::string name,
-                               const std::unordered_map<std::string, std::string> &tags)
+                               const std::unordered_map<std::string, std::string> &tags,
+                               const std::unordered_map<std::string, MeshLOD> &lodOverrides)
 {
     std::filesystem::path glbPath = directory + name + ".glb";
     std::filesystem::path cachePath = directory + name + ".cache";
@@ -1328,7 +1333,7 @@ static void loadAndCacheMeshes(std::vector<Mesh> &meshes, std::string directory,
             .loadGltfBinary(fastgltf::GltfDataBuffer::FromPath(glbPath.string()).get(), directory,
                             fastgltf::Options::DontRequireValidAssetMember)
             .get(),
-        tags);
+        tags, lodOverrides);
 
     if (settings::current.cacheModels)
     {
@@ -1364,12 +1369,14 @@ void FieldRenderer::loadFieldModel()
         performRotationStack(fieldModelMatrix[0],
                              j["rotations"].get<std::vector<ModelRotationConfig>>());
         std::memcpy(fieldModelMatrix[1], fieldModelMatrix[0], sizeof(float) * 16);
+        bx::mtxInverse(invFieldModelMatrix, fieldModelMatrix[0]);
 
         coordinateSystem = coordinateSystemFromString(j["coordinateSystem"].get<std::string>());
         fieldWidthMeters = j["widthInches"].get<float>() * INCHES_TO_METERS;
         fieldHeightMeters = j["heightInches"].get<float>() * INCHES_TO_METERS;
 
         std::unordered_map<std::string, std::string> tags;
+        std::unordered_map<std::string, MeshLOD> lodOverrides;
 
         if (j.contains("gamePieces"))
         {
@@ -1452,15 +1459,15 @@ void FieldRenderer::loadFieldModel()
 
         if (fmsUI)
         {
-            fmsUI->tagFieldObjects(tags);
+            fmsUI->preProcessField(tags, lodOverrides);
         }
 
-        loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model", tags);
+        loadAndCacheMeshes(fieldMeshes, fieldDirectory, "model", tags, lodOverrides);
 
         for (size_t i = 0; i < gamePieces.size(); i++)
         {
             loadAndCacheMeshes(gamePieces[i].meshes, fieldDirectory, "model_" + std::to_string(i),
-                               {});
+                               {}, {});
             for (auto &mesh : gamePieces[i].meshes)
             {
                 mesh.material.writesObjectMotionVectors = true;
@@ -1609,10 +1616,13 @@ void FieldRenderer::loadRobotModel()
         }
 
         std::unordered_map<std::string, std::string> tags;
+        std::unordered_map<std::string, MeshLOD> lodOverrides;
 
         for (const auto &rslNodeName : rslNodeNames)
         {
             tags[rslNodeName] = "rsl";
+            // Force rsl to be drawn at further distance for better driver visibility
+            lodOverrides[rslNodeName] = MeshLOD::LOD_MAX_3;
         }
 
         for (const auto &bumperNodeName : bumperNodeNames)
@@ -1623,9 +1633,11 @@ void FieldRenderer::loadRobotModel()
         for (const auto &ledNodeName : ledNodeNames)
         {
             tags[ledNodeName] = "led";
+            // Force led mesh to always be full detail since it needs specific UVs and geometry
+            lodOverrides[ledNodeName] = MeshLOD::LOD_ALL;
         }
 
-        loadAndCacheMeshes(robotModel.meshes, robotDirectory, "model", tags);
+        loadAndCacheMeshes(robotModel.meshes, robotDirectory, "model", tags, lodOverrides);
         for (auto &mesh : robotModel.meshes)
         {
             mesh.material.writesObjectMotionVectors = true;
@@ -1633,7 +1645,7 @@ void FieldRenderer::loadRobotModel()
         for (size_t i = 0; i < components.size(); i++)
         {
             loadAndCacheMeshes(robotModel.components[i].meshes, robotDirectory,
-                               "model_" + std::to_string(i), {});
+                               "model_" + std::to_string(i), {}, {});
             for (auto &mesh : robotModel.components[i].meshes)
             {
                 mesh.material.writesObjectMotionVectors = true;
@@ -2045,6 +2057,80 @@ void FieldRenderer::drawAprilTags(bgfx::Encoder *encoder)
     encoder->submit(VIEW_GBUFFER, programPBRApriltag);
 }
 
+MeshLOD FieldRenderer::getLODForMesh(const Mesh &mesh, const bx::Vec3 &cameraPosition,
+                                     float modelMatrix[16], float invModelMatrix[16],
+                                     bool isMainRobotModel) const
+{
+    if (cameraLODOverride >= 0)
+    {
+        return static_cast<MeshLOD>(1U << static_cast<uint8_t>(cameraLODOverride));
+    }
+
+    std::optional<bx::Vec3> meshCenter =
+        mesh.getClosestWorldCenter(cameraPosition, modelMatrix, invModelMatrix);
+
+    if (!meshCenter.has_value())
+    {
+        return MeshLOD::LOD0;
+    }
+
+    float distance = bx::distance(meshCenter.value(), cameraPosition);
+
+    if (isMainRobotModel)
+    {
+        distance *= settings::current.mainRobotModelLODScale;
+    }
+
+    switch (settings::current.modelQuality)
+    {
+    case LODQuality::Low:
+        distance *= 2.0f;
+        break;
+    case LODQuality::Medium:
+        distance *= 1.0f;
+        break;
+    case LODQuality::High:
+        distance *= 0.2f;
+        break;
+    case LODQuality::Ultra:
+        distance *= 0.01f;
+        break;
+    }
+
+    if (distance < 1.0)
+    {
+        return MeshLOD::LOD0;
+    }
+    else if (distance < 2.0)
+    {
+        return MeshLOD::LOD1;
+    }
+    else if (distance < 4.0)
+    {
+        return MeshLOD::LOD2;
+    }
+    else if (distance < 6.0)
+    {
+        return MeshLOD::LOD3;
+    }
+    else if (distance < 10.0)
+    {
+        return MeshLOD::LOD4;
+    }
+    else if (distance < 30.0)
+    {
+        return MeshLOD::LOD5;
+    }
+    else if (distance < 50.0)
+    {
+        return MeshLOD::LOD6;
+    }
+    else
+    {
+        return MeshLOD::LOD7;
+    }
+}
+
 void FieldRenderer::addRobot(std::string_view poseTopic, std::string_view componentPosesTopic,
                              std::string_view rslStateTopic, std::string_view allianceStationTopic,
                              std::string_view ledColorsTopic, std::string_view enabledTopic)
@@ -2091,6 +2177,11 @@ void FieldRenderer::drawDebugMenu()
     }
 
     ImGui::Checkbox("Freeze Temporal Effects", &freezeTemporalEffects);
+
+    ImGui::Separator();
+
+    ImGui::Text("Camera LOD Override");
+    ImGui::SliderInt("LOD Override", &cameraLODOverride, -1, 7);
 
     ImGui::Separator();
 
@@ -2670,11 +2761,30 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     auto coordTransform = [this](const frc::Pose3d &pose)
     { return transformPose3dToLocalCoordinates(pose); };
 
-    for (auto &[robotModel, instances] : robots)
     {
-        for (auto &robot : instances)
+        size_t robotModelIndex = 0;
+        for (auto &[robotModel, instances] : robots)
         {
-            robot.update(currentDataUpdateIndex, deltaTime, freezeTemporalEffects, coordTransform);
+            size_t robotInstanceIndex = 0;
+            for (auto &robot : instances)
+            {
+                robot.update(currentDataUpdateIndex, deltaTime, freezeTemporalEffects,
+                             coordTransform);
+
+                if (settings::current.cameraTarget.size() == 2 &&
+                    robotModelIndex == settings::current.cameraTarget[0] &&
+                    robotInstanceIndex == settings::current.cameraTarget[1])
+                {
+                    robot.isMainRobot = true;
+                }
+                else
+                {
+                    robot.isMainRobot = false;
+                }
+
+                robotInstanceIndex++;
+            }
+            robotModelIndex++;
         }
     }
 
@@ -2837,6 +2947,10 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     float viewProj[16];
     bx::mtxMul(viewProj, view, proj);
 
+    float invView[16];
+    bx::mtxInverse(invView, view);
+    bx::Vec3 cameraPos = bx::mul({0.0f, 0.0f, 0.0f}, invView);
+
     if (firstFrame)
     {
         std::memcpy(previousViewProj, viewProj, sizeof(viewProj));
@@ -2931,7 +3045,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                                    { return pair.second.instanceData; });
             if (!instanceData.empty())
             {
-                drawMeshesInstanced(encoder, gamePiece.meshes, instanceData);
+                drawMeshesInstanced(encoder, gamePiece.meshes, instanceData, cameraPos, {});
                 drawnGamePieces.push_back(gamePiece.name);
             }
         }
@@ -2946,7 +3060,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                                       drawnGamePieces.end(); /* only draw meshes that haven't been
                                                                 drawn by game pieces */
                            }),
-                   fieldModelMatrix);
+                   fieldModelMatrix, invFieldModelMatrix, cameraPos, false);
 
         drawAprilTags(encoder);
     }
@@ -2962,7 +3076,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                         [this](const RobotData &robot)
                         { return robot.dynamicData.lastDataUpdate == currentDataUpdateIndex; }),
                 [this](const DynamicObjectData &component)
-                { return component.lastDataUpdate == currentDataUpdateIndex; });
+                { return component.lastDataUpdate == currentDataUpdateIndex; }, cameraPos);
         }
     }
 

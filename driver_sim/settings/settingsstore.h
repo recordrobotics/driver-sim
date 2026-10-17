@@ -55,38 +55,35 @@ template <> constexpr auto enum_all_values<CameraView>()
                                      CameraView::RobotRelative, CameraView::DriverStation};
 }
 
-enum class RobotModelSimplificationMode : uint8_t
+enum class LODQuality : uint8_t
 {
-    Never,
-    Distance,
-    MainRobot,
-    Always
+    Low,
+    Medium,
+    High,
+    Ultra
 };
 
-template <>
-constexpr std::string_view
-enum_to_string<RobotModelSimplificationMode>(RobotModelSimplificationMode value)
+template <> constexpr std::string_view enum_to_string<LODQuality>(LODQuality value)
 {
     switch (value)
     {
-    case RobotModelSimplificationMode::Never:
-        return "Never";
-    case RobotModelSimplificationMode::Distance:
-        return "By Distance";
-    case RobotModelSimplificationMode::MainRobot:
-        return "Only Main Robot";
-    case RobotModelSimplificationMode::Always:
-        return "Always";
+    case LODQuality::Low:
+        return "Low";
+    case LODQuality::Medium:
+        return "Medium";
+    case LODQuality::High:
+        return "High";
+    case LODQuality::Ultra:
+        return "Ultra";
     default:
         return "Unknown";
     }
 }
 
-template <> constexpr auto enum_all_values<RobotModelSimplificationMode>()
+template <> constexpr auto enum_all_values<LODQuality>()
 {
-    return std::array<RobotModelSimplificationMode, 4>{
-        RobotModelSimplificationMode::Never, RobotModelSimplificationMode::Distance,
-        RobotModelSimplificationMode::MainRobot, RobotModelSimplificationMode::Always};
+    return std::array<LODQuality, 4>{LODQuality::Low, LODQuality::Medium, LODQuality::High,
+                                     LODQuality::Ultra};
 }
 
 namespace settings
@@ -138,7 +135,8 @@ namespace settings
         std::string renderApi;
         bool enableVSync;
         bool updateWhileMinimized;
-        RobotModelSimplificationMode useFullDetailRobotModel;
+        LODQuality modelQuality;
+        float mainRobotModelLODScale;
         bool cacheModels;
         bool writeObjectMotionVectors;
         bool enableGTAO;

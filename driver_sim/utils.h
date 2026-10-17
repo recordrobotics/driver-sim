@@ -133,3 +133,61 @@ constexpr bool containsIgnoreCase(std::string_view str, std::string_view sub)
 
     return !result.empty();
 }
+
+#if __cplusplus
+template <typename ENUMTYPE> struct UTILS__ENUM_FLAG_SIZED_INTEGER
+{
+    using type = std::underlying_type_t<ENUMTYPE>;
+};
+
+#if _MSC_VER >= 1900 || __cplusplus >= 201103L
+#define UTILS__ENUM_FLAG_CONSTEXPR constexpr
+#else
+#define UTILS__ENUM_FLAG_CONSTEXPR
+#endif
+
+#define UTILS_DEFINE_ENUM_FLAG_OPERATORS(ENUMTYPE)                                                 \
+    extern "C++"                                                                                   \
+    {                                                                                              \
+        inline UTILS__ENUM_FLAG_CONSTEXPR ENUMTYPE operator|(ENUMTYPE a, ENUMTYPE b) noexcept      \
+        {                                                                                          \
+            return ENUMTYPE(((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) |                  \
+                            ((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));                  \
+        }                                                                                          \
+        inline ENUMTYPE &operator|=(ENUMTYPE &a, ENUMTYPE b) noexcept                              \
+        {                                                                                          \
+            return (ENUMTYPE &)(((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) |=           \
+                                ((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));              \
+        }                                                                                          \
+        inline UTILS__ENUM_FLAG_CONSTEXPR ENUMTYPE operator&(ENUMTYPE a, ENUMTYPE b) noexcept      \
+        {                                                                                          \
+            return ENUMTYPE(((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) &                  \
+                            ((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));                  \
+        }                                                                                          \
+        inline ENUMTYPE &operator&=(ENUMTYPE &a, ENUMTYPE b) noexcept                              \
+        {                                                                                          \
+            return (ENUMTYPE &)(((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) &=           \
+                                ((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));              \
+        }                                                                                          \
+        inline UTILS__ENUM_FLAG_CONSTEXPR ENUMTYPE operator~(ENUMTYPE a) noexcept                  \
+        {                                                                                          \
+            return ENUMTYPE(~((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a));                 \
+        }                                                                                          \
+        inline UTILS__ENUM_FLAG_CONSTEXPR ENUMTYPE operator^(ENUMTYPE a, ENUMTYPE b) noexcept      \
+        {                                                                                          \
+            return ENUMTYPE(((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) ^                  \
+                            ((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));                  \
+        }                                                                                          \
+        inline ENUMTYPE &operator^=(ENUMTYPE &a, ENUMTYPE b) noexcept                              \
+        {                                                                                          \
+            return (ENUMTYPE &)(((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) ^=           \
+                                ((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));              \
+        }                                                                                          \
+        inline UTILS__ENUM_FLAG_CONSTEXPR bool is_nonzero(ENUMTYPE a) noexcept                     \
+        {                                                                                          \
+            return ((UTILS__ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) != 0;                       \
+        }                                                                                          \
+    }
+#else
+#define UTILS_DEFINE_ENUM_FLAG_OPERATORS(ENUMTYPE) // NOP, C allows these operators.
+#endif

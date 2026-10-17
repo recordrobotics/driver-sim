@@ -2,6 +2,7 @@
 
 #include "../utils.h"
 #include <bgfx/bgfx.h>
+#include <bx/math.h>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -13,13 +14,43 @@
 #include <fastgltf/types.hpp>
 
 constexpr std::array<uint8_t, 4> MESH_SERIALIZATION_MAGIC = {0x67, 0x31, 0x67, 0x31};
-constexpr uint8_t MESH_SERIALIZATION_VERSION = 9; // increment to force reload cache
+constexpr uint8_t MESH_SERIALIZATION_VERSION = 10; // increment to force reload cache
 
 enum class MaterialType : uint8_t
 {
     Opaque,
-    Transparent
+    Transparent,
 };
+
+/**
+ * LOD flags. When targeting a certain LOD, only meshes with that level are drawn.
+ * Ex. if you want a mesh to be drawn at and below LOD6, set the LOD flag to LOD6 | LOD7.
+ */
+enum class MeshLOD : uint8_t
+{
+    // Highest level of detail
+    LOD0 = (1U << 0U),
+    LOD1 = (1U << 1U),
+    LOD2 = (1U << 2U),
+    LOD3 = (1U << 3U),
+    LOD4 = (1U << 4U),
+    LOD5 = (1U << 5U),
+    LOD6 = (1U << 6U),
+    // Lowest level of detail
+    LOD7 = (1U << 7U),
+
+    LOD_ALL = LOD0 | LOD1 | LOD2 | LOD3 | LOD4 | LOD5 | LOD6 | LOD7,
+
+    LOD_MAX_0 = LOD0,
+    LOD_MAX_1 = LOD_MAX_0 | LOD1,
+    LOD_MAX_2 = LOD_MAX_1 | LOD2,
+    LOD_MAX_3 = LOD_MAX_2 | LOD3,
+    LOD_MAX_4 = LOD_MAX_3 | LOD4,
+    LOD_MAX_5 = LOD_MAX_4 | LOD5,
+    LOD_MAX_6 = LOD_MAX_5 | LOD6,
+};
+
+UTILS_DEFINE_ENUM_FLAG_OPERATORS(MeshLOD)
 
 namespace fmt
 {
@@ -153,10 +184,108 @@ struct MeshVertex
     }
 };
 
+struct IslandMap
+{
+    struct Coordinate
+    {
+        int32_t x;
+        int32_t y;
+        int32_t z;
+
+        bool operator==(const Coordinate &other) const
+        {
+            return x == other.x && y == other.y && z == other.z;
+        }
+    };
+
+    struct CoordinateHash
+    {
+        std::size_t operator()(const Coordinate &coord) const
+        {
+            std::size_t hash = 2166136261u;
+            hash_combine(hash, coord.x);
+            hash_combine(hash, coord.y);
+            hash_combine(hash, coord.z);
+            return hash;
+        }
+    };
+
+    struct Island
+    {
+        bx::Vec3 boundsMin{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                           std::numeric_limits<float>::max()};
+        bx::Vec3 boundsMax{std::numeric_limits<float>::min(), std::numeric_limits<float>::min(),
+                           std::numeric_limits<float>::min()};
+    };
+
+    float islandSize = 0.1f;
+    std::unordered_map<Coordinate, Island, CoordinateHash> islands;
+
+    Coordinate getIslandCoordinate(const bx::Vec3 &position) const
+    {
+        return Coordinate{static_cast<int32_t>(std::floor(position.x / islandSize)),
+                          static_cast<int32_t>(std::floor(position.y / islandSize)),
+                          static_cast<int32_t>(std::floor(position.z / islandSize))};
+    }
+
+    Island &getOrCreateIsland(const bx::Vec3 &position)
+    {
+        Coordinate coord = getIslandCoordinate(position);
+        auto it = islands.find(coord);
+        if (it != islands.end())
+        {
+            return it->second;
+        }
+        else
+        {
+            Island newIsland;
+            islands[coord] = newIsland;
+            return islands[coord];
+        }
+    }
+
+    std::optional<Island> getClosestIsland(const bx::Vec3 &position) const
+    {
+        Coordinate coord = getIslandCoordinate(position);
+        auto it = islands.find(coord);
+        if (it != islands.end())
+        {
+            return it->second;
+        }
+        else if (!islands.empty())
+        {
+            int32_t closestDistance = std::numeric_limits<int32_t>::max();
+            Island closestIsland = islands.begin()->second; // Initialize with the first island
+
+            for (const auto &[islandCoord, island] : islands)
+            {
+                int32_t dx = islandCoord.x - coord.x;
+                int32_t dy = islandCoord.y - coord.y;
+                int32_t dz = islandCoord.z - coord.z;
+
+                int32_t distance = dx * dx + dy * dy + dz * dz;
+
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closestIsland = island;
+                }
+            }
+            return closestIsland;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+    }
+};
+
 struct Mesh
 {
     std::string tag;
     Material material;
+    MeshLOD lod = MeshLOD::LOD_ALL;
+    IslandMap islands;
 
     std::vector<MeshVertex> vertices;
     std::vector<uint32_t> indices;
@@ -204,15 +333,37 @@ struct Mesh
         indices.clear();
     }
 
+    inline std::optional<bx::Vec3> getClosestWorldCenter(bx::Vec3 worldPosition,
+                                                         float modelMatrix[16],
+                                                         float invModelMatrix[16]) const
+    {
+        bx::Vec3 localPosition = bx::mul(worldPosition, invModelMatrix);
+
+        std::optional<IslandMap::Island> island = islands.getClosestIsland(localPosition);
+        if (!island.has_value())
+        {
+            return std::nullopt;
+        }
+
+        bx::Vec3 center =
+            bx::mul(bx::add(island.value().boundsMin, island.value().boundsMax), 0.5f);
+        return bx::mul(center, modelMatrix);
+    }
+
     /**
      * tags is a map of mesh-name:tag
      * meshes of the same material but different tags will stay separated and won't be merged.
      * this is useful for dynamically removing meshes based on tags.
      * additionally, meshes with same tag but different materials will also stay separated, since
      * they can't be merged anyway.
+     *
+     * lodOverrides is a map of mesh-name:MeshLOD, which allows overriding the LOD of specific
+     * meshes. this is useful for meshes that are small but important (such as RSL or led strips),
+     * and should be drawn at higher LODs than their size would normally make them.
      */
     static void fromGltfModel(std::vector<Mesh> &meshesOut, const fastgltf::Asset &asset,
-                              const std::unordered_map<std::string, std::string> &tags);
+                              const std::unordered_map<std::string, std::string> &tags,
+                              const std::unordered_map<std::string, MeshLOD> &lodOverrides);
     static void fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path);
     static void toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path);
     static void createBuffersForMeshes(std::vector<Mesh> &meshes);

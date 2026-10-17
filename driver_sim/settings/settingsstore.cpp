@@ -77,48 +77,48 @@ namespace nlohmann
         }
     };
 
-    template <> struct adl_serializer<RobotModelSimplificationMode>
+    template <> struct adl_serializer<LODQuality>
     {
-        static void to_json(json &json, const RobotModelSimplificationMode &value)
+        static void to_json(json &json, const LODQuality &value)
         {
             switch (value)
             {
-            case RobotModelSimplificationMode::Never:
-                json = "never";
+            case LODQuality::Low:
+                json = "low";
                 break;
-            case RobotModelSimplificationMode::Distance:
-                json = "distance";
+            case LODQuality::Medium:
+                json = "medium";
                 break;
-            case RobotModelSimplificationMode::MainRobot:
-                json = "main-robot";
+            case LODQuality::High:
+                json = "high";
                 break;
-            case RobotModelSimplificationMode::Always:
-                json = "always";
+            case LODQuality::Ultra:
+                json = "ultra";
                 break;
             }
         }
 
-        static RobotModelSimplificationMode from_json(const json &json)
+        static LODQuality from_json(const json &json)
         {
-            std::string mode = json.get<std::string>();
-            if (mode == "never")
+            std::string quality = json.get<std::string>();
+            if (quality == "low")
             {
-                return RobotModelSimplificationMode::Never;
+                return LODQuality::Low;
             }
-            if (mode == "distance")
+            if (quality == "medium")
             {
-                return RobotModelSimplificationMode::Distance;
+                return LODQuality::Medium;
             }
-            if (mode == "main-robot")
+            if (quality == "high")
             {
-                return RobotModelSimplificationMode::MainRobot;
+                return LODQuality::High;
             }
-            if (mode == "always")
+            if (quality == "ultra")
             {
-                return RobotModelSimplificationMode::Always;
+                return LODQuality::Ultra;
             }
 
-            throw std::invalid_argument("Invalid robot model simplification mode");
+            throw std::invalid_argument("Invalid LOD quality");
         }
     };
 } // namespace nlohmann
@@ -190,7 +190,8 @@ namespace settings
             .renderApi = "auto",
             .enableVSync = true,
             .updateWhileMinimized = true,
-            .useFullDetailRobotModel = RobotModelSimplificationMode::Distance,
+            .modelQuality = LODQuality::High,
+            .mainRobotModelLODScale = 1.0f,
             .cacheModels = true,
             .writeObjectMotionVectors = true,
             .enableGTAO = true,
@@ -382,8 +383,9 @@ namespace settings
             current.enableVSync = json.value("enableVSync", current.enableVSync);
             current.updateWhileMinimized =
                 json.value("updateWhileMinimized", current.updateWhileMinimized);
-            current.useFullDetailRobotModel =
-                json.value("useFullDetailRobotModel", current.useFullDetailRobotModel);
+            current.modelQuality = json.value("modelQuality", current.modelQuality);
+            current.mainRobotModelLODScale =
+                json.value("mainRobotModelLODScale", current.mainRobotModelLODScale);
             current.cacheModels = json.value("cacheModels", current.cacheModels);
             current.writeObjectMotionVectors =
                 json.value("writeObjectMotionVectors", current.writeObjectMotionVectors);
@@ -450,7 +452,8 @@ namespace settings
         json["renderApi"] = current.renderApi;
         json["enableVSync"] = current.enableVSync;
         json["updateWhileMinimized"] = current.updateWhileMinimized;
-        json["useFullDetailRobotModel"] = current.useFullDetailRobotModel;
+        json["modelQuality"] = current.modelQuality;
+        json["mainRobotModelLODScale"] = current.mainRobotModelLODScale;
         json["cacheModels"] = current.cacheModels;
         json["writeObjectMotionVectors"] = current.writeObjectMotionVectors;
         json["enableGTAO"] = current.enableGTAO;
