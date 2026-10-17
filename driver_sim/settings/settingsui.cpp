@@ -749,9 +749,8 @@ void settings::draw(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize,
                 "cacheModels", "Cache 3D models",
                 "Whether to cache the pre-processed 3D model files. When enabled, this "
                 "significantly "
-                "lowers startup time (by a factor of 10x or more) however uses around 2-3x more "
-                "disk "
-                "space. It is strongly recommended to keep this enabled if possible.",
+                "lowers startup time (by a factor of 10x or more) however uses around 1.5-2x more "
+                "disk space. It is strongly recommended to keep this enabled if possible.",
                 {.value = &settings::current.cacheModels,
                  .defaultValue = settings::makeDefault().cacheModels});
             ImGui::Dummy(spacer);

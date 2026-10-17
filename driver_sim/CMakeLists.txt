@@ -190,6 +190,7 @@ target_link_libraries(${PROJECT_NAME}
     fmt::fmt
     discordsdk::discordsdk
     yaml-cpp::yaml-cpp
+    ZLIB::ZLIBSTATIC
 )
 
 target_include_directories(${PROJECT_NAME}

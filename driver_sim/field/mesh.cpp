@@ -1,5 +1,6 @@
 #include "mesh.h"
 
+#include "../gziputils.h"
 #include <blackboard_app/logger.h>
 #include <bx/error.h>
 #include <bx/pixelformat.h>
@@ -310,12 +311,15 @@ void Mesh::createBuffersForMeshes(Mesh &mesh)
 
 void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::path &path)
 {
-    std::ofstream outFile(path, std::ios::binary);
-    if (!outFile)
+    std::ofstream file(path, std::ios::binary);
+    if (!file)
     {
         logger->error("Failed to open file for writing: {}", path.string());
         throw std::runtime_error("Failed to open file for writing.");
     }
+
+    GzipOutputBuf gzipBuffer(file);
+    std::ostream outFile(&gzipBuffer);
 
     // write magic
     outFile.write(reinterpret_cast<const char *>(MESH_SERIALIZATION_MAGIC.data()),
@@ -383,16 +387,35 @@ void Mesh::toSerialized(const std::vector<Mesh> &meshes, const std::filesystem::
         outFile.write(reinterpret_cast<const char *>(mesh.indices.data()),
                       static_cast<std::streamsize>(indexCount * sizeof(uint32_t)));
     }
+
+    outFile.flush();
+    if (!outFile)
+    {
+        logger->error("Failed to serialize mesh to file: {}", path.string());
+        throw std::runtime_error("Failed to serialize mesh");
+    }
+
+    gzipBuffer.finish();
+    file.flush();
+
+    if (!file)
+    {
+        logger->error("Failed to write gzip file: {}", path.string());
+        throw std::runtime_error("Failed to write gzip file");
+    }
 }
 
 void Mesh::fromSerialized(std::vector<Mesh> &meshesOut, const std::filesystem::path &path)
 {
-    std::ifstream inFile(path, std::ios::binary);
-    if (!inFile)
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
     {
         logger->error("Failed to open file for reading: {}", path.string());
         throw std::runtime_error("Failed to open file for reading.");
     }
+
+    GzipInputBuf gzipBuffer(file);
+    std::istream inFile(&gzipBuffer);
 
     // read magic
     uint8_t magic[MESH_SERIALIZATION_MAGIC.size()];
