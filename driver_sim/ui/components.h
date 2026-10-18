@@ -49,7 +49,7 @@ namespace ui
 
     void DrawCenteredText(const char *text, float yOffset = 0.0f);
     void DrawProgress(const std::string_view &label, float value, bool isError = false);
-    void SplitToggleButtonGroup(const std::list<ToggleButton> &buttons);
+    void SplitToggleButtonGroup(const std::vector<ToggleButton> &buttons);
     bool DrawTextButton(const char *text, const TextButtonOptions &options = defaultButtonOptions);
     bool CircularButton(const char *id, float radius);
 

@@ -64,7 +64,7 @@ void ui::DrawProgress(const std::string_view &label, float value, bool isError)
     ImGui::Dummy(ImVec2(0, 18 * globalScale));
 }
 
-void ui::SplitToggleButtonGroup(const std::list<ToggleButton> &buttons)
+void ui::SplitToggleButtonGroup(const std::vector<ToggleButton> &buttons)
 {
     if (buttons.empty())
     {

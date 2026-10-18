@@ -25,6 +25,8 @@
 #include <string>
 #include <vector>
 
+#include <filesystem>
+
 #include <fmt/ranges.h>
 
 #include "ui/components.h"
@@ -58,6 +60,8 @@ using blackboard::gui::string_hex_to_rgba_u32;
 using namespace ui;
 using namespace blackboard;
 
+namespace fs = std::filesystem;
+
 #define LOAD_FONT(font, set_as_default)                                                            \
     blackboard::gui::load_font(#font, static_cast<const void *>(font##_bytes),                     \
                                sizeof(font##_bytes), 12.0f, dpi, set_as_default);
@@ -67,17 +71,20 @@ constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboa
 constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
 
 constexpr std::string_view halsimDelimiter = ";";
+constexpr std::string_view halsimPrefix = "";
 #elif __APPLE__
 constexpr std::string_view elasticDashboardExecutable =
     "elastic/elastic_dashboard.app/Contents/MacOS/elastic_dashboard";
 constexpr std::string_view elasticDashboardWorkingDirectory = "elastic/elastic_dashboard.app";
 
 constexpr std::string_view halsimDelimiter = ":";
+constexpr std::string_view halsimPrefix = "lib";
 #else
 constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard";
 constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
 
 constexpr std::string_view halsimDelimiter = ":";
+constexpr std::string_view halsimPrefix = "lib";
 #endif
 
 blackboard::app::App *app_ptr;
@@ -108,6 +115,9 @@ std::shared_ptr<Discord> discord;
 std::shared_ptr<FieldRenderer> fieldRenderer;
 
 std::future<void> javaLogEnforceFuture;
+
+// Pair of <filename, display name>
+std::vector<std::pair<std::string, std::string>> additionalDetectedHalsimExtensions;
 
 blackboard::renderer::Api getRendererApiFromString(const std::string &api)
 {
@@ -155,6 +165,42 @@ std::string rendererApiToString(blackboard::renderer::Api api)
         return "WebGL";
     default:
         return "Unknown";
+    }
+}
+
+void detectAdditionalHalsimExtensions()
+{
+    additionalDetectedHalsimExtensions.clear();
+
+    std::string prefPath = SDL_GetPrefPath(nullptr, "DriverSim");
+    fs::path extensionsPath = fs::path(prefPath) / "jni" / "release";
+
+    if (!fs::exists(extensionsPath) || !fs::is_directory(extensionsPath))
+    {
+        return;
+    }
+
+    const std::string prefix = std::string(halsimPrefix) + "halsim_";
+
+    for (const auto &entry : fs::directory_iterator(extensionsPath))
+    {
+        if (entry.is_regular_file())
+        {
+            std::string filename = entry.path().stem().string();
+
+            if (filename.starts_with(prefix))
+            {
+                filename.erase(0, halsimPrefix.length());
+
+                if (filename == "halsim_gui" || filename == "halsim_ds_socket")
+                {
+                    continue;
+                }
+
+                std::string displayName = filename.substr(prefix.length() - halsimPrefix.length());
+                additionalDetectedHalsimExtensions.push_back({filename, displayName});
+            }
+        }
     }
 }
 
@@ -331,8 +377,6 @@ void initFieldView()
 
 void cleanupFieldView()
 {
-    if (!hasInitializedFieldView)
-        return;
     hasInitializedFieldView = false;
 
     fieldRenderer.reset();
@@ -462,6 +506,10 @@ void drawPageLoading()
         {
             initFieldView();
         }
+        else
+        {
+            detectAdditionalHalsimExtensions();
+        }
     }
 
     ImGui::Dummy(ImVec2(0, 22 * globalScale));
@@ -504,10 +552,23 @@ void drawPageSelect()
     bool driverStationSelected = settings::current.enabledExtensions.contains("halsim_ds_socket");
     bool simGuiSelected = settings::current.enabledExtensions.contains("halsim_gui");
 
-    SplitToggleButtonGroup({
+    std::vector<ToggleButton> buttons = {
         {"Driver Station", &driverStationSelected},
         {"Sim GUI", &simGuiSelected},
-    });
+    };
+    buttons.reserve(buttons.size() + additionalDetectedHalsimExtensions.size());
+
+    std::vector<char> additionalSelectedStates(additionalDetectedHalsimExtensions.size(), 0);
+    for (size_t i = 0; i < additionalDetectedHalsimExtensions.size(); ++i)
+    {
+        const auto &[filename, displayName] = additionalDetectedHalsimExtensions[i];
+        additionalSelectedStates[i] =
+            static_cast<char>(settings::current.enabledExtensions.contains(filename));
+        buttons.push_back(
+            {displayName.c_str(), reinterpret_cast<bool *>(&additionalSelectedStates[i])});
+    }
+
+    SplitToggleButtonGroup(buttons);
 
     if (driverStationSelected)
     {
@@ -525,6 +586,19 @@ void drawPageSelect()
     else
     {
         settings::current.enabledExtensions.erase("halsim_gui");
+    }
+
+    for (size_t i = 0; i < additionalDetectedHalsimExtensions.size(); ++i)
+    {
+        const auto &[filename, displayName] = additionalDetectedHalsimExtensions[i];
+        if (additionalSelectedStates[i])
+        {
+            settings::current.enabledExtensions.insert(filename);
+        }
+        else
+        {
+            settings::current.enabledExtensions.erase(filename);
+        }
     }
 
     ImGui::Dummy(ImVec2(0, 17 * globalScale));
@@ -703,6 +777,7 @@ void app_update()
         if (fieldRenderer->isExiting())
         {
             pageTransition.transition(PAGE_SELECT);
+            detectAdditionalHalsimExtensions();
         }
     }
     else if (fieldRenderer && fieldRenderer->isExiting())
