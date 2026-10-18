@@ -242,6 +242,9 @@ std::vector<std::string> getJavaCommandLine()
     std::vector<std::string> javaCommandLine = {
         prefPath + "jdk/jdk-" + Manifest::getCurrent().jdk.version + std::string(javaExecutable),
         "-Djava.library.path=" + prefPath + "jni/release",
+#if __APPLE__
+        "-XstartOnFirstThread",
+#endif
         "-jar",
         prefPath + "code/" + Manifest::getCurrent().code.jarPath,
     };
