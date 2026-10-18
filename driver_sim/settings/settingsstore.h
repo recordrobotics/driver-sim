@@ -135,6 +135,7 @@ namespace settings
         std::string renderApi;
         bool enableVSync;
         bool updateWhileMinimized;
+        uint32_t renderDownscale;
         LODQuality modelQuality;
         float mainRobotModelLODScale;
         bool cacheModels;

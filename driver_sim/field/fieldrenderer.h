@@ -643,6 +643,8 @@ class FieldRenderer
     bgfx::UniformHandle u_pbrData;
     bgfx::UniformHandle u_ledData;
 
+    bgfx::UniformHandle u_renderedRect;
+
     bgfx::UniformHandle u_lightPos;
     bgfx::UniformHandle u_lightColor;
 

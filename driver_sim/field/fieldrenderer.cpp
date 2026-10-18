@@ -1729,6 +1729,14 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window,
         throw std::runtime_error("Failed to create uniform: u_previousViewProj");
     }
 
+    u_renderedRect =
+        bgfx::createUniform("u_renderedRect", bgfx::UniformFreq::View, bgfx::UniformType::Vec4);
+    if (!bgfx::isValid(u_renderedRect))
+    {
+        logger->error("Failed to create uniform: u_renderedRect");
+        throw std::runtime_error("Failed to create uniform: u_renderedRect");
+    }
+
     const auto type = bgfx::getRendererType();
 
     blitProgram =
@@ -2628,11 +2636,18 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     float widthScale =
         static_cast<float>(window.pixelWidth) / static_cast<float>(window.viewportWidth);
 
-    uint16_t m_width =
+    uint16_t m_rawWidth =
         settings::showSettings()
             ? static_cast<uint16_t>(std::round(window.pixelWidth - sidebarWidth * widthScale))
             : window.pixelWidth;
-    uint16_t m_height = window.pixelHeight;
+    uint16_t m_rawHeight = window.pixelHeight;
+
+    uint16_t m_width = static_cast<uint16_t>(
+        std::clamp(static_cast<uint32_t>(m_rawWidth) * 10U / settings::current.renderDownscale, 1U,
+                   static_cast<uint32_t>(std::numeric_limits<uint16_t>::max())));
+    uint16_t m_height = static_cast<uint16_t>(
+        std::clamp(static_cast<uint32_t>(m_rawHeight) * 10U / settings::current.renderDownscale, 1U,
+                   static_cast<uint32_t>(std::numeric_limits<uint16_t>::max())));
 
     uint16_t m_viewportWidth =
         settings::showSettings()
@@ -3022,10 +3037,13 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     bgfx::setViewRect(VIEW_POSTPROCESS, 0, 0, uint16_t(m_width), uint16_t(m_height));
     bgfx::setViewFrameBuffer(VIEW_POSTPROCESS, BGFX_INVALID_HANDLE);
 
-    // Blit and tonemap
+    // Blit and gamma correction
     bgfx::setViewFrameBuffer(VIEW_BLIT, BGFX_INVALID_HANDLE);
     bgfx::setViewName(VIEW_BLIT, "Field - Blit");
-    bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_width), uint16_t(m_height));
+    // Blit should upscale to backbuffer resolution
+    bgfx::setViewRect(VIEW_BLIT, 0, 0, uint16_t(m_rawWidth), uint16_t(m_rawHeight));
+    std::array<float, 4> renderedRect = {0.0f, 0.0f, float(m_width), float(m_height)};
+    bgfx::setViewUniform(VIEW_BLIT, u_renderedRect, renderedRect.data(), 1);
 
     bgfx::Encoder *encoder = bgfx::begin();
 
@@ -3605,6 +3623,8 @@ FieldRenderer::~FieldRenderer()
         bgfx::destroy(u_lightPos);
     if (bgfx::isValid(u_lightColor))
         bgfx::destroy(u_lightColor);
+    if (bgfx::isValid(u_renderedRect))
+        bgfx::destroy(u_renderedRect);
 
     if (bgfx::isValid(u_mbVelocityData))
         bgfx::destroy(u_mbVelocityData);

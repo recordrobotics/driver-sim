@@ -727,6 +727,18 @@ void settings::draw(ImGuiID viewportId, ImVec2 viewportPos, ImVec2 viewportSize,
                  .defaultValue = settings::makeDefault().updateWhileMinimized});
             ImGui::Dummy(spacer);
 
+            drawSettingOption<uint32_t>(
+                "renderDownscale", "Render downscale",
+                "The factor to divide the render resolution by, represented as a fraction "
+                "multiplied by 10 (10 = 1.0, 15 = 1.5). A value of 10 means the render "
+                "resolution is the same as the window size, a value more than 10 means the "
+                "render resolution is lower than the window size (downsampling), and a value less "
+                "than 10 means the render resolution is higher than the window size "
+                "(supersampling).",
+                {.value = &settings::current.renderDownscale,
+                 .defaultValue = settings::makeDefault().renderDownscale});
+            ImGui::Dummy(spacer);
+
             drawSettingOption<LODQuality>(
                 "modelQuality", "Model quality",
                 "Determines at what distance high-detail models are stopped being rendered.",

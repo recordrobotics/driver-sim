@@ -190,6 +190,7 @@ namespace settings
             .renderApi = "auto",
             .enableVSync = true,
             .updateWhileMinimized = true,
+            .renderDownscale = 10,
             .modelQuality = LODQuality::High,
             .mainRobotModelLODScale = 1.0f,
             .cacheModels = true,
@@ -383,6 +384,7 @@ namespace settings
             current.enableVSync = json.value("enableVSync", current.enableVSync);
             current.updateWhileMinimized =
                 json.value("updateWhileMinimized", current.updateWhileMinimized);
+            current.renderDownscale = json.value("renderDownscale", current.renderDownscale);
             current.modelQuality = json.value("modelQuality", current.modelQuality);
             current.mainRobotModelLODScale =
                 json.value("mainRobotModelLODScale", current.mainRobotModelLODScale);
@@ -452,6 +454,7 @@ namespace settings
         json["renderApi"] = current.renderApi;
         json["enableVSync"] = current.enableVSync;
         json["updateWhileMinimized"] = current.updateWhileMinimized;
+        json["renderDownscale"] = current.renderDownscale;
         json["modelQuality"] = current.modelQuality;
         json["mainRobotModelLODScale"] = current.mainRobotModelLODScale;
         json["cacheModels"] = current.cacheModels;
