@@ -72,6 +72,7 @@ constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
 
 constexpr std::string_view halsimDelimiter = ";";
 constexpr std::string_view halsimPrefix = "";
+constexpr std::string_view halsimLibExtension = ".dll";
 #elif __APPLE__
 constexpr std::string_view elasticDashboardExecutable =
     "elastic/elastic_dashboard.app/Contents/MacOS/elastic_dashboard";
@@ -79,12 +80,14 @@ constexpr std::string_view elasticDashboardWorkingDirectory = "elastic/elastic_d
 
 constexpr std::string_view halsimDelimiter = ":";
 constexpr std::string_view halsimPrefix = "lib";
+constexpr std::string_view halsimLibExtension = ".dylib";
 #else
 constexpr std::string_view elasticDashboardExecutable = "elastic/elastic_dashboard";
 constexpr std::string_view elasticDashboardWorkingDirectory = "elastic";
 
 constexpr std::string_view halsimDelimiter = ":";
 constexpr std::string_view halsimPrefix = "lib";
+constexpr std::string_view halsimLibExtension = ".so";
 #endif
 
 blackboard::app::App *app_ptr;
@@ -188,7 +191,7 @@ void detectAdditionalHalsimExtensions()
         {
             std::string filename = entry.path().stem().string();
 
-            if (filename.starts_with(prefix))
+            if (filename.starts_with(prefix) && entry.path().extension() == halsimLibExtension)
             {
                 filename.erase(0, halsimPrefix.length());
 
@@ -346,7 +349,9 @@ void initFieldView()
                                              std::string(),
                                              [&](const std::string &acc, const std::string &ext)
                                              {
-                                                 return acc + prefPath + "jni/release/" + ext +
+                                                 return acc + prefPath + "jni/release/" +
+                                                        std::string(halsimPrefix) + ext +
+                                                        std::string(halsimLibExtension) +
                                                         std::string(halsimDelimiter);
                                              })}},
             .kill_parent_on_child_exit = false,
