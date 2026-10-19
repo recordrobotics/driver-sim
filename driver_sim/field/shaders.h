@@ -94,6 +94,9 @@
 #include <glsl/cs_XeGTAO_debugVisibility.sc.bin.h>
 #include <spirv/cs_XeGTAO_debugVisibility.sc.bin.h>
 
+#include <glsl/cs_fisheye.sc.bin.h>
+#include <spirv/cs_fisheye.sc.bin.h>
+
 #if BGFX_PLATFORM_SUPPORTS_DXBC
 #include <dxbc/fs_oit_moments.sc.bin.h>
 #include <dxbc/fs_pbr.sc.bin.h>
@@ -130,6 +133,8 @@
 #include <dxbc/cs_XeGTAO_PrefilterDepths16x16.sc.bin.h>
 #include <dxbc/cs_XeGTAO_debugNormals.sc.bin.h>
 #include <dxbc/cs_XeGTAO_debugVisibility.sc.bin.h>
+
+#include <dxbc/cs_fisheye.sc.bin.h>
 #endif
 
 #if BGFX_PLATFORM_SUPPORTS_DXIL
@@ -168,6 +173,8 @@
 #include <dxil/cs_XeGTAO_PrefilterDepths16x16.sc.bin.h>
 #include <dxil/cs_XeGTAO_debugNormals.sc.bin.h>
 #include <dxil/cs_XeGTAO_debugVisibility.sc.bin.h>
+
+#include <dxil/cs_fisheye.sc.bin.h>
 #endif
 
 #if BGFX_PLATFORM_SUPPORTS_METAL
@@ -206,4 +213,6 @@
 #include <metal/cs_XeGTAO_PrefilterDepths16x16.sc.bin.h>
 #include <metal/cs_XeGTAO_debugNormals.sc.bin.h>
 #include <metal/cs_XeGTAO_debugVisibility.sc.bin.h>
+
+#include <metal/cs_fisheye.sc.bin.h>
 #endif

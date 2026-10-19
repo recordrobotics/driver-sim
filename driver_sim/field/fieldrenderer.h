@@ -350,6 +350,7 @@ class FieldRenderer
     void initMotionBlur(uint16_t width, uint16_t height);
     void initBloom(uint16_t width, uint16_t height);
     void initGTAO(uint16_t width, uint16_t height);
+    void initEffects(uint16_t width, uint16_t height);
 
     frc::Pose3d transformPose3dToLocalCoordinates(const frc::Pose3d &pose) const;
 
@@ -659,6 +660,8 @@ class FieldRenderer
 
     bgfx::UniformHandle u_XeGTAOData;
 
+    bgfx::UniformHandle u_fisheyeParams;
+
     bgfx::ProgramHandle programPBR = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle programPBRTextured = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle programPBRInstanced = BGFX_INVALID_HANDLE;
@@ -692,6 +695,8 @@ class FieldRenderer
     bgfx::ProgramHandle XeGTAO_DenoiseProgram = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle XeGTAO_debugNormalsProgram = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle XeGTAO_debugVisibilityProgram = BGFX_INVALID_HANDLE;
+
+    bgfx::ProgramHandle fisheyeEffectProgram = BGFX_INVALID_HANDLE;
 
     ImFont *font;
     blackboard::gui::ImTexture shadowTexture;
@@ -775,6 +780,8 @@ class FieldRenderer
     bgfx::UniformHandle s_workingAOTerm;
     bgfx::UniformHandle s_workingEdges;
 
+    bgfx::UniformHandle s_texFisheye;
+
     float bloomThreshold = 2.0f;
     float bloomKnee = 0.1f;
     float bloomIntensity = 1.0f;
@@ -794,6 +801,9 @@ class FieldRenderer
     float gtaoIntensity = 1.0f;
     float gtaoDirectIntensity = 1.0f;
     float gtaoBentNormalIntensity = 0.7f; // 0.7 looks a bit better than 1.0 with metallic materials
+
+    bool enableFisheyeEffect = false;
+    float fisheyeEffectFOVDegrees = 150.0f;
 
     float fieldModelMatrix[2][16];
     float invFieldModelMatrix[16];

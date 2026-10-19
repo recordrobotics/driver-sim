@@ -73,6 +73,8 @@ static const bgfx::EmbeddedShader s_embeddedShaders[] = {
     BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugNormals),
     BGFX_EMBEDDED_SHADER(cs_XeGTAO_debugVisibility),
 
+    BGFX_EMBEDDED_SHADER(cs_fisheye),
+
     BGFX_EMBEDDED_SHADER_END()};
 
 enum class ModelRotationAxis
@@ -913,6 +915,33 @@ void FieldRenderer::initGTAO(uint16_t width, uint16_t height)
 
     TEXTURE(gGTAOFinalAOTerm, width, height, 1.0f, 1.0f, false, 1, bgfx::TextureFormat::R32U,
             BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_TEXTURE_COMPUTE_WRITE);
+}
+
+void FieldRenderer::initEffects(uint16_t width, uint16_t height)
+{
+    const auto type = bgfx::getRendererType();
+
+    u_fisheyeParams = bgfx::createUniform("u_fisheyeParams", bgfx::UniformType::Vec4, 1);
+    if (!bgfx::isValid(u_fisheyeParams))
+    {
+        logger->error("Failed to create uniform: u_fisheyeParams");
+        throw std::runtime_error("Failed to create uniform: u_fisheyeParams");
+    }
+
+    s_texFisheye = bgfx::createUniform("s_texFisheye", bgfx::UniformType::Sampler);
+    if (!bgfx::isValid(s_texFisheye))
+    {
+        logger->error("Failed to create uniform: s_texFisheye");
+        throw std::runtime_error("Failed to create uniform: s_texFisheye");
+    }
+
+    fisheyeEffectProgram = bgfx::createProgram(
+        bgfx::createEmbeddedShader(s_embeddedShaders, type, "cs_fisheye"), true);
+    if (!bgfx::isValid(fisheyeEffectProgram))
+    {
+        logger->error("Failed to create fisheye effect program.");
+        throw std::runtime_error("Failed to create fisheye effect program.");
+    }
 }
 
 frc::Pose3d FieldRenderer::transformPose3dToLocalCoordinates(const frc::Pose3d &pose) const
@@ -1774,6 +1803,7 @@ FieldRenderer::FieldRenderer(const blackboard::app::Window &window,
     initMotionBlur(window.pixelWidth, window.pixelHeight);
     initBloom(window.pixelWidth, window.pixelHeight);
     initGTAO(window.pixelWidth, window.pixelHeight);
+    initEffects(window.pixelWidth, window.pixelHeight);
 
     fms = std::make_shared<FMS>();
 
@@ -2242,6 +2272,14 @@ void FieldRenderer::drawDebugMenu()
         }
 
         ImGui::EndCombo();
+    }
+
+    ImGui::Separator();
+
+    ImGui::Checkbox("Enable Fisheye Effect", &enableFisheyeEffect);
+    if (enableFisheyeEffect)
+    {
+        ImGui::SliderFloat("Fisheye FOV", &fisheyeEffectFOVDegrees, 1.0f, 180.0f);
     }
 
     ImGui::End();
@@ -3316,6 +3354,27 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
     }
 
+    // Fisheye
+    if (enableFisheyeEffect)
+    {
+        xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
+        yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
+
+        float yFov = bx::toRad(settings::current.cameraFov);
+        float xFov = 2.0f * bx::atan(bx::tan(yFov / 2.0f) * (float)m_width / (float)m_height);
+
+        float fisheyeParams[4] = {bx::toRad(fisheyeEffectFOVDegrees), xFov, yFov, 0.0f};
+        encoder->setUniform(u_fisheyeParams, fisheyeParams);
+        encoder->setTexture(0, s_texFisheye, gOutputColor.handle);
+        encoder->setImage(1, gBloomFirstPass.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, fisheyeEffectProgram, xGroups, yGroups);
+
+        // Copy to output
+        encoder->setImage(0, gBloomFirstPass.handle, 0, bgfx::Access::Read);
+        encoder->setImage(1, gOutputColor.handle, 0, bgfx::Access::Write);
+        encoder->dispatch(VIEW_POSTPROCESS, blitProgram, xGroups, yGroups);
+    }
+
     // Exposure
     xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
@@ -3325,9 +3384,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
                           powf(2.0f, tonemappingExposure)};
     encoder->setUniform(u_lutParams, lutParams);
     encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::Read);
-    encoder->setImage(1,
-                      settings::current.enableBloom ? gBloomFirstPass.handle : gOutputColor.handle,
-                      0, bgfx::Access::Write);
+    encoder->setImage(1, gBloomFirstPass.handle, 0, bgfx::Access::Write);
     encoder->dispatch(VIEW_POSTPROCESS, exposureProgram, xGroups, yGroups);
 
     // Bloom
@@ -3391,7 +3448,9 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     xGroups = (int)floorf(((float)m_width - 1) / 16 + 1);
     yGroups = (int)floorf(((float)m_height - 1) / 16 + 1);
     encoder->setUniform(u_lutParams, lutParams);
-    encoder->setImage(0, gOutputColor.handle, 0, bgfx::Access::Read);
+    encoder->setImage(0,
+                      settings::current.enableBloom ? gOutputColor.handle : gBloomFirstPass.handle,
+                      0, bgfx::Access::Read);
     encoder->setImage(1, gTonemapOutput.handle, 0, bgfx::Access::Write);
     encoder->setTexture(2, s_lut, tonemappingLut.handle);
     encoder->dispatch(VIEW_POSTPROCESS, tonemapProgram, xGroups, yGroups);
@@ -3644,6 +3703,9 @@ FieldRenderer::~FieldRenderer()
     if (bgfx::isValid(u_lutParams))
         bgfx::destroy(u_lutParams);
 
+    if (bgfx::isValid(u_fisheyeParams))
+        bgfx::destroy(u_fisheyeParams);
+
     if (bgfx::isValid(programPBR))
         bgfx::destroy(programPBR);
     if (bgfx::isValid(programPBRTextured))
@@ -3702,6 +3764,8 @@ FieldRenderer::~FieldRenderer()
         bgfx::destroy(XeGTAO_debugNormalsProgram);
     if (bgfx::isValid(XeGTAO_debugVisibilityProgram))
         bgfx::destroy(XeGTAO_debugVisibilityProgram);
+    if (bgfx::isValid(fisheyeEffectProgram))
+        bgfx::destroy(fisheyeEffectProgram);
 
     gAccumTex.destroy();
     gMomentsTex.destroy();
@@ -3797,6 +3861,9 @@ FieldRenderer::~FieldRenderer()
         bgfx::destroy(s_workingAOTerm);
     if (bgfx::isValid(s_workingEdges))
         bgfx::destroy(s_workingEdges);
+
+    if (bgfx::isValid(s_texFisheye))
+        bgfx::destroy(s_texFisheye);
 
     shadowTexture.destroy();
     settingsTexture.destroy();
