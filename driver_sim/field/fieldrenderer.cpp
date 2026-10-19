@@ -2596,7 +2596,7 @@ void FieldRenderer::drawModelLoadingOverlay()
     ui::DrawLoadingIndicator(drawList,
                              ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f,
                                     viewport->Pos.y + viewport->Size.y * 0.5f),
-                             20.0f * globalScale, 8.0f * globalScale,
+                             24.0f * globalScale, 8.0f * globalScale,
                              string_hex_to_rgba_u32("#314d6bff"),
                              string_hex_to_rgba_u32("#2587f0ff"));
 

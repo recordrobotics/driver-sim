@@ -999,10 +999,10 @@ void ui::DrawLoadingIndicator(ImDrawList *drawList, ImVec2 center, float radius,
     const float startAngle = time;
     const float endAngle = time + arcLength * IM_PI * 2.0f;
 
-    drawList->AddCircle(center, radius, trackColor, 64, thickness);
+    drawList->AddCircle(center, radius, trackColor, 0, thickness);
 
-    drawList->PathArcTo(center, radius, startAngle, endAngle, 32);
-    drawList->PathStroke(fillColor, thickness);
+    drawList->PathArcTo(center, radius, startAngle, endAngle);
+    drawList->PathStroke(fillColor, thickness, ImDrawFlags_StrokeInside);
 }
 
 // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-type-vararg)
