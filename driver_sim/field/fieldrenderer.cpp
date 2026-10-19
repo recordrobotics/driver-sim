@@ -2279,7 +2279,7 @@ void FieldRenderer::drawDebugMenu()
     ImGui::Checkbox("Enable Fisheye Effect", &enableFisheyeEffect);
     if (enableFisheyeEffect)
     {
-        ImGui::SliderFloat("Fisheye FOV", &fisheyeEffectFOVDegrees, 1.0f, 180.0f);
+        ImGui::SliderFloat("Fisheye FOV", &fisheyeEffectFOVDegrees, 1.0f, 280.0f);
     }
 
     ImGui::End();
@@ -2548,7 +2548,7 @@ void FieldRenderer::drawViewModeWindow(ImGuiID viewportId, ImVec2 viewportPos, I
         ImGui::LabelText("##fov", "Field of View");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
-        ImGui::SliderFloat("##fovslider", &settings::current.cameraFov, 10.0f, 160.0f, "%.1f");
+        ImGui::SliderFloat("##fovslider", &settings::current.cameraFov, 10.0f, 179.0f, "%.1f");
 
         ImGui::Dummy(ImVec2(0, 10.0f * globalScale));
 
