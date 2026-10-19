@@ -18,3 +18,23 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(zlib)
+
+set(ZLIB_INCLUDE_DIR
+    "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}"
+    CACHE STRING "Zlib include directories" FORCE
+)
+
+if(WIN32)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(zlib_name "zsd.lib")
+    else()
+        set(zlib_name "zs.lib")
+    endif()
+else()
+    set(zlib_name "libz.a")
+endif(WIN32)
+
+set(ZLIB_LIBRARY
+    "${zlib_BINARY_DIR}/${zlib_name}"
+    CACHE STRING "Zlib static library" FORCE
+)

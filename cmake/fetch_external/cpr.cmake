@@ -8,11 +8,12 @@ set(CURL_ZLIB OFF CACHE BOOL "Disable zlib in curl" FORCE)
 set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "Disable building libcurl docs" FORCE)
 set(BUILD_MISC_DOCS OFF CACHE BOOL "Disable building libcurl docs" FORCE)
 set(ENABLE_CURL_MANUAL OFF CACHE BOOL "Disable building libcurl docs" FORCE)
+set(CPR_ENABLE_INSTALL OFF CACHE BOOL "Disable install target" FORCE)
 
 FetchContent_Declare(
     cpr
     GIT_REPOSITORY https://github.com/libcpr/cpr.git
-    GIT_TAG        1.14.2
+    GIT_TAG        1.15.1
     GIT_SHALLOW 1
 )
 FetchContent_MakeAvailable(cpr)

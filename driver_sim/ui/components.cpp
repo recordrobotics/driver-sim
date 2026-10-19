@@ -133,18 +133,18 @@ void ui::SplitToggleButtonGroup(const std::vector<ToggleButton> &buttons)
                                     ? (active ? on_active : (hovered ? on_hovered : on_normal))
                                     : (active ? off_active : (hovered ? off_hovered : off_normal));
 
-        ImDrawFlags cornerFlags = ImDrawFlags_RoundCornersNone;
+        ImDrawFlags cornerFlags = ImDrawFlags_RoundNone;
         if (buttonCount == 1)
         {
-            cornerFlags = ImDrawFlags_RoundCornersAll;
+            cornerFlags = ImDrawFlags_RoundAll;
         }
         else if (index == 0)
         {
-            cornerFlags = ImDrawFlags_RoundCornersLeft;
+            cornerFlags = ImDrawFlags_RoundLeft;
         }
         else if (index + 1 == buttonCount)
         {
-            cornerFlags = ImDrawFlags_RoundCornersRight;
+            cornerFlags = ImDrawFlags_RoundRight;
         }
 
         drawList->AddRectFilled(segmentPos,
@@ -168,7 +168,7 @@ void ui::SplitToggleButtonGroup(const std::vector<ToggleButton> &buttons)
 
     const ImVec2 groupMax(groupMin.x + totalWidth, groupMin.y + segmentHeight);
     drawList->AddRect(groupMin, groupMax, borderColor, frameRounding, borderThickness,
-                      ImDrawFlags_RoundCornersAll);
+                      ImDrawFlags_RoundAll);
 
     float dividerX = groupMin.x;
     size_t dividerIndex = 0;

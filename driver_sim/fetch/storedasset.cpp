@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <archive.h>
 #include <archive_entry.h>
+#include <array>
 #include <blackboard_app/logger.h>
 #include <fstream>
 #include <ranges>

@@ -341,11 +341,14 @@ void initFieldView()
             .commandLine = getJavaCommandLine(),
             .working_directory = prefPath + "code",
             .environment = {{"HALSIM_EXTENSIONS",
-                             std::accumulate(
-                                 settings::current.enabledExtensions.begin(),
-                                 settings::current.enabledExtensions.end(), std::string(),
-                                 [](const std::string &acc, const std::string &ext)
-                                 { return acc + ext + std::string(halsimDelimiter); })}},
+                             std::accumulate(settings::current.enabledExtensions.begin(),
+                                             settings::current.enabledExtensions.end(),
+                                             std::string(),
+                                             [&](const std::string &acc, const std::string &ext)
+                                             {
+                                                 return acc + prefPath + "jni/release/" + ext +
+                                                        std::string(halsimDelimiter);
+                                             })}},
             .kill_parent_on_child_exit = false,
             .auto_restart = true,
             .use_existing_process = false},
