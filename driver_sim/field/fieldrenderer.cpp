@@ -2276,6 +2276,8 @@ void FieldRenderer::drawDebugMenu()
 
     ImGui::Separator();
 
+    ImGui::SliderFloat("Camera Near", &cameraNear, 0.01f, 0.1f);
+
     ImGui::Checkbox("Enable Fisheye Effect", &enableFisheyeEffect);
     if (enableFisheyeEffect)
     {
@@ -2992,7 +2994,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
     }
 
     float proj[16];
-    bx::mtxProjInf(proj, settings::current.cameraFov, float(m_width) / float(m_height), 0.1f,
+    bx::mtxProjInf(proj, settings::current.cameraFov, float(m_width) / float(m_height), cameraNear,
                    bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right, bx::NearFar::Reverse);
     proj[8] -= jitterX;
     proj[9] -= jitterY;
@@ -3012,7 +3014,7 @@ void FieldRenderer::render(const blackboard::app::Window &window,
         firstFrame = false;
     }
 
-    updateInfo(0.1f, proj);
+    updateInfo(cameraNear, proj);
 
     if (!freezeTemporalEffects)
     {

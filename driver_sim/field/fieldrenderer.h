@@ -805,6 +805,8 @@ class FieldRenderer
     bool enableFisheyeEffect = false;
     float fisheyeEffectFOVDegrees = 150.0f;
 
+    float cameraNear = 0.1f;
+
     float fieldModelMatrix[2][16];
     float invFieldModelMatrix[16];
 
